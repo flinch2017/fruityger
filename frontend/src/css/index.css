@@ -1,5 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Comic+Sans+MS&display=swap');
 
+html, body {
+  overflow-x: hidden;
+}
+
+.profile-page,
+.profile-card,
+.profile-posts {
+  width: 100%;
+  max-width: 100%;
+}
+
 :root {
   /* Nostalgic but vivid palette */
   --beige-dark: #7a5c40;
@@ -12,18 +23,30 @@
   --shadow-border: #7a5c40;
   --button-bg: #d6b895;
   --button-hover-bg: #7a5c40;
+
+  /* Aero glow extras */
+  --glow-light: rgba(0, 200, 255, 0.35);
+  --glow-medium: rgba(0, 180, 255, 0.25);
+  --glow-dark: rgba(0, 150, 255, 0.15);
 }
 
-/* Reset */
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  transition: all 0.2s ease;
 }
 
+
 body {
-  font-family: "Comic Sans MS", cursive;
-  background: var(--beige-light);
+  font-family: "Comic Sans MS", "Segoe UI", Tahoma, sans-serif;
+  background: linear-gradient(
+    180deg,
+    var(--beige-light) 0%,
+    #e0f7ff 50%,
+    var(--beige-light) 100%
+  );
   color: var(--beige-dark);
   min-height: 100vh;
 }

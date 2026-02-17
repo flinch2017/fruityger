@@ -1,13 +1,21 @@
+import { Routes, Route } from "react-router-dom";
+import Header from "./components/Header";
+import Feed from "./components/Feed";
+import Profile from "./pages/Profile";
+import Settings from "./pages/Settings";
 import "./css/App.css";
-import Header from "./components/Header.jsx";
-import Feed from "./components/Feed.jsx";
 
 function App() {
   return (
     <>
       <Header />
+
       <div className="app-container">
-        <Feed />
+        <Routes>
+          <Route path="/" element={<Feed />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/settings" element={<Settings />} />
+        </Routes>
       </div>
     </>
   );
