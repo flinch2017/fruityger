@@ -1,0 +1,29 @@
+@import url('https://fonts.googleapis.com/css2?family=Comic+Sans+MS&display=swap');
+
+:root {
+  /* Nostalgic but vivid palette */
+  --beige-dark: #7a5c40;
+  --beige-medium: #d6b895;
+  --beige-light: #f5e6d3;
+  --accent-pink: #ff85a2;
+  --accent-cyan: #00d4ff;
+  --white: #ffffff;
+  --black: #000000;
+  --shadow-border: #7a5c40;
+  --button-bg: #d6b895;
+  --button-hover-bg: #7a5c40;
+}
+
+/* Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Comic Sans MS", cursive;
+  background: var(--beige-light);
+  color: var(--beige-dark);
+  min-height: 100vh;
+}

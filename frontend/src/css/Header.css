@@ -1,0 +1,124 @@
+.top-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(
+    90deg,
+    var(--header-gradient-start, var(--beige-medium)),
+    var(--header-gradient-end, var(--beige-light))
+  );
+  padding: 10px 20px;
+  width: 100%;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  border-bottom: 4px solid var(--shadow-border);
+  box-shadow: 0 4px 0 var(--shadow-border);
+  font-family: "Comic Sans MS", cursive;
+}
+
+.logo {
+  font-weight: bold;
+  font-size: 1.2rem;
+  white-space: nowrap;
+}
+
+.nav-items {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-button {
+  background: var(--button-bg);
+  color: var(--white);
+  border: 2px solid var(--shadow-border);
+  padding: 6px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--shadow-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s ease-in-out;
+}
+
+.nav-button:hover {
+  background: var(--button-hover-bg);
+  transform: translate(1px,1px);
+  box-shadow: 1px 1px 0 var(--shadow-border);
+}
+
+.nav-button:active {
+  transform: translate(2px,2px);
+  box-shadow: none;
+}
+
+.profile-container {
+  position: relative;
+}
+
+.profile-placeholder {
+  background: var(--button-bg);
+  color: var(--white);
+  border: 2px solid var(--shadow-border);
+  padding: 6px 10px;
+  margin-left: 5px;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--shadow-border);
+  transition: all 0.1s ease-in-out;
+}
+
+.profile-placeholder:hover {
+  background: var(--button-hover-bg);
+  transform: translate(1px,1px);
+  box-shadow: 1px 1px 0 var(--shadow-border);
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--beige-light);
+  border: 2px solid var(--shadow-border);
+  box-shadow: 2px 2px 0 var(--shadow-border);
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  z-index: 2000;
+}
+
+.profile-dropdown button {
+  background: var(--button-bg);
+  border: none;
+  padding: 8px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-dropdown button:hover {
+  background: var(--button-hover-bg);
+  color: var(--white);
+}
+
+/* Mobile / responsive adjustments */
+@media (max-width: 480px) {
+  .top-header {
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 10px;
+  }
+
+  .nav-items {
+    gap: 5px;
+  }
+
+  .nav-button {
+    font-size: 1rem;
+    padding: 6px;
+  }
+
+  .profile-placeholder {
+    padding: 6px 8px;
+  }
+}
