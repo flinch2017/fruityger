@@ -1,0 +1,191 @@
+/* ===== HEADER ===== */
+.welcome-top-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 25px;
+  width: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+
+  backdrop-filter: blur(18px);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.7),
+    rgba(180, 240, 255, 0.4)
+  );
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.9);
+  font-family: "Segoe UI", Tahoma, sans-serif;
+}
+
+.welcome-logo {
+  font-weight: 700;
+  font-size: 1.4rem;
+  color: #0077aa;
+  text-shadow: 0 0 8px rgba(0, 200, 255, 0.6);
+}
+
+/* Hamburger */
+.welcome-hamburger {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  background: radial-gradient(circle at 30% 30%, #ffffff, #5fd9ff 60%, #00bfff 100%);
+  color: white;
+  transition: all 0.25s ease;
+}
+
+.welcome-hamburger:hover {
+  transform: translateY(-2px) scale(1.08);
+}
+.welcome-hamburger:active {
+  transform: translateY(0) scale(1);
+}
+
+/* Desktop Nav */
+.welcome-desktop-nav {
+  display: none;
+  align-items: center;
+  gap: 12px;
+}
+
+.welcome-desktop-nav a {
+  font-size: 0.875rem;
+  color: #0077aa;
+  text-decoration: none;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.welcome-desktop-nav a:hover {
+  color: #00d4ff;
+  background: rgba(0, 212, 255, 0.1);
+}
+
+.welcome-login-btn {
+  padding: 8px 20px; /* a bit taller and wider for a candy feel */
+  font-size: 0.9rem;
+  border-radius: 50px; /* full capsule / bean shape */
+  background: linear-gradient(145deg, #00d4ff, #4facfe, #00b0ff);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 15px rgba(0, 212, 255, 0.4), 
+              0 0 10px rgba(255,255,255,0.2) inset;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
+  border: none; /* remove border completely */
+}
+
+.welcome-login-btn:hover {
+  transform: translateY(-2px) scale(1.08);
+  box-shadow: 0 8px 20px rgba(0, 212, 255, 0.5), 
+              0 0 15px rgba(255,255,255,0.25) inset;
+  background: linear-gradient(145deg, #00bfff, #4facfe, #00e0ff);
+}
+
+
+/* Mobile Drawer */
+.welcome-mobile-drawer {
+  position: fixed;
+  top: 0;
+  right: -100%;
+  width: 80%;
+  max-width: 300px;
+  height: 100vh;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(20px);
+  border-left: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 20px 0 0 20px;
+
+  z-index: 1010;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px 20px 20px;
+  transition: right 0.3s ease;
+}
+
+.welcome-mobile-drawer.open {
+  right: 0;
+}
+
+.welcome-drawer-links a {
+  display: block;
+  margin-bottom: 20px;
+  font-size: 16px;
+  color: #0077aa;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.welcome-drawer-links a:hover {
+  color: #00d4ff;
+}
+
+.welcome-drawer-login {
+  padding: 14px;
+  width: 100%;
+  border: none; /* remove border completely */
+  border-radius: 50px; /* full capsule / bean shape */
+  background: linear-gradient(145deg, #00d4ff, #4facfe, #00b0ff); /* juicy gradient */
+  color: white;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 6px 15px rgba(0, 212, 255, 0.4), 
+              0 0 10px rgba(255,255,255,0.2) inset; /* soft weighty glow */
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
+}
+
+.welcome-drawer-login:hover {
+  transform: translateY(-2px) scale(1.08);
+  box-shadow: 0 8px 20px rgba(0, 212, 255, 0.5), 
+              0 0 15px rgba(255,255,255,0.25) inset;
+  background: linear-gradient(145deg, #00bfff, #4facfe, #00e0ff);
+}
+
+.welcome-drawer-login:active {
+  transform: scale(0.98); /* slight squash for that candy press feel */
+  box-shadow: 0 4px 10px rgba(0, 212, 255, 0.3),
+              0 0 8px rgba(255,255,255,0.15) inset;
+}
+
+
+/* Overlay */
+.welcome-drawer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.25);
+  z-index: 1005;
+}
+
+/* Desktop: show desktop nav, hide hamburger */
+@media (min-width: 481px) {
+  .welcome-hamburger {
+    display: none;
+  }
+
+  .welcome-desktop-nav {
+    display: flex;
+  }
+
+  .welcome-mobile-drawer,
+  .welcome-drawer-overlay {
+    display: none;
+  }
+}

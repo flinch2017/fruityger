@@ -1,160 +1,226 @@
-/* ===== SETTINGS PAGE LAYOUT ===== */
+/* ================= ROOT AERO VARIABLES ================= */
+
+:root {
+  --aero-cyan: #00d4ff;
+  --aero-blue: #4facfe;
+  --aero-sky: #b6f0ff;
+  --aero-white: rgba(255, 255, 255, 0.65);
+  --aero-glass: rgba(255, 255, 255, 0.35);
+  --aero-border: rgba(255, 255, 255, 0.7);
+}
+
+/* ================= PAGE BACKGROUND ================= */
+
 .settings-page {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 35px;
+  gap: 40px;
 
   width: 90%;
-  max-width: 1200px;
-  margin: 30px auto;
-  padding: 30px;
+  max-width: 1100px;
+  margin: 40px auto;
+  padding: 40px;
 
-  /* Vista-style glassy background */
-  backdrop-filter: blur(20px);
+  border-radius: 40px;
+
+  /* Dreamy sky gradient */
   background: linear-gradient(
     160deg,
-    rgba(255, 255, 255, 0.6),
-    rgba(245, 230, 211, 0.3) /* --beige-light */
+    #e0f7ff,
+    #b6f0ff,
+    #d6faff
   );
 
-  border-radius: 30px;
+  box-shadow:
+    0 20px 50px rgba(0, 200, 255, 0.2),
+    inset 0 0 40px rgba(255, 255, 255, 0.6);
 
-  font-family: 'Comic Sans MS', "Segoe UI", Tahoma, sans-serif;
-  color: var(--beige-dark);
+  font-family: "Segoe UI", sans-serif;
+  color: #045d75;
+  overflow: hidden;
 }
 
-/* Page Title */
+/* Light Glow Overlay */
+.settings-page::before {
+  content: "";
+  position: absolute;
+  top: -100px;
+  left: -100px;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, white 0%, transparent 70%);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* ================= TITLE ================= */
+
 .settings-page h1 {
   text-align: center;
-  font-size: 20px;
-  margin-bottom: 25px;
-  color: var(--beige-dark);
+  font-size: 28px;
+  font-weight: 600;
+  color: #0277a8;
+  text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
 }
 
-/* Individual Settings Sections */
+/* ================= GLASS SECTIONS ================= */
+
 .settings-section {
-  padding: 25px;
-  border-radius: 25px;
+  position: relative;
+  padding: 30px;
+  border-radius: 30px;
 
+  background: var(--aero-glass);
+  backdrop-filter: blur(25px);
+
+  border: 1px solid var(--aero-border);
+
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.8),
+    0 10px 30px rgba(0, 180, 255, 0.15);
+
+  transition: transform 0.3s ease;
+}
+
+.settings-section:hover {
+  transform: translateY(-4px);
+}
+
+/* Glossy top shine */
+.settings-section::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 50%;
+  width: 100%;
+  border-radius: 30px;
   background: linear-gradient(
-    160deg,
+    to bottom,
     rgba(255, 255, 255, 0.6),
-    rgba(245, 230, 211, 0.3)
+    transparent
   );
-
-  backdrop-filter: blur(18px);
-
-  margin-bottom: 25px;
+  pointer-events: none;
 }
 
-/* Section Titles */
+/* ================= SECTION TITLES ================= */
+
 .settings-section h2 {
-  font-size: 14px;
-  margin-bottom: 12px;
-  color: var(--beige-dark);
+  font-size: 16px;
+  margin-bottom: 15px;
+  color: #026b90;
 }
 
-/* Labels */
+/* ================= INPUTS ================= */
+
 .settings-section label {
   display: flex;
   flex-direction: column;
-  font-size: 11px;
-  margin-bottom: 12px;
-  color: var(--beige-dark);
+  font-size: 13px;
+  margin-bottom: 15px;
 }
 
-/* Inputs & Selects */
 .settings-section input,
 .settings-section select {
-  padding: 10px;
-  font-family: inherit;
-  font-size: 11px;
-  border-radius: 12px;
-  border: none;
+  margin-top: 6px;
+  padding: 12px;
 
-  background: rgba(245, 230, 211, 0.8); /* --beige-light */
-  color: var(--beige-dark);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+
+  font-size: 13px;
+  outline: none;
+
+  transition: all 0.3s ease;
 }
 
-/* Checkbox Wrapper */
+.settings-section input:focus,
+.settings-section select:focus {
+  border: 1px solid var(--aero-cyan);
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.5);
+}
+
+/* ================= AERO CHECKBOX ================= */
+
 .checkbox-wrapper {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 10px;
-  font-size: 11px;
-  color: var(--beige-dark);
-}
-
-.checkbox-wrapper input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-  margin: 0;
-}
-
-/* ===== SAVE BUTTONS ===== */
-.save-btn {
-  padding: 12px 26px;
+  margin-bottom: 12px;
   font-size: 13px;
+}
+
+/* Custom checkbox */
+.checkbox-wrapper input[type="checkbox"] {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+
+  border: 1px solid var(--aero-border);
+  background: rgba(255, 255, 255, 0.6);
+
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.checkbox-wrapper input[type="checkbox"]:checked {
+  background: linear-gradient(
+    to bottom,
+    var(--aero-cyan),
+    var(--aero-blue)
+  );
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.7);
+}
+
+.checkbox-wrapper input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  color: white;
+  font-size: 14px;
+  top: 1px;
+  left: 5px;
+}
+
+/* ================= SAVE BUTTON ================= */
+
+.save-btn {
+  margin-top: 10px;
+  padding: 14px 30px;
+  font-size: 14px;
   font-weight: 600;
+
   border-radius: 50px;
   border: none;
   cursor: pointer;
-  color: var(--white);
 
-  /* Vista-style pastel gradient matching palette */
+  color: white;
+
   background: linear-gradient(
     to bottom,
-    var(--accent-cyan),
-    rgba(0, 212, 255, 0.8)
+    var(--aero-sky),
+    var(--aero-blue)
   );
 
-  transition: all 0.2s ease;
+  box-shadow:
+    0 5px 15px rgba(0, 180, 255, 0.4),
+    inset 0 2px 5px rgba(255, 255, 255, 0.8);
+
+  transition: all 0.25s ease;
 }
 
 .save-btn:hover {
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 212, 255, 0.9),
-    var(--accent-cyan)
-  );
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow:
+    0 8px 20px rgba(0, 212, 255, 0.6),
+    inset 0 2px 5px rgba(255, 255, 255, 0.8);
 }
 
 .save-btn:active {
   transform: translateY(0);
-}
-
-/* ===== RESPONSIVE ===== */
-@media (max-width: 480px) {
-  .settings-page {
-    padding: 20px;
-    margin: 15px;
-  }
-
-  .settings-section h2 {
-    font-size: 12px;
-  }
-
-  .settings-section label {
-    font-size: 9px;
-  }
-
-  .settings-section input,
-  .settings-section select {
-    font-size: 9px;
-    padding: 8px;
-  }
-
-  .checkbox-wrapper {
-    font-size: 9px;
-    gap: 6px;
-  }
-
-  .save-btn {
-    font-size: 12px;
-    padding: 10px;
-    width: 100%;
-  }
 }

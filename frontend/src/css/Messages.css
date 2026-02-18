@@ -1,0 +1,132 @@
+:root {
+  --aero-cyan: #00d4ff;
+  --aero-blue: #4facfe;
+  --aero-sky: #b6f0ff;
+  --glass: rgba(255, 255, 255, 0.35);
+  --border-light: rgba(255, 255, 255, 0.8);
+}
+
+/* ================= PAGE ================= */
+.messages-page {
+  width: 95%;
+  max-width: 1200px;
+  margin: 40px auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+
+  border-radius: 30px;
+  background: linear-gradient(160deg, #e0f7ff, #c9f6ff, #dffbff);
+  box-shadow: 0 20px 50px rgba(0, 200, 255, 0.2),
+              inset 0 0 40px rgba(255, 255, 255, 0.6);
+
+  font-family: "Segoe UI", sans-serif;
+}
+
+/* ================= MESSAGES LIST ================= */
+.messages-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.messages-sidebar h2 {
+  margin-bottom: 10px;
+  color: #0277a8;
+  font-size: 22px;
+}
+
+/* Individual message preview card */
+.chat-preview {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  padding: 12px 15px;
+  border-radius: 20px;
+  background: var(--glass);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-light);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.chat-preview:hover,
+.chat-preview.active {
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 12px var(--aero-cyan);
+}
+
+.chat-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: white;
+  background: linear-gradient(to bottom, var(--aero-sky), var(--aero-blue));
+  box-shadow: 0 5px 15px rgba(0, 180, 255, 0.4),
+              inset 0 2px 5px rgba(255, 255, 255, 0.8);
+}
+
+.chat-preview div h4 {
+  margin-bottom: 4px;
+  font-size: 16px;
+  color: #026b90;
+}
+
+.chat-preview div p {
+  font-size: 14px;
+  color: #026b90;
+  opacity: 0.8;
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 768px) {
+  .chat-preview {
+    padding: 10px 12px;
+    gap: 12px;
+  }
+
+  .chat-avatar {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  .chat-preview div h4 {
+    font-size: 14px;
+  }
+
+  .chat-preview div p {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .messages-page {
+    width: 95%;
+    padding: 10px;
+  }
+
+  .chat-preview {
+    padding: 8px 10px;
+    gap: 10px;
+  }
+
+  .chat-avatar {
+    width: 35px;
+    height: 35px;
+    font-size: 18px;
+  }
+
+  .chat-preview div h4 {
+    font-size: 13px;
+  }
+
+  .chat-preview div p {
+    font-size: 11px;
+  }
+}

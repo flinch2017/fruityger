@@ -37,7 +37,7 @@ export default function Profile() {
         <h3>Your Posts</h3>
 
         <div className="post-card">
-          <p>This is my first post in Pixetown 🎮</p>
+          <p>This is my first post in Fruityger 🎮</p>
         </div>
       </div>
     </div>

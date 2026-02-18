@@ -30,11 +30,11 @@ export default function Header() {
             🏠
           </button>
 
-          <button className="nav-button" title="Notifications">
+          <button className="nav-button" onClick={() => navigate("/notifications")} title="Notifications">
             🔔
           </button>
 
-          <button className="nav-button" title="Messages">
+          <button className="nav-button" onClick={() => navigate("/messages")} title="Messages">
             ✉️
           </button>
 

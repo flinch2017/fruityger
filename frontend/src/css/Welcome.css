@@ -1,0 +1,160 @@
+:root {
+  --aero-cyan: #00d4ff;
+  --aero-blue: #4facfe;
+  --aero-sky: #b6f0ff;
+  --glass: rgba(255, 255, 255, 0.35);
+  --border-light: rgba(255, 255, 255, 0.8);
+  --text-dark: #0277a8;
+  --text-light: #ffffff;
+}
+
+/* ===== FULL PAGE ===== */
+.welcome-page {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  background: linear-gradient(160deg, #e0f7ff, #c9f6ff, #dffbff);
+
+  font-family: "Segoe UI", sans-serif;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+/* ===== HEADER ===== */
+.welcome-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.welcome-header h1 {
+  font-size: 48px;
+  color: var(--text-dark);
+}
+
+.welcome-header p {
+  font-size: 18px;
+  color: var(--text-dark);
+  opacity: 0.85;
+}
+
+/* ===== MAIN CARD / CTA ===== */
+.welcome-card {
+  text-align: center;
+  padding: 50px 40px;
+  border-radius: 40px;
+  width: 100%;
+  max-width: 600px;
+
+  background: var(--glass);
+  backdrop-filter: blur(25px);
+  border: 1px solid var(--border-light);
+  box-shadow: 0 20px 50px rgba(0, 200, 255, 0.2),
+              inset 0 0 40px rgba(255, 255, 255, 0.6);
+}
+
+.welcome-card h2 {
+  font-size: 32px;
+  margin-bottom: 12px;
+  color: var(--text-dark);
+}
+
+.welcome-card p {
+  font-size: 16px;
+  margin-bottom: 30px;
+  color: var(--text-dark);
+  opacity: 0.85;
+}
+
+/* ===== BUTTON WITH LIQUID FILL ===== */
+.welcome-buttons button {
+  position: relative;
+  overflow: hidden;
+  padding: 14px 28px;
+  border-radius: 50px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-dark);
+  background: rgba(255, 255, 255, 0.15); /* glass effect */
+  backdrop-filter: blur(15px);
+  box-shadow: 0 5px 15px rgba(0, 212, 255, 0.3),
+              inset 0 2px 5px rgba(255,255,255,0.6);
+  transition: transform 0.2s ease;
+}
+
+/* Text always on top */
+.welcome-buttons button span {
+  position: relative;
+  z-index: 3;  /* above liquid */
+  text-shadow: 0 0 6px rgba(0,0,0,0.6);
+}
+
+/* Liquid wave layer */
+.welcome-buttons button::before,
+.welcome-buttons button::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 200%;
+  height: 50%;  /* only fill bottom half for readability */
+  border-radius: 50%;
+  background: rgba(0, 212, 255, 0.25);
+  z-index: 1;
+  animation: liquidMove 3s ease-in-out infinite;
+}
+
+/* Second wave for realism */
+.welcome-buttons button::after {
+  background: rgba(0, 212, 255, 0.15);
+  animation: liquidMoveAlt 4s ease-in-out infinite;
+}
+
+/* Wave movement */
+@keyframes liquidMove {
+  0%   { transform: translateX(-50%) translateY(25%); }
+  50%  { transform: translateX(-25%) translateY(5%); }
+  100% { transform: translateX(-50%) translateY(25%); }
+}
+
+@keyframes liquidMoveAlt {
+  0%   { transform: translateX(-50%) translateY(15%); }
+  50%  { transform: translateX(-30%) translateY(-5%); }
+  100% { transform: translateX(-50%) translateY(15%); }
+}
+
+.welcome-buttons button:hover {
+  transform: translateY(-2px) scale(1.05);
+}
+
+
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 480px) {
+  .welcome-header h1 { font-size: 36px; }
+  .welcome-header p { font-size: 14px; }
+
+  .welcome-card { padding: 30px 20px; }
+  .welcome-card h2 { font-size: 24px; }
+  .welcome-card p { font-size: 14px; }
+
+  .welcome-buttons {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .welcome-buttons button {
+    font-size: 14px;
+    padding: 12px 20px;
+    width: 100%;
+  }
+}
+
+body.welcome {
+  padding-top: 0;
+}

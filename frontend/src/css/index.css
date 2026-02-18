@@ -35,12 +35,24 @@ html, body {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+button,
+input,
+.chat-preview,
+.notification-card,
+.message {
   transition: all 0.2s ease;
 }
 
+html, body {
+  overflow-x: hidden;
+}
+
+
 
 body {
-  font-family: "Comic Sans MS", "Segoe UI", Tahoma, sans-serif;
+  font-family: "Segoe UI", sans-serif;
   background: linear-gradient(
     180deg,
     var(--beige-light) 0%,
