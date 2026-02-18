@@ -9,7 +9,7 @@ export default function Profile() {
 
         <div className="profile-info">
           <div className="profile-avatar">👤</div>
-          <h2>Pixetown User</h2>
+          <h2>Fruityger User</h2>
           <p>Status: Feeling nostalgic ✨</p>
 
           {/* Action Buttons */}

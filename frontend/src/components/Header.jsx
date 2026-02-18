@@ -11,11 +11,11 @@ export default function Header() {
     <header className="top-header">
       {/* Make logo clickable too */}
       <div 
-        className="logo pixel-font" 
+        className="logo fruityger-font" 
         onClick={() => navigate("/")}
         style={{ cursor: "pointer" }}
       >
-        Pixetown
+        Fruityger
       </div>
 
       <div className="nav-row">

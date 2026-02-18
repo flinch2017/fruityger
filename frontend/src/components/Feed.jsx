@@ -7,7 +7,7 @@ export default function Feed() {
       <div className="create-post">
         <input
           type="text"
-          placeholder="What's happening in Pixetown?"
+          placeholder="What's happening?"
         />
         <button>Post</button>
       </div>
@@ -16,12 +16,12 @@ export default function Feed() {
         <div className="post-header">
           <div className="avatar">👤</div>
           <div>
-            <strong>Pixetown Admin</strong>
+            <strong>Fruityger Admin</strong>
             <p className="post-time">Just now</p>
           </div>
         </div>
         <p className="post-content">
-          Welcome to Pixetown. The internet is colorful again ✨
+          Welcome to Fruityger. The internet is colorful again ✨
         </p>
       </div>
 
