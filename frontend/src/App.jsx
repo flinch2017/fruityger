@@ -8,6 +8,14 @@ import Messages from "./pages/Messages";
 import Chat from "./pages/Chat";
 import Welcome from "./pages/Welcome";
 import WelcomeHeader from "./components/WelcomeHeader";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import ScrollToTop from "./components/ScrollToTop";
+import PrivateRoute from "./components/PrivateRoute";
+import PublicRoute from "./components/PublicRoute";
+import NotFound from "./pages/NotFound"; // <-- import it
+import EditProfile from "./pages/EditProfile"; // <-- import it
+
 import "./css/App.css";
 
 // Layouts
@@ -24,75 +32,135 @@ function StandaloneLayout({ children }) {
   return (
     <>
       <WelcomeHeader />
-      {children}
+      <div className="welcome">{children}</div>
     </>
   );
 }
 
+function MiscPageLayout({ children }) {
+  return (
+    <>
+      <div className="misc-page-container">{children}</div>
+    </>
+  );
+}
 
 function App() {
   return (
-    <Routes>
-      {/* Welcome page without header */}
-      <Route
-        path="/"
-        element={
-          <StandaloneLayout>
-            <Welcome />
-          </StandaloneLayout>
-        }
-      />
+    <>
+      <ScrollToTop />
+      <Routes>
+        {/* Public pages: welcome, login, signup */}
+        <Route
+          path="/"
+          element={
+            <PublicRoute>
+              <StandaloneLayout>
+                <Welcome />
+              </StandaloneLayout>
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            <PublicRoute>
+              <StandaloneLayout>
+                <Login />
+              </StandaloneLayout>
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/signup"
+          element={
+            <PublicRoute>
+              <StandaloneLayout>
+                <Signup />
+              </StandaloneLayout>
+            </PublicRoute>
+          }
+        />
 
-      {/* All other pages with header */}
-      <Route
-        path="/feed"
-        element={
-          <MainLayout>
-            <Feed />
-          </MainLayout>
-        }
-      />
-      <Route
-        path="/profile"
-        element={
-          <MainLayout>
-            <Profile />
-          </MainLayout>
-        }
-      />
-      <Route
-        path="/settings"
-        element={
-          <MainLayout>
-            <Settings />
-          </MainLayout>
-        }
-      />
-      <Route
-        path="/notifications"
-        element={
-          <MainLayout>
-            <Notifications />
-          </MainLayout>
-        }
-      />
-      <Route
-        path="/messages"
-        element={
-          <MainLayout>
-            <Messages />
-          </MainLayout>
-        }
-      />
-      <Route
-        path="/chat/:chatId"
-        element={
-          <MainLayout>
-            <Chat />
-          </MainLayout>
-        }
-      />
-    </Routes>
+        {/* Protected pages */}
+        <Route
+          path="/feed"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <Feed />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <Profile />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <Settings />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <Notifications />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/messages"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <Messages />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/chat/:chatId"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <Chat />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="*"
+          element={
+            <MiscPageLayout>
+              <NotFound />
+            </MiscPageLayout>
+          }
+        />
+        <Route
+          path="/edit-profile"
+          element={
+            <MainLayout>
+              <EditProfile />
+            </MainLayout>
+          }
+        />
+      </Routes>
+    </>
   );
 }
 

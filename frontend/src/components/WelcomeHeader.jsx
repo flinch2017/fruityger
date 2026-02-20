@@ -17,7 +17,13 @@ export default function WelcomeHeader() {
   return (
     <>
       <header className="welcome-top-header">
-        <div className="welcome-logo">Fruityger</div>
+        <div
+          className="welcome-logo"
+          onClick={() => handleNavigate("/")} // <-- navigate home
+          style={{ cursor: "pointer" }} // optional: shows pointer on hover
+        >
+          Fruityger
+        </div>
 
         {/* Mobile Hamburger */}
         <button className="welcome-hamburger" onClick={toggleDrawer}>

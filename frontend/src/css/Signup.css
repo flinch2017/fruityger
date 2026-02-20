@@ -1,0 +1,123 @@
+.signup-aero-page {
+  width: 100%;
+  height: 100vh;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  background: linear-gradient(
+    160deg,
+    #e0f7ff,
+    #c9f6ff,
+    #dffbff
+  );
+
+  font-family: "Segoe UI", sans-serif;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+/* ===== GLASS CARD ===== */
+.signup-aero-card {
+  width: 360px;
+  padding: 40px;
+  border-radius: 30px;
+
+  backdrop-filter: blur(25px);
+
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.8),
+    rgba(200, 240, 255, 0.6)
+  );
+
+  border: 1px solid rgba(255, 255, 255, 0.9);
+
+  box-shadow:
+    0 20px 40px rgba(0, 150, 255, 0.25),
+    inset 0 0 20px rgba(255, 255, 255, 0.5);
+}
+
+/* ===== TITLE ===== */
+.signup-aero-title {
+  text-align: center;
+  margin-bottom: 30px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #0077aa;
+  text-shadow: 0 0 10px rgba(0, 200, 255, 0.6);
+}
+
+/* ===== FORM ===== */
+.signup-aero-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ===== INPUTS ===== */
+.signup-aero-input {
+  padding: 14px 18px;
+  border-radius: 50px;
+  border: none;
+  outline: none;
+  font-size: 0.95rem;
+
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.9),
+    rgba(220,245,255,0.7)
+  );
+
+  box-shadow:
+    inset 0 2px 6px rgba(0, 150, 255, 0.15),
+    0 0 8px rgba(0, 200, 255, 0.2);
+
+  transition: all 0.25s ease;
+}
+
+.signup-aero-input:focus {
+  box-shadow:
+    inset 0 2px 8px rgba(0, 150, 255, 0.25),
+    0 0 15px rgba(0, 212, 255, 0.5);
+  transform: scale(1.02);
+}
+
+/* ===== CANDY BUTTON ===== */
+.signup-aero-btn {
+  margin-top: 10px;
+  padding: 14px;
+  border: none;
+  border-radius: 50px;
+
+  background: linear-gradient(
+    145deg,
+    #00e0ff,
+    #00bfff,
+    #4facfe
+  );
+
+  color: white;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+
+  box-shadow:
+    0 8px 20px rgba(0, 200, 255, 0.4),
+    inset 0 0 15px rgba(255,255,255,0.3);
+
+  transition: all 0.25s ease;
+}
+
+.signup-aero-btn:hover {
+  transform: translateY(-3px) scale(1.06);
+  box-shadow:
+    0 12px 25px rgba(0, 200, 255, 0.6),
+    inset 0 0 20px rgba(255,255,255,0.4);
+}
+
+.signup-aero-btn:active {
+  transform: scale(0.96);
+}

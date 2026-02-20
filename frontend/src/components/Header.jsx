@@ -12,7 +12,7 @@ export default function Header() {
       {/* Make logo clickable too */}
       <div 
         className="logo fruityger-font" 
-        onClick={() => navigate("/")}
+        onClick={() => navigate("/feed")}
         style={{ cursor: "pointer" }}
       >
         Fruityger
@@ -24,7 +24,7 @@ export default function Header() {
           {/* 🏠 Home Button */}
           <button 
             className="nav-button"
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/feed")}
             title="Home"
           >
             🏠
@@ -47,28 +47,36 @@ export default function Header() {
             </div>
 
             {dropdownOpen && (
-  <div className="profile-dropdown">
-    <button
-      onClick={() => {
-        navigate("/profile");
-        setDropdownOpen(false);
-      }}
-    >
-      Profile
-    </button>
+              <div className="profile-dropdown">
+                <button
+                  onClick={() => {
+                    navigate("/profile");
+                    setDropdownOpen(false);
+                  }}
+                >
+                  Profile
+                </button>
 
-    <button
-      onClick={() => {
-        navigate("/settings");
-        setDropdownOpen(false);
-      }}
-    >
-      Settings
-    </button>
+                <button
+                  onClick={() => {
+                    navigate("/settings");
+                    setDropdownOpen(false);
+                  }}
+                >
+                  Settings
+                </button>
 
-    <button>Logout</button>
-  </div>
-)}
+                <button
+                  onClick={() => {
+                    localStorage.removeItem("token"); // remove JWT
+                    setDropdownOpen(false);
+                    navigate("/login"); // redirect to login
+                  }}
+                >
+                  Logout
+                </button>
+              </div>
+            )}
 
           </div>
 

@@ -16,6 +16,7 @@ body {
   flex-direction: column;
   gap: 30px;
   width: 100%;
+  padding-top:  70px;
 }
 
 /* ===== GLASS CREATE POST ===== */

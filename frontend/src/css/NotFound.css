@@ -1,0 +1,71 @@
+.notfound-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  width: 100%;
+  height: 100vh;
+
+  background: linear-gradient(
+    160deg,
+    #e0f7ff,
+    #c9f6ff,
+    #dffbff
+  );
+
+  font-family: "Segoe UI", sans-serif;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.notfound-card {
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.85),
+    rgba(200, 240, 255, 0.6)
+  );
+  backdrop-filter: blur(25px);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 20px 40px rgba(0, 150, 255, 0.25),
+    inset 0 0 20px rgba(255, 255, 255, 0.5);
+
+  padding: 50px 40px;
+  border-radius: 30px;
+  text-align: center;
+  max-width: 400px;
+}
+
+.notfound-card h1 {
+  font-size: 4rem;
+  color: #0077aa;
+  text-shadow: 0 0 10px rgba(0, 200, 255, 0.6);
+  margin-bottom: 20px;
+}
+
+.notfound-card p {
+  font-size: 1.2rem;
+  margin-bottom: 25px;
+  color: #005577;
+}
+
+.notfound-card a {
+  text-decoration: none;
+  padding: 12px 25px;
+  border-radius: 50px;
+  background: linear-gradient(145deg, #00e0ff, #00bfff, #4facfe);
+  color: white;
+  font-weight: 700;
+  box-shadow:
+    0 8px 20px rgba(0, 200, 255, 0.4),
+    inset 0 0 15px rgba(255,255,255,0.3);
+  transition: all 0.25s ease;
+}
+
+.notfound-card a:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow:
+    0 12px 25px rgba(0, 200, 255, 0.6),
+    inset 0 0 20px rgba(255,255,255,0.4);
+}
