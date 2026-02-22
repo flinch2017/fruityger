@@ -4,13 +4,6 @@ import "../css/Feed.css";
 export default function Feed() {
   return (
     <main className="feed">
-      <div className="create-post">
-        <input
-          type="text"
-          placeholder="What's happening?"
-        />
-        <button>Post</button>
-      </div>
 
       <div className="post-card">
         <div className="post-header">
@@ -37,6 +30,7 @@ export default function Feed() {
           Remember when websites had glitter GIFs everywhere? 🥹
         </p>
       </div>
+
     </main>
   );
 }

@@ -25,6 +25,86 @@
 }
 
 
+.post-more {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+
+  font-size: 22px;
+  color: #0088cc;
+
+  cursor: pointer;
+
+  width: 32px;
+  height: 32px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  transition: all 0.25s ease;
+}
+
+.post-more:hover {
+  background: rgba(0,200,255,0.2);
+  box-shadow: 0 0 12px rgba(0,200,255,0.6);
+}
+
+/* ===== POST FOOTER ===== */
+
+.post-footer {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 12px;
+}
+
+/* Left action cluster */
+
+.post-actions-left {
+  display: flex;
+  gap: 14px;
+}
+
+/* Action Buttons */
+
+.post-action-btn {
+  width: 38px;
+  height: 38px;
+
+  border-radius: 50%;
+  border: none;
+
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.95),
+    rgba(180,240,255,0.6)
+  );
+
+  backdrop-filter: blur(10px);
+
+  font-size: 16px;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 6px 18px rgba(0,180,255,0.25),
+    inset 0 2px 6px rgba(255,255,255,0.9);
+
+  transition: all 0.25s ease;
+}
+
+.post-action-btn:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 10px 25px rgba(0,200,255,0.4);
+}
+
+.post-action-btn:active {
+  transform: scale(0.92);
+}
+
 
 /* ===== PROFILE INFO ===== */
 .profile-info {
@@ -263,4 +343,212 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+
+/* ===============================
+   INSTAGRAM STYLE CAROUSEL
+================================ */
+
+.profile-posts {
+  backdrop-filter: blur(18px);
+
+  background: linear-gradient(
+    160deg,
+    rgba(255,255,255,0.75),
+    rgba(200,240,255,0.4)
+  );
+
+  border-radius: 30px;
+  padding: 30px;
+
+  box-shadow:
+    0 25px 60px rgba(0,180,255,0.3),
+    inset 0 1px 4px rgba(255,255,255,0.9);
+}
+
+.post-card {
+  margin-bottom: 20px;
+}
+
+/* CAROUSEL */
+
+.instagram-carousel {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  margin-top: 15px;
+
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 30px rgba(0,160,255,0.25);
+
+  touch-action: pan-y;
+}
+
+.carousel-track {
+  display: flex;
+  transition: transform 0.35s ease;
+  touch-action: pan-x;
+  user-select: none;
+}
+
+.carousel-item {
+  min-width: 100%;
+}
+
+.carousel-item img,
+.carousel-item video {
+  width: 100%;
+  aspect-ratio: 1/1;
+  object-fit: cover;
+  display: block;
+}
+
+/* ARROWS */
+
+.carousel-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+
+  width: 40px;
+  height: 40px;
+
+  border-radius: 50%;
+  border: none;
+
+  background: rgba(255,255,255,0.85);
+  color: #0077aa;
+
+  font-size: 24px;
+
+  cursor: pointer;
+
+  z-index: 10;
+
+  box-shadow: 0 6px 18px rgba(0,150,255,0.4);
+}
+
+.carousel-arrow.left { left: 12px; }
+.carousel-arrow.right { right: 12px; }
+
+/* INDICATOR */
+
+.carousel-indicator {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(0,120,180,0.3);
+  transition: all 0.3s ease;
+}
+
+.indicator-dot.active {
+  width: 20px;
+  background: #00bfff;
+  box-shadow: 0 0 10px rgba(0,200,255,0.8);
+}
+
+/* MOBILE */
+
+@media (max-width: 768px) {
+
+  .profile-posts {
+    padding: 20px;
+  }
+
+  .carousel-arrow {
+    display: none;
+  }
+}
+
+.carousel-track {
+  display: flex;
+  transition: transform 0.38s cubic-bezier(.34,.99,.6,1);
+
+  will-change: transform;
+  transform: translateZ(0);
+
+  touch-action: pan-x;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.carousel-item {
+  min-width: 100%;
+}
+
+.carousel-item img,
+.carousel-item video {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  display: block;
+}
+
+.auto-video {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+
+  display: block;
+}
+
+
+/* ===== POST HEADER ===== */
+
+.post-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 0px;
+}
+
+.post-user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.post-user-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #ddd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.post-user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.post-user-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.post-username {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.post-date {
+  font-size: 12px;
+  color: #888;
+}
+
+.post-loader {
+  text-align: center;
+  padding: 20px;
+  color: #888;
 }

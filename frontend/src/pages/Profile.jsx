@@ -1,34 +1,248 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom"; // <- import
+import React, { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import "../css/Profile.css";
 
 export default function Profile() {
+
   const [user, setUser] = useState(null);
-  const navigate = useNavigate(); // <- initialize navigate
+  const [posts, setPosts] = useState([]);
+  const [activeIndexMap, setActiveIndexMap] = useState({});
+
+  const [dragging, setDragging] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [touchStartY, setTouchStartY] = useState(0);
+
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+
+  const loaderRef = useRef(null);
+  const videoRefs = useRef({});
+  const observerRef = useRef(null);
+
+  const LIMIT = 5;
+  const navigate = useNavigate();
+
+  /* ================= FETCH DATA ================= */
+
+  const formatDate = (dateString) => {
+    if (!dateString) return "";
+
+    const now = new Date();
+    const date = new Date(dateString);
+    if (isNaN(date)) return "";
+
+    const diffMs = now - date;
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    const diffWeeks = Math.floor(diffDays / 7);
+
+    if (diffSeconds < 60) return "Just now";
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffWeeks < 4) return `${diffWeeks}w ago`;
+
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
+  };
+
+  const fetchUser = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      const res = await fetch(
+        "http://localhost:5000/api/main/me",
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const data = await res.json();
+      if (res.ok) setUser(data.user);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchPosts = async (initial = false) => {
+    if (loadingPosts) return;
+
+    setLoadingPosts(true);
+
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const currentOffset = initial ? 0 : offset;
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/profile/posts?limit=${LIMIT}&offset=${currentOffset}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const data = await res.json();
+
+      if (res.ok) {
+
+        if (!data.posts || data.posts.length === 0) {
+          setHasMore(false);
+          setLoadingPosts(false);
+          return;
+        }
+
+        if (initial) {
+          setPosts(data.posts);
+          setOffset(data.posts.length);
+        } else {
+          setPosts(prev => [...prev, ...data.posts]);
+          setOffset(prev => prev + data.posts.length);
+        }
+
+        if (data.posts.length < LIMIT) {
+          setHasMore(false);
+        }
+      }
+
+    } catch (err) {
+      console.error(err);
+    }
+
+    setLoadingPosts(false);
+  };
 
   useEffect(() => {
-    const fetchUser = async () => {
-      const token = localStorage.getItem("token");
-      if (!token) return;
+    fetchUser();
+    fetchPosts(true);
+  }, []);
 
-      try {
-        const res = await fetch("http://localhost:5000/api/main/me", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+  /* ================= FIXED INFINITE SCROLL ================= */
 
-        const data = await res.json();
-        if (res.ok) {
-          setUser(data.user);
-        } else {
-          console.error(data.error);
+  useEffect(() => {
+    if (!loaderRef.current || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        const entry = entries[0];
+        if (entry.isIntersecting && !loadingPosts) {
+          fetchPosts();
         }
-      } catch (err) {
-        console.error(err);
+      },
+      {
+        root: null,
+        rootMargin: "500px",
+        threshold: 0
+      }
+    );
+
+    observer.observe(loaderRef.current);
+
+    return () => observer.disconnect();
+
+  }, [hasMore, loadingPosts, offset]);
+
+  /* ===== MOBILE SAFETY FALLBACK (VERY IMPORTANT) ===== */
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!hasMore || loadingPosts) return;
+
+      const scrollPosition =
+        window.innerHeight + window.scrollY;
+
+      const bottomThreshold =
+        document.documentElement.offsetHeight - 400;
+
+      if (scrollPosition >= bottomThreshold) {
+        fetchPosts();
       }
     };
 
-    fetchUser();
-  }, []);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+
+  }, [hasMore, loadingPosts, offset]);
+
+  /* ================= VIDEO AUTO PLAY OBSERVER ================= */
+
+  useEffect(() => {
+
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    observerRef.current = new IntersectionObserver(
+      entries => {
+        entries.forEach(entry => {
+          const video = entry.target;
+          if (!video) return;
+
+          if (entry.isIntersecting) {
+            video.play().catch(() => {});
+          } else {
+            video.pause();
+            video.currentTime = 0;
+          }
+        });
+      },
+      { threshold: 0.75 }
+    );
+
+    Object.values(videoRefs.current).forEach(list => {
+      list?.forEach(video => {
+        if (video) observerRef.current.observe(video);
+      });
+    });
+
+    return () => observerRef.current?.disconnect();
+
+  }, [posts, activeIndexMap]);
+
+  /* ================= CAROUSEL CONTROL ================= */
+
+  const moveSlide = (postId, direction, mediaLength) => {
+    setActiveIndexMap(prev => {
+      const current = prev[postId] || 0;
+      let nextIndex = current + direction;
+
+      if (nextIndex < 0) nextIndex = mediaLength - 1;
+      if (nextIndex >= mediaLength) nextIndex = 0;
+
+      return { ...prev, [postId]: nextIndex };
+    });
+  };
+
+  /* ================= SWIPE GESTURE ================= */
+
+  const handlePointerStart = (e) => {
+    const touch = e.touches ? e.touches[0] : e;
+    setDragging(true);
+    setDragStartX(touch.clientX);
+    setTouchStartY(touch.clientY);
+  };
+
+  const handlePointerMove = (e, postId, mediaLength) => {
+    if (!dragging) return;
+
+    const touch = e.touches ? e.touches[0] : e;
+    const dx = dragStartX - touch.clientX;
+    const dy = touch.clientY - touchStartY;
+
+    if (Math.abs(dy) > Math.abs(dx)) return;
+
+    if (Math.abs(dx) > 80) {
+      moveSlide(postId, dx > 0 ? 1 : -1, mediaLength);
+      setDragStartX(touch.clientX);
+    }
+  };
+
+  const handlePointerEnd = () => setDragging(false);
+
+  /* ================= RENDER ================= */
 
   if (!user) {
     return (
@@ -41,22 +255,29 @@ export default function Profile() {
 
   return (
     <div className="profile-page">
+
       <div className="profile-card">
         <div className="profile-info">
           <div className="profile-avatar">
-            {user.profile_pic ? <img src={user.profile_pic} alt="Avatar" /> : "👤"}
+            {user.profile_pic ?
+              <img src={user.profile_pic} alt="Avatar" />
+              : "👤"}
           </div>
+
           <h2>{user.username}</h2>
           <p>Status: Feeling nostalgic ✨</p>
 
           <div className="profile-actions">
             <button
               className="profile-btn edit-btn"
-              onClick={() => navigate("/edit-profile")} // <- handle edit
+              onClick={() => navigate("/edit-profile")}
             >
               Edit Profile
             </button>
-            <button className="profile-btn share-btn">Share Profile</button>
+
+            <button className="profile-btn share-btn">
+              Share Profile
+            </button>
           </div>
 
           <div className="profile-stats">
@@ -64,6 +285,7 @@ export default function Profile() {
               <span className="stat-number">128</span>
               <span className="stat-label">Followers</span>
             </div>
+
             <div className="stat">
               <span className="stat-number">76</span>
               <span className="stat-label">Following</span>
@@ -74,9 +296,147 @@ export default function Profile() {
 
       <div className="profile-posts">
         <h3>Your Posts</h3>
-        <div className="post-card">
-          <p>This is my first post in Fruityger 🎮</p>
-        </div>
+
+        {posts.map(post => (
+          <div key={post.post_id} className="post-card">
+
+            {/* ===== MORE OPTIONS (TOP RIGHT) ===== */}
+            <div className="post-more">
+              ⋮
+            </div>
+
+            <div className="post-header">
+              <div className="post-user-info">
+                <div className="post-user-avatar">
+                  {user.profile_pic ? (
+                    <img src={user.profile_pic} alt="pfp" />
+                  ) : "👤"}
+                </div>
+
+                <div className="post-user-text">
+                  <span className="post-username">
+                    {user.username}
+                  </span>
+                  <span className="post-date">
+                    {formatDate(post.date_posted)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {post.caption && (
+              <p className="post-content">{post.caption}</p>
+            )}
+
+            {/* ===== CAROUSEL ===== */}
+            {post.media?.length > 0 && (
+              <div className="instagram-carousel">
+                {post.media.length > 1 && (
+                  <>
+                    <button
+                      className="carousel-arrow left"
+                      onClick={() =>
+                        moveSlide(post.post_id, -1, post.media.length)
+                      }
+                    >‹</button>
+
+                    <button
+                      className="carousel-arrow right"
+                      onClick={() =>
+                        moveSlide(post.post_id, 1, post.media.length)
+                      }
+                    >›</button>
+                  </>
+                )}
+
+                <div
+                  className="carousel-track"
+                  style={{
+                    transform: `translateX(-${
+                      (activeIndexMap[post.post_id] || 0) * 100
+                    }%)`
+                  }}
+                  onMouseDown={handlePointerStart}
+                  onMouseMove={(e) =>
+                    handlePointerMove(e, post.post_id, post.media.length)
+                  }
+                  onMouseUp={handlePointerEnd}
+                  onMouseLeave={handlePointerEnd}
+                  onTouchStart={handlePointerStart}
+                  onTouchMove={(e) =>
+                    handlePointerMove(e, post.post_id, post.media.length)
+                  }
+                  onTouchEnd={handlePointerEnd}
+                >
+                  {post.media.map((m, i) => (
+                    <div className="carousel-item" key={i}>
+                      {m.media_type === "video" ? (
+                        <video
+                          ref={el => {
+                            if (!el) return;
+                            if (!videoRefs.current[post.post_id]) {
+                              videoRefs.current[post.post_id] = [];
+                            }
+                            videoRefs.current[post.post_id][i] = el;
+                          }}
+                          src={m.media_url}
+                          playsInline
+                          loop
+                          preload="metadata"
+                          className="auto-video"
+                        />
+                      ) : (
+                        <img src={m.media_url} alt="" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {post.media.length > 1 && (
+                  <div className="carousel-indicator">
+                    {post.media.map((_, i) => (
+                      <span
+                        key={i}
+                        className={
+                          (activeIndexMap[post.post_id] || 0) === i
+                            ? "indicator-dot active"
+                            : "indicator-dot"
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ===== POST FOOTER ACTIONS ===== */}
+            <div className="post-footer">
+
+              <div className="post-actions-left">
+                <button className="post-action-btn">
+                  👍
+                </button>
+
+                <button className="post-action-btn">
+                  💬
+                </button>
+
+                <button className="post-action-btn">
+                  🔗
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+        ))}
+
+        {hasMore && (
+          <div ref={loaderRef} className="post-loader">
+            {loadingPosts && <p>Loading more posts...</p>}
+          </div>
+        )}
+
       </div>
     </div>
   );

@@ -4,6 +4,9 @@ import cors from "cors";
 import authRoutes from "./routes/auth.js";
 import mainRoutes from "./routes/mainRoutes.js"
 import uploadRoutes from "./routes/upload.js";
+import postRoutes from "./routes/postRoutes.js";
+import profilePostsRoutes from "./routes/profilePosts.js";
+
 
 dotenv.config();
 
@@ -17,6 +20,9 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/main", mainRoutes);
 app.use("/api/main", uploadRoutes);
+app.use("/api/posts", postRoutes);
+app.use("/api/profile", profilePostsRoutes);
+
 
 app.get("/", (req, res) => {
   res.send({ status: "Fruityger backend running" });

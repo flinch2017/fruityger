@@ -174,3 +174,70 @@ body {
     font-size: 1.2rem;
   }
 }
+
+
+/* ===============================
+   MOBILE FLOATING + BUTTON (FAB)
+================================ */
+
+.mobile-fab-create {
+  position: fixed !important;
+  right: 20px !important;
+  bottom: 25px !important;
+
+  width: 60px;
+  height: 60px;
+
+  border-radius: 50%;
+  border: none;
+
+  font-size: 1.6rem;
+  color: white;
+
+  cursor: pointer;
+
+  background: radial-gradient(
+    circle at 30% 30%,
+    #ffffff,
+    #5fd9ff 60%,
+    #00bfff 100%
+  );
+
+  backdrop-filter: blur(12px);
+
+  box-shadow: 0 0 18px rgba(0, 180, 255, 0.6);
+
+  display: none;
+  align-items: center;
+  justify-content: center;
+
+  z-index: 9999; /* make sure it is above header */
+  transition: all 0.25s ease;
+}
+
+.mobile-fab-create:hover {
+  transform: scale(1.08) translateY(-3px);
+}
+
+.mobile-fab-create {
+  pointer-events: auto;
+}
+
+/* Show only on mobile */
+@media (max-width: 768px) {
+  .mobile-fab-create {
+    display: flex;
+  }
+}
+
+/* Desktop only create button */
+.desktop-create-btn {
+  display: flex;
+}
+
+/* Hide on mobile */
+@media (max-width: 768px) {
+  .desktop-create-btn {
+    display: none;
+  }
+}

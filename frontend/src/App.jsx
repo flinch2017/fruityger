@@ -15,6 +15,7 @@ import PrivateRoute from "./components/PrivateRoute";
 import PublicRoute from "./components/PublicRoute";
 import NotFound from "./pages/NotFound"; // <-- import it
 import EditProfile from "./pages/EditProfile"; // <-- import it
+import CreatePost from "./pages/CreatePost"; // <-- import it
 
 import "./css/App.css";
 
@@ -156,6 +157,14 @@ function App() {
           element={
             <MainLayout>
               <EditProfile />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/create"
+          element={
+            <MainLayout>
+              <CreatePost />
             </MainLayout>
           }
         />
