@@ -30,7 +30,14 @@ export default function Profile() {
     fetchUser();
   }, []);
 
-  if (!user) return <p>Loading profile...</p>;
+  if (!user) {
+    return (
+      <div className="profile-loading">
+        <div className="profile-spinner"></div>
+        <p>Loading profile...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="profile-page">

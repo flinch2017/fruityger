@@ -2,6 +2,7 @@
 import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
+import { deleteR2Object } from "../utils/r2Delete.js";
 
 const router = express.Router();
 
@@ -25,30 +26,45 @@ router.get("/me", authenticateToken, async (req, res) => {
 });
 
 router.put("/edit-profile", authenticateToken, async (req, res) => {
-  const { username, email, password, profile_pic } = req.body;
+  const { username, profile_pic, profile_pic_key } = req.body;
 
   try {
-    // Start building query and params
-    let query = `UPDATE users SET username=$1, email=$2, profile_pic=$3`;
-    const params = [username, email, profile_pic];
 
-    // If password is provided, add it to query
-    if (password) {
-      const hashed = await bcrypt.hash(password, 10);
-      query += `, password=$4 WHERE user_id=$5 RETURNING user_id, username, email, profile_pic, created_at`;
-      params.push(hashed, req.user.id); // $4 = hashed password, $5 = user_id
-    } else {
-      query += ` WHERE user_id=$4 RETURNING user_id, username, email, profile_pic, created_at`;
-      params.push(req.user.id); // $4 = user_id
-    }
+    // ⭐ Get old profile picture key
+    const userResult = await pool.query(
+      "SELECT profile_pic_key FROM users WHERE id=$1",
+      [req.user.id]
+    );
+
+    const oldKey = userResult.rows[0]?.profile_pic_key;
+
+    // ⭐ Delete old R2 image
+    await deleteR2Object(process.env.R2_BUCKET, oldKey);
+
+    // ⭐ Update profile
+    const query = `
+      UPDATE users 
+      SET username=$1,
+          profile_pic=$2,
+          profile_pic_key=$3
+      WHERE id=$4
+      RETURNING id, username, email, profile_pic, created_at
+    `;
+
+    const params = [
+      username,
+      profile_pic,
+      profile_pic_key,
+      req.user.id
+    ];
 
     const { rows } = await pool.query(query, params);
 
-    if (!rows[0]) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    res.json({
+      user: rows[0],
+      message: "Profile updated successfully"
+    });
 
-    res.json({ user: rows[0], message: "Profile updated successfully" });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
