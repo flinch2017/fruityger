@@ -6,6 +6,12 @@ import mainRoutes from "./routes/mainRoutes.js"
 import uploadRoutes from "./routes/upload.js";
 import postRoutes from "./routes/postRoutes.js";
 import profilePostsRoutes from "./routes/profilePosts.js";
+import likeRoutes from "./routes/likes.js";
+import commentRoutes from "./routes/comments.js";
+import commentLikeRoutes from "./routes/commentLikes.js";
+
+
+
 
 
 dotenv.config();
@@ -22,6 +28,11 @@ app.use("/api/main", mainRoutes);
 app.use("/api/main", uploadRoutes);
 app.use("/api/posts", postRoutes);
 app.use("/api/profile", profilePostsRoutes);
+app.use("/api/likes", likeRoutes);
+app.use("/api/comments", commentRoutes);
+app.use("/api/commentLikes", commentLikeRoutes);
+
+
 
 
 app.get("/", (req, res) => {

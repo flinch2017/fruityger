@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/Profile.css";
+import CommentSheet from "../components/CommentSheet";
+import "../css/CommentSheet.css";
 
 export default function Profile() {
 
@@ -16,9 +18,12 @@ export default function Profile() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingPosts, setLoadingPosts] = useState(false);
 
+  const [likingMap, setLikingMap] = useState({});
+
   const loaderRef = useRef(null);
   const videoRefs = useRef({});
   const observerRef = useRef(null);
+  const [activeCommentPost, setActiveCommentPost] = useState(null);
 
   const LIMIT = 5;
   const navigate = useNavigate();
@@ -242,6 +247,78 @@ export default function Profile() {
 
   const handlePointerEnd = () => setDragging(false);
 
+  const toggleLike = async (postId) => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    // 🚫 Prevent spam clicking
+    if (likingMap[postId]) return;
+
+    const currentPost = posts.find(p => p.post_id === postId);
+    if (!currentPost) return;
+
+    const wasLiked = currentPost.is_liked;
+
+    // Mark as processing
+    setLikingMap(prev => ({ ...prev, [postId]: true }));
+
+    // ✨ Optimistic UI update
+    setPosts(prev =>
+      prev.map(post =>
+        post.post_id === postId
+          ? {
+              ...post,
+              is_liked: !wasLiked,
+              like_count: wasLiked
+                ? Math.max((post.like_count || 1) - 1, 0)
+                : (post.like_count || 0) + 1
+            }
+          : post
+      )
+    );
+
+    try {
+      const res = await fetch(
+        "http://localhost:5000/api/likes/toggle",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ postId })
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed");
+      }
+
+    } catch (err) {
+      console.error(err);
+
+      // 🔄 Revert on failure
+      setPosts(prev =>
+        prev.map(post =>
+          post.post_id === postId
+            ? {
+                ...post,
+                is_liked: wasLiked,
+                like_count: currentPost.like_count
+              }
+            : post
+        )
+      );
+    } finally {
+      // ✅ Unlock button
+      setLikingMap(prev => {
+        const updated = { ...prev };
+        delete updated[postId];
+        return updated;
+      });
+    }
+  };
+
   /* ================= RENDER ================= */
 
   if (!user) {
@@ -253,8 +330,22 @@ export default function Profile() {
     );
   }
 
+  
   return (
     <div className="profile-page">
+
+      {activeCommentPost && (
+        <CommentSheet
+          postId={activeCommentPost}
+          user={user}
+
+          // ✅ Add this (VERY IMPORTANT)
+          postAuthorId={user?.id}
+
+          onClose={() => setActiveCommentPost(null)}
+        />
+      )}
+
 
       <div className="profile-card">
         <div className="profile-info">
@@ -413,11 +504,25 @@ export default function Profile() {
             <div className="post-footer">
 
               <div className="post-actions-left">
-                <button className="post-action-btn">
-                  👍
-                </button>
+                <div className="like-wrapper">
 
-                <button className="post-action-btn">
+                  <button
+                    className={`post-action-btn ${post.is_liked ? "liked" : ""}`}
+                    onClick={() => toggleLike(post.post_id)}
+                  >
+                    ❤️
+                  </button>
+
+                  <span className="like-count">
+                    {post.like_count || 0}
+                  </span>
+
+                </div>
+
+                <button
+                  className="post-action-btn"
+                  onClick={() => setActiveCommentPost(post.post_id)}
+                >
                   💬
                 </button>
 

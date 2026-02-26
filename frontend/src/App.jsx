@@ -16,6 +16,7 @@ import PublicRoute from "./components/PublicRoute";
 import NotFound from "./pages/NotFound"; // <-- import it
 import EditProfile from "./pages/EditProfile"; // <-- import it
 import CreatePost from "./pages/CreatePost"; // <-- import it
+import CommentSheet from "./components/CommentSheet";
 
 import "./css/App.css";
 
@@ -165,6 +166,14 @@ function App() {
           element={
             <MainLayout>
               <CreatePost />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/comments"
+          element={
+            <MainLayout>
+              <CommentSheet />
             </MainLayout>
           }
         />

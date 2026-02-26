@@ -9,16 +9,18 @@ const router = express.Router();
 ============================================ */
 
 router.get("/posts", authenticateToken, async (req, res) => {
+
   try {
+
     const userId = req.user.id;
     const limit = parseInt(req.query.limit) || 5;
     const offset = parseInt(req.query.offset) || 0;
 
     const query = `
       SELECT 
-        p.post_id,
-        p.caption,
-        p.date_posted,
+        p.*,
+
+        -- ✅ ORDERED MEDIA ARRAY (IMPORTANT)
         COALESCE(
           json_agg(
             json_build_object(
@@ -26,16 +28,36 @@ router.get("/posts", authenticateToken, async (req, res) => {
               'media_type', pm.media_type,
               'media_order', pm.media_order
             )
-            ORDER BY pm.media_order
-          ) FILTER (WHERE pm.media_id IS NOT NULL),
+            ORDER BY pm.media_order ASC
+          )
+          FILTER (WHERE pm.media_url IS NOT NULL),
           '[]'
-        ) AS media
+        ) AS media,
+
+        -- ✅ LIKE COUNT
+        COUNT(DISTINCT l.like_id)::int AS like_count,
+
+        -- ✅ IS LIKED
+        EXISTS (
+          SELECT 1 FROM likes
+          WHERE post_id = p.post_id
+          AND liker = $1
+        ) AS is_liked
+
       FROM posts p
-      LEFT JOIN post_media pm 
-        ON p.post_id = pm.post_id
+
+      LEFT JOIN post_media pm
+        ON pm.post_id = p.post_id
+
+      LEFT JOIN likes l
+        ON l.post_id = p.post_id
+
       WHERE p.user_id = $1
-      GROUP BY p.post_id, p.caption, p.date_posted
+
+      GROUP BY p.post_id
+
       ORDER BY p.date_posted DESC
+
       LIMIT $2 OFFSET $3
     `;
 

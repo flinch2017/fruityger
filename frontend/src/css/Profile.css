@@ -552,3 +552,31 @@
   padding: 20px;
   color: #888;
 }
+
+
+.like-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.post-action-btn.liked {
+  background: linear-gradient(
+    to bottom,
+    #ffb6e6,
+    #ff5ec4
+  );
+
+  box-shadow:
+    0 0 18px rgba(255, 0, 170, 0.8),
+    0 8px 25px rgba(255, 0, 200, 0.6);
+
+  color: white;
+  transform: scale(1.08);
+}
+
+.like-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0088cc;
+}
