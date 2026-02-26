@@ -169,14 +169,7 @@ function App() {
             </MainLayout>
           }
         />
-        <Route
-          path="/comments"
-          element={
-            <MainLayout>
-              <CommentSheet />
-            </MainLayout>
-          }
-        />
+        
       </Routes>
     </>
   );

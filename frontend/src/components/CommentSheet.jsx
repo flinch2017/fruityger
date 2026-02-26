@@ -18,6 +18,9 @@ export default function CommentSheet({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const listRef = useRef(null);
+  const [replyPageMap, setReplyPageMap] = useState({});
+  const [initialLoading, setInitialLoading] = useState(true);
+  const REPLY_PAGE_SIZE = 5;
 
   const inputRef = useRef(null);
   const token = localStorage.getItem("token");
@@ -28,30 +31,40 @@ export default function CommentSheet({
 
   async function fetchComments(pageNumber = 1) {
 
-  const res = await fetch(
-    `http://localhost:5000/api/comments/${postId}?page=${pageNumber}&limit=20`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`
+    try {
+
+      if (pageNumber === 1) {
+        setInitialLoading(true);
       }
+
+      const res = await fetch(
+        `http://localhost:5000/api/comments/${postId}?page=${pageNumber}&limit=20`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      const data = await res.json();
+
+      if (pageNumber === 1) {
+        setComments(data.comments || []);
+      } else {
+        setComments(prev => [
+          ...prev,
+          ...(data.comments || [])
+        ]);
+      }
+
+      if (!data.comments || data.comments.length < 20) {
+        setHasMore(false);
+      }
+
+    } finally {
+      setInitialLoading(false);
     }
-  );
-
-  const data = await res.json();
-
-  if (pageNumber === 1) {
-    setComments(data.comments || []);
-  } else {
-    setComments(prev => [
-      ...prev,
-      ...(data.comments || [])
-    ]);
   }
-
-  if (!data.comments || data.comments.length < 20) {
-    setHasMore(false);
-  }
-}
 
   /* ===============================
      REALTIME SUBSCRIPTION
@@ -219,6 +232,24 @@ export default function CommentSheet({
     }));
   };
 
+  const getVisibleReplies = (commentId) => {
+
+  const replies = replyMap[commentId] || [];
+
+  const page = replyPageMap[commentId] || 1;
+
+  return replies.slice(0, page * REPLY_PAGE_SIZE);
+};
+
+const loadMoreReplies = (commentId) => {
+
+  setReplyPageMap(prev => ({
+    ...prev,
+    [commentId]: (prev[commentId] || 1) + 1
+  }));
+
+};
+
   const mainComments = comments.filter(
     c => !c.parent_comment_id
   );
@@ -250,6 +281,41 @@ export default function CommentSheet({
 
         <div className="comment-list" ref={listRef}>
 
+          {/* ===============================
+                COMMENT LOADING SKELETON
+              ================================ */}
+
+              {initialLoading && (
+                <>
+                  {[1,2,3].map(i => (
+                    <div key={i} className="comment-item skeleton">
+
+                      <div className="comment-avatar skeleton-box" />
+
+                      <div style={{ flex: 1 }}>
+
+                        <div className="skeleton-line short" />
+                        <div className="skeleton-line" />
+                        <div className="skeleton-line small" />
+
+                      </div>
+
+                    </div>
+                  ))}
+                </>
+              )}
+
+
+              {/* ===============================
+                NO COMMENTS STATE
+              ================================ */}
+
+              {!initialLoading && mainComments.length === 0 && (
+                <div className="no-comments-state">
+                  No comments yet
+                </div>
+              )}
+
           {mainComments.map(c => {
 
             const replies = replyMap[c.comment_id] || [];
@@ -261,13 +327,40 @@ export default function CommentSheet({
                 <div className="comment-content">
 
                   <div className="comment-username">
-                    {c.username}
 
-                    {c.date_commented && (
-                      <span className="comment-date">
-                        • {formatRelativeTime(c.date_commented)}
+                    <div className="comment-avatar">
+                      {c.profile_pic ? (
+                        <img
+                          src={c.profile_pic}
+                          alt="pfp"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.target.style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        "👤"
+                      )}
+                    </div>
+
+                    <div className="comment-user-meta">
+                      <span className="comment-user-name">
+                        {c.username}
+
+                        {c.user_id === postAuthorId && (
+                          <span className="comment-author-badge">
+                            Author
+                          </span>
+                        )}
                       </span>
-                    )}
+
+                      {c.date_commented && (
+                        <span className="comment-date">
+                          • {formatRelativeTime(c.date_commented)}
+                        </span>
+                      )}
+                    </div>
+
                   </div>
 
                   <p className="comment-text">
@@ -310,42 +403,90 @@ export default function CommentSheet({
                     </div>
                   )}
 
-                  {expanded && replies.map(r => (
-                    <div key={r.comment_id} className="thread-wrapper">
+                  {expanded && (() => {
 
-                      <div className="thread-author">
-                        @{r.username}
-                      </div>
+                    const visibleReplies = getVisibleReplies(c.comment_id);
+                    const totalReplies = replies.length;
 
-                      <div className="thread-text">
-                        {r.commented_text}
-                      </div>
+                    return (
+                      <>
+                        {visibleReplies.map(r => (
+                          <div key={r.comment_id} className="thread-wrapper">
 
-                      {/* ⭐ Reply + Like Actions */}
-                      <div className="thread-actions">
+                            <div className="thread-author">
 
-                        <button
-                          className="thread-reply-btn"
-                          onClick={() => {
-                            setReplyingTo(r);
-                            setText(`@${r.username} `);
-                            inputRef.current?.focus();
-                          }}
-                        >
-                          ↩ Reply
-                        </button>
+                              <div className="comment-avatar small">
+                                {r.profile_pic ? (
+                                  <img
+                                    src={r.profile_pic}
+                                    alt="pfp"
+                                    loading="lazy"
+                                    onError={(e) => {
+                                      e.target.style.display = "none";
+                                    }}
+                                  />
+                                ) : (
+                                  "👤"
+                                )}
+                              </div>
 
-                        <button
-                          className="thread-reply-btn"
-                          onClick={() => toggleCommentLike(r.comment_id)}
-                        >
-                          ❤️ {r.like_count || 0}
-                        </button>
+                              <span>
+                                @{r.username}
 
-                      </div>
+                                {r.user_id === postAuthorId && (
+                                  <span className="comment-author-badge">
+                                    Author
+                                  </span>
+                                )}
+                              </span>
 
-                    </div>
-                  ))}
+                            </div>
+
+                            <div className="thread-text">
+                              {r.commented_text}
+                            </div>
+
+                            <div className="thread-actions">
+
+                              <button
+                                className="thread-reply-btn"
+                                onClick={() => {
+                                  setReplyingTo(r);
+                                  setText(`@${r.username} `);
+                                  inputRef.current?.focus();
+                                }}
+                              >
+                                ↩ Reply
+                              </button>
+
+                              <button
+                                className="thread-reply-btn"
+                                onClick={() => toggleCommentLike(r.comment_id)}
+                              >
+                                ❤️ {r.like_count || 0}
+                              </button>
+
+                            </div>
+
+                          </div>
+                        ))}
+
+                        {/* ⭐ Load More Replies Button */}
+
+                        {visibleReplies.length < totalReplies && (
+                          <div
+                            className="thread-teaser"
+                            style={{ marginLeft: "40px" }}
+                            onClick={() => loadMoreReplies(c.comment_id)}
+                          >
+                            Load more replies
+                          </div>
+                        )}
+
+                      </>
+                    );
+
+                  })()}
 
                 </div>
               </div>

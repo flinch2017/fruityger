@@ -394,3 +394,200 @@
     rgba(255,220,235,0.9)
   );
 }
+
+
+.comment-author-badge {
+  margin-left: 8px;
+  font-size: 11px;
+  color: #ffffff;
+  font-weight: 600;
+
+  background: rgba(0,160,255,0.15);
+
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+
+.comment-username {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.comment-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.comment-avatar.small {
+  width: 28px;
+  height: 28px;
+}
+
+.comment-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.comment-user-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.comment-user-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.comment-author-badge {
+  font-size: 11px;
+  background: #b6b2d1;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+
+/* ===============================
+   FIX REPLY AVATAR ALIGNMENT
+================================ */
+
+/* Make reply header row horizontal */
+.thread-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Align avatar + username in replies */
+.thread-author .comment-avatar.small {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Prevent avatar jumping vertically */
+.thread-author span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+
+/* ===============================
+   LOADING SKELETON
+================================ */
+
+.skeleton {
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes skeletonPulse {
+  0% { opacity: 0.4; }
+  50% { opacity: 0.9; }
+  100% { opacity: 0.4; }
+}
+
+.skeleton-box {
+  background: rgba(0,160,220,0.2);
+  border-radius: 50%;
+}
+
+.skeleton-line {
+  height: 10px;
+  width: 100%;
+  background: rgba(0,160,220,0.18);
+  border-radius: 8px;
+  margin-top: 6px;
+}
+
+.skeleton-line.short {
+  width: 60%;
+}
+
+.skeleton-line.small {
+  width: 40%;
+}
+
+
+.no-comments-state {
+  text-align: center;
+  padding: 40px 20px;
+
+  color: #0088cc;
+  font-size: 15px;
+
+  opacity: 0.8;
+}
+
+
+/* ===============================
+   COMMENT MENU
+================================ */
+
+.comment-menu-wrapper {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+}
+
+.comment-ellipsis {
+  border: none;
+  background: transparent;
+
+  font-size: 18px;
+  color: #777;
+
+  cursor: pointer;
+
+  padding: 2px 6px;
+  border-radius: 50%;
+}
+
+.comment-ellipsis:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+/* Dropdown */
+
+.comment-dropdown {
+  position: absolute;
+  right: 0;
+  top: 28px;
+
+  background: white;
+
+  border-radius: 12px;
+
+  box-shadow:
+    0 6px 20px rgba(0,0,0,0.12);
+
+  overflow: hidden;
+
+  z-index: 100;
+}
+
+/* Dropdown items */
+
+.dropdown-item {
+  padding: 10px 16px;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.dropdown-item:hover {
+  background: rgba(0,0,0,0.04);
+}
+
+.dropdown-item.delete {
+  color: #ff4d6d;
+}
+
+.dropdown-item.report {
+  color: #0077cc;
+}

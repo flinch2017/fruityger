@@ -519,12 +519,20 @@ export default function Profile() {
 
                 </div>
 
-                <button
-                  className="post-action-btn"
-                  onClick={() => setActiveCommentPost(post.post_id)}
-                >
-                  💬
-                </button>
+                <div className="like-wrapper">
+
+                  <button
+                    className="post-action-btn"
+                    onClick={() => setActiveCommentPost(post.post_id)}
+                  >
+                    💬
+                  </button>
+
+                  <span className="like-count">
+                    {post.comment_count || 0}
+                  </span>
+
+                </div>
 
                 <button className="post-action-btn">
                   🔗

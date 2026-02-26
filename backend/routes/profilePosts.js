@@ -42,7 +42,14 @@ router.get("/posts", authenticateToken, async (req, res) => {
           SELECT 1 FROM likes
           WHERE post_id = p.post_id
           AND liker = $1
-        ) AS is_liked
+        ) AS is_liked,
+
+         -- ⭐ COMMENT COUNT (ADD THIS)
+        (
+            SELECT COUNT(*)
+            FROM comments c
+            WHERE c.post_id = p.post_id
+        ) AS comment_count
 
       FROM posts p
 

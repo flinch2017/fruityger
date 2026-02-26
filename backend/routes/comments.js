@@ -28,13 +28,22 @@ router.get("/:postId", authenticateToken, async (req, res) => {
         c.date_commented,
 
         u.username,
+        u.profile_pic,
 
-        COUNT(cl.comment_id) AS like_count,
-        BOOL_OR(cl.user_id = $2) AS is_liked
+        COUNT(DISTINCT cl.comment_id)::int AS like_count,
+
+        EXISTS (
+          SELECT 1
+          FROM comment_likes
+          WHERE comment_id = c.comment_id
+          AND user_id = $2
+        ) AS is_liked
 
       FROM comments c
 
-      JOIN users u ON u.id = c.user_id
+      JOIN users u
+        ON u.id = c.user_id
+
       LEFT JOIN comment_likes cl
         ON cl.comment_id = c.comment_id
 
@@ -42,12 +51,22 @@ router.get("/:postId", authenticateToken, async (req, res) => {
 
       GROUP BY
         c.comment_id,
-        u.username
+        c.post_id,
+        c.user_id,
+        c.commented_text,
+        c.parent_comment_id,
+        c.date_commented,
+        u.username,
+        u.profile_pic
 
       ORDER BY c.date_commented ASC
-
       LIMIT $3 OFFSET $4
-    `, [postId, userId, limit, offset]);
+    `, [
+      postId,
+      userId,
+      limit,
+      offset
+    ]);
 
     res.json({
       comments: result.rows
