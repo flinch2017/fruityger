@@ -12,7 +12,24 @@ router.get("/posts", authenticateToken, async (req, res) => {
 
   try {
 
-    const userId = req.user.id;
+    let userId = req.user.id;
+
+    // ⭐ If frontend sends username, override profile owner
+    const username = req.query.username;
+
+    if (username) {
+
+      const userResult = await pool.query(
+        "SELECT id FROM users WHERE username=$1",
+        [username]
+      );
+
+      if (!userResult.rows[0]) {
+        return res.json({ posts: [] });
+      }
+
+      userId = userResult.rows[0].id;
+    }
     const limit = parseInt(req.query.limit) || 5;
     const offset = parseInt(req.query.offset) || 0;
 

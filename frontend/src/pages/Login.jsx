@@ -45,8 +45,12 @@ export default function Login() {
     }
 
     console.log("Logged in user:", data.user);
-    localStorage.setItem("token", data.token); // store JWT
-    window.location.href = "/feed"; // redirect to main app
+    localStorage.setItem("token", data.token);
+
+    // ⭐ Save username for profile routing
+    localStorage.setItem("username", data.user.username);
+
+    window.location.href = "/feed";
   } catch (err) {
     console.error(err);
     alert("Login request failed");

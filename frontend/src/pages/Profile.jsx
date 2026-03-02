@@ -1,10 +1,13 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import "../css/Profile.css";
 import CommentSheet from "../components/CommentSheet";
 import "../css/CommentSheet.css";
 
 export default function Profile() {
+
+  const { username } = useParams();
 
   const [user, setUser] = useState(null);
   const [posts, setPosts] = useState([]);
@@ -62,19 +65,30 @@ export default function Profile() {
     if (!token) return;
 
     try {
-      const res = await fetch(
-        "http://localhost:5000/api/main/me",
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+
+      let url = username
+      ? `http://localhost:5000/api/main/user/${username}`
+      : "http://localhost:5000/api/main/me";
+
+      
+
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
       const data = await res.json();
+
       if (res.ok) setUser(data.user);
+
     } catch (err) {
       console.error(err);
     }
   };
 
+  
+
   const fetchPosts = async (initial = false) => {
+
     if (loadingPosts) return;
 
     setLoadingPosts(true);
@@ -85,9 +99,18 @@ export default function Profile() {
     const currentOffset = initial ? 0 : offset;
 
     try {
+
+      const profileQuery = username
+        ? `&username=${username}`
+        : "";
+
       const res = await fetch(
-        `http://localhost:5000/api/profile/posts?limit=${LIMIT}&offset=${currentOffset}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        `http://localhost:5000/api/profile/posts?limit=${LIMIT}&offset=${currentOffset}${profileQuery}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
       );
 
       const data = await res.json();
@@ -108,9 +131,6 @@ export default function Profile() {
           setOffset(prev => prev + data.posts.length);
         }
 
-        if (data.posts.length < LIMIT) {
-          setHasMore(false);
-        }
       }
 
     } catch (err) {
@@ -123,7 +143,7 @@ export default function Profile() {
   useEffect(() => {
     fetchUser();
     fetchPosts(true);
-  }, []);
+  }, [username]);
 
   /* ================= FIXED INFINITE SCROLL ================= */
 

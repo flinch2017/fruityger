@@ -92,7 +92,13 @@ export default function Header() {
 
               {dropdownOpen && (
                 <div className="profile-dropdown">
-                  <button onClick={() => { navigate("/profile"); setDropdownOpen(false); }}>
+                  <button
+                    onClick={() => {
+                      const username = localStorage.getItem("username");
+                      navigate(username ? `/profile/${username}` : "/feed");
+                      setDropdownOpen(false);
+                    }}
+                  >
                     Profile
                   </button>
 

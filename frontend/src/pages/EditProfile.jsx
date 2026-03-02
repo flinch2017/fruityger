@@ -134,7 +134,7 @@ export default function EditProfile() {
       <div className="edit-profile-card">
         <button
           className="edit-close-btn"
-          onClick={() => navigate("/profile")}
+          onClick={() => navigate(-1)}
         >
           ✕
         </button>

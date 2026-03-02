@@ -97,16 +97,7 @@ function App() {
             </PrivateRoute>
           }
         />
-        <Route
-          path="/profile"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <Profile />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
+        
         <Route
           path="/settings"
           element={
@@ -172,7 +163,16 @@ function App() {
           }
         />
         <Route path="/search" element={<MainLayout><Search /></MainLayout>} />
-        <Route path="/profile/:username" element={<MainLayout><Profile /></MainLayout>} />
+        <Route
+          path="/profile/:username"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <Profile />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
         
       </Routes>
     </>
