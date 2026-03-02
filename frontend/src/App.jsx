@@ -17,6 +17,8 @@ import NotFound from "./pages/NotFound"; // <-- import it
 import EditProfile from "./pages/EditProfile"; // <-- import it
 import CreatePost from "./pages/CreatePost"; // <-- import it
 import CommentSheet from "./components/CommentSheet";
+import Search from "./pages/Search";
+
 
 import "./css/App.css";
 
@@ -169,6 +171,8 @@ function App() {
             </MainLayout>
           }
         />
+        <Route path="/search" element={<MainLayout><Search /></MainLayout>} />
+        <Route path="/profile/:username" element={<MainLayout><Profile /></MainLayout>} />
         
       </Routes>
     </>

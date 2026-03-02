@@ -7,8 +7,30 @@ export default function Header() {
   const toggleDropdown = () => setDropdownOpen(!dropdownOpen);
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   const isCreatePage = location.pathname === "/create";
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+
+    const keyword = searchQuery.trim();
+    if (!keyword) return;
+
+    const encoded = encodeURIComponent(keyword);
+
+    // Prevent redundant navigation
+    if (location.pathname === "/search" &&
+        new URLSearchParams(location.search).get("q") === keyword) {
+      return;
+    }
+
+    navigate(`/search?q=${encoded}`);
+
+    setSearchQuery("");
+    setMobileSearchOpen(false);
+  };
 
   return (
     <>
@@ -23,6 +45,16 @@ export default function Header() {
           Fruityger
         </div>
 
+        <form className="search-form" onSubmit={handleSearch}>
+          <input
+            type="text"
+            placeholder="Search accounts..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="search-input"
+          />
+        </form>
+
         <div className="nav-row">
           <nav className="nav-items">
 
@@ -36,6 +68,13 @@ export default function Header() {
 
             <button className="nav-button" onClick={() => navigate("/feed")}>
               🏠
+            </button>
+
+            <button
+              className="nav-button mobile-search-btn"
+              onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+            >
+              🔍
             </button>
 
             <button className="nav-button" onClick={() => navigate("/notifications")}>
@@ -74,6 +113,27 @@ export default function Header() {
 
           </nav>
         </div>
+
+        {mobileSearchOpen && (
+          <div className="mobile-search-dropdown">
+            <form
+              onSubmit={(e) => {
+                handleSearch(e);
+                setMobileSearchOpen(false);
+              }}
+              className="mobile-search-form"
+            >
+              <input
+                type="text"
+                placeholder="Search accounts..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="mobile-search-input"
+                autoFocus
+              />
+            </form>
+          </div>
+        )}
       </header>
 
       {/* ⭐ Floating Mobile FAB MUST BE OUTSIDE HEADER */}

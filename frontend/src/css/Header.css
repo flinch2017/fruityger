@@ -65,13 +65,13 @@ body {
 .nav-items {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 10px;
 }
 
 /* ===== GLOSSY ORB BUTTONS ===== */
 .nav-button {
-  width: 42px;
-  height: 42px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
@@ -80,7 +80,7 @@ body {
   align-items: center;
   justify-content: center;
 
-  font-size: 1.2rem;
+  font-size: 0.95rem;
 
   background: radial-gradient(
     circle at 30% 30%,
@@ -90,7 +90,7 @@ body {
   );
 
   color: white;
-  transition: all 0.25s ease;
+  transition: all 0.2s ease;
 }
 
 .nav-button:hover {
@@ -108,15 +108,18 @@ body {
 
 /* PROFILE BUTTON */
 .profile-placeholder {
-  padding: 8px 16px;
-  border-radius: 50px;
-  border: none;
-  cursor: pointer;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
   background: linear-gradient(to bottom, #7ee0ff, #00bfff);
   color: white;
-  font-weight: 600;
-  transition: all 0.25s ease;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .profile-placeholder:hover {
@@ -164,11 +167,7 @@ body {
     padding: 12px 15px;
   }
 
-  .nav-button {
-    width: 36px;
-    height: 36px;
-    font-size: 1rem;
-  }
+  
 
   .logo {
     font-size: 1.2rem;
@@ -238,6 +237,124 @@ body {
 /* Hide on mobile */
 @media (max-width: 768px) {
   .desktop-create-btn {
+    display: none;
+  }
+}
+
+.search-form {
+  margin: 0 20px;
+}
+
+.search-input {
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid #ccc;
+  outline: none;
+  width: 200px;
+}
+
+
+.search-form {
+  margin: 0 20px;
+}
+
+.search-input {
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid #ccc;
+  outline: none;
+  width: 200px;
+}
+
+/* Mobile behavior */
+@media (max-width: 768px) {
+  .search-form {
+    display: none;
+  }
+
+  .mobile-search-btn {
+    display: inline-block;
+  }
+}
+
+/* Desktop hide search icon */
+@media (min-width: 769px) {
+  .mobile-search-btn {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .nav-button {
+    width: 30px;
+    height: 30px;
+    font-size: 0.85rem;
+  }
+}
+
+/* ===============================
+   MOBILE SEARCH DROPDOWN
+================================ */
+
+.mobile-search-dropdown {
+  position: fixed;
+  top: 58px; /* height of header */
+  left: 0;
+  width: 100%;
+
+  padding: 15px;
+
+  backdrop-filter: blur(18px);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.85),
+    rgba(180, 240, 255, 0.6)
+  );
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.9);
+
+  z-index: 999;
+  animation: slideDown 0.25s ease;
+}
+
+.mobile-search-form {
+  width: 100%;
+}
+
+.mobile-search-input {
+  width: 100%;
+  padding: 14px 18px;
+
+  border-radius: 30px;
+  border: 1px solid rgba(0, 180, 255, 0.3);
+
+  font-size: 1rem;
+  outline: none;
+
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.mobile-search-input:focus {
+  border-color: #00bfff;
+  box-shadow: 0 0 10px rgba(0, 180, 255, 0.4);
+}
+
+/* Slide animation */
+@keyframes slideDown {
+  from {
+    transform: translateY(-15px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Hide on desktop */
+@media (min-width: 769px) {
+  .mobile-search-dropdown {
     display: none;
   }
 }

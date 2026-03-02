@@ -9,7 +9,7 @@ const router = express.Router();
 router.get("/", authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT user_id, username, email, profile_pic, created_at FROM users WHERE user_id = $1",
+      "SELECT id, username, email, profile_pic, created_at FROM users WHERE id = $1",
       [req.user.id]
     );
     res.json(result.rows[0]);
