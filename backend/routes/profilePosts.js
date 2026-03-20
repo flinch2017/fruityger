@@ -9,6 +9,7 @@ const router = express.Router();
 ============================================ */
 
 router.get("/posts", authenticateToken, async (req, res) => {
+  
 
   try {
 
@@ -98,5 +99,43 @@ router.get("/posts", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+router.delete("/:postId", authenticateToken, async (req, res) => {
+  console.log("Authenticated user:", req.user);
+  const { postId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    // ✅ Check if post exists + ownership
+    const postCheck = await pool.query(
+      "SELECT user_id FROM posts WHERE post_id = $1",
+      [postId]
+    );
+
+    if (postCheck.rows.length === 0) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    if (postCheck.rows[0].user_id !== userId) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    // 🔥 IMPORTANT: delete dependencies first (if no CASCADE yet)
+
+    await pool.query("DELETE FROM comments WHERE post_id = $1", [postId]);
+    await pool.query("DELETE FROM likes WHERE post_id = $1", [postId]);
+    await pool.query("DELETE FROM post_media WHERE post_id = $1", [postId]);
+
+    // ✅ Delete the post
+    await pool.query("DELETE FROM posts WHERE post_id = $1", [postId]);
+
+    res.json({ message: "Post deleted successfully" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 
 export default router;

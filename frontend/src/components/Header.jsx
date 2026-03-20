@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import "../css/Header.css";
 
 export default function Header() {
@@ -9,8 +9,49 @@ export default function Header() {
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const profileRef = useRef(null);
+  const searchRef = useRef(null);
 
   const isCreatePage = location.pathname === "/create";
+
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      try {
+        const res = await fetch("http://localhost:5000/api/main/me", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (res.ok) setCurrentUser(data.user);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchCurrentUser();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      // Close profile dropdown if click is outside
+      if (profileRef.current && !profileRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+      // Close mobile search dropdown if click is outside
+      if (searchRef.current && !searchRef.current.contains(e.target)) {
+        setMobileSearchOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -85,9 +126,23 @@ export default function Header() {
               ✉️
             </button>
 
-            <div className="profile-container">
+            {/* PROFILE */}
+            <div className="profile-container" ref={profileRef}>
               <div className="profile-placeholder" onClick={toggleDropdown}>
-                👤
+                {currentUser?.profile_pic ? (
+                  <img
+                    src={currentUser.profile_pic}
+                    alt="Avatar"
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                    }}
+                  />
+                ) : (
+                  "👤"
+                )}
               </div>
 
               {dropdownOpen && (
@@ -120,8 +175,9 @@ export default function Header() {
           </nav>
         </div>
 
+        {/* MOBILE SEARCH */}
         {mobileSearchOpen && (
-          <div className="mobile-search-dropdown">
+          <div className="mobile-search-dropdown" ref={searchRef}>
             <form
               onSubmit={(e) => {
                 handleSearch(e);

@@ -6,7 +6,40 @@ import { deleteR2Object } from "../utils/r2Delete.js";
 
 const router = express.Router();
 
-// Get current user info
+
+
+router.get("/user/:username", authenticateToken, async (req, res) => {
+  try {
+    const { username } = req.params;
+
+    const { rows } = await pool.query(
+      `SELECT id, username, email, profile_pic, created_at
+       FROM users
+       WHERE username = $1`,
+      [username]
+    );
+
+    if (!rows[0]) return res.status(404).json({ error: "User not found" });
+
+    const user = rows[0];
+
+    const countRes = await pool.query(
+      `SELECT
+          (SELECT COUNT(*) FROM follows WHERE following_id=$1) AS followers_count,
+          (SELECT COUNT(*) FROM follows WHERE follower_id=$1) AS following_count`,
+      [user.id]
+    );
+
+    user.followers_count = parseInt(countRes.rows[0].followers_count, 10);
+    user.following_count = parseInt(countRes.rows[0].following_count, 10);
+
+    res.json({ user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 router.get("/me", authenticateToken, async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -18,31 +51,19 @@ router.get("/me", authenticateToken, async (req, res) => {
 
     if (!rows[0]) return res.status(404).json({ error: "User not found" });
 
-    res.json({ user: rows[0] });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
+    const user = rows[0];
 
-router.get("/user/:username", authenticateToken, async (req, res) => {
-  try {
-
-    const { username } = req.params;
-
-    const { rows } = await pool.query(
-      `SELECT id, username, email, profile_pic, created_at
-       FROM users
-       WHERE username = $1`,
-      [username]
+    const countRes = await pool.query(
+      `SELECT
+          (SELECT COUNT(*) FROM follows WHERE following_id=$1) AS followers_count,
+          (SELECT COUNT(*) FROM follows WHERE follower_id=$1) AS following_count`,
+      [user.id]
     );
 
-    if (!rows[0]) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    user.followers_count = parseInt(countRes.rows[0].followers_count, 10);
+    user.following_count = parseInt(countRes.rows[0].following_count, 10);
 
-    res.json({ user: rows[0] });
-
+    res.json({ user });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });

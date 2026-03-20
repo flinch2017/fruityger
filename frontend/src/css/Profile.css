@@ -233,6 +233,31 @@
   color: white;
 }
 
+.follow-btn {
+  background: linear-gradient(
+    to bottom,
+    #7ee0ff,
+    #00bfff
+  );
+  color: white;
+}
+
+.button-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top: 2px solid #fff; /* or any color */
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 /* SHARE BUTTON (SOFT CYAN/GREEN) */
 .share-btn {
   background: linear-gradient(
@@ -365,6 +390,13 @@
   box-shadow:
     0 25px 60px rgba(0,180,255,0.3),
     inset 0 1px 4px rgba(255,255,255,0.9);
+}
+
+.profile-posts h3 {
+  font-size: 22px;
+  margin-bottom: 20px;
+ 
+  text-align: center;
 }
 
 .post-card {
@@ -579,4 +611,298 @@
   font-size: 13px;
   font-weight: 600;
   color: #0088cc;
+}
+
+
+/* ===== FRUTIGER AERO DROPDOWN ===== */
+
+.post-more-wrapper {
+  position: absolute;
+  top: 10px;
+  right: -10px; /* pushes it to edge */
+}
+
+/* Keep your existing button, just enhance slightly */
+.post-more {
+  font-size: 20px;
+  color: #00aaff;
+
+  width: 34px;
+  height: 34px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  cursor: pointer;
+
+  transition: all 0.25s ease;
+
+}
+
+.post-more:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 20px rgba(0,200,255,0.5),
+    inset 0 2px 6px rgba(255,255,255,1);
+}
+
+
+/* ===== DROPDOWN PANEL ===== */
+
+.post-dropdown {
+  position: absolute;
+  top: 45px;
+  right: 0;
+
+  min-width: 160px;
+  padding: 6px;
+
+  border-radius: 18px;
+
+  backdrop-filter: blur(20px);
+
+  background: linear-gradient(
+    160deg,
+    rgba(255,255,255,0.85),
+    rgba(180,240,255,0.55)
+  );
+
+  box-shadow:
+    0 15px 40px rgba(0,180,255,0.35),
+    inset 0 2px 6px rgba(255,255,255,0.9);
+
+  z-index: 20;
+
+  animation: dropdownPop 0.25s ease;
+}
+
+/* Smooth pop animation */
+@keyframes dropdownPop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+
+/* ===== ITEMS ===== */
+
+.dropdown-item {
+  padding: 10px 14px;
+  border-radius: 12px;
+
+  font-size: 13px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  color: #006688;
+
+  transition: all 0.2s ease;
+}
+
+/* Hover = glowing bubble */
+.dropdown-item:hover {
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.9),
+    rgba(150,230,255,0.6)
+  );
+
+  box-shadow:
+    0 6px 18px rgba(0,200,255,0.5),
+    inset 0 2px 5px rgba(255,255,255,1);
+
+  transform: translateY(-1px);
+}
+
+
+/* ===== SPECIAL STATES ===== */
+
+.dropdown-item.delete {
+  color: #ff4d6d;
+}
+
+.dropdown-item.delete:hover {
+  box-shadow:
+    0 6px 18px rgba(255, 80, 120, 0.6),
+    inset 0 2px 5px rgba(255,255,255,1);
+}
+
+.dropdown-item.report {
+  color: #ffaa00;
+}
+
+.dropdown-item.report:hover {
+  box-shadow:
+    0 6px 18px rgba(255, 180, 0, 0.6),
+    inset 0 2px 5px rgba(255,255,255,1);
+}
+
+.dropdown-item.edit {
+  color: #00aaff;
+}
+
+.dropdown-item.edit:hover {
+  box-shadow:
+    0 6px 18px rgba(0, 180, 255, 0.6),
+    inset 0 2px 5px rgba(255,255,255,1);
+}
+
+/* ===== MODAL ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.15); /* subtle darken */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  animation: fadeIn 0.3s ease forwards;
+  /* REMOVE backdrop-filter from overlay */
+}
+
+.modal-card {
+  background: rgba(245,246,250,0.9); /* frosted glass effect */
+  border: 1px solid rgba(255,255,255,0.25);
+  padding: 28px 36px;
+  border-radius: 20px;
+  width: 380px;
+  max-width: 90%;
+  text-align: center;
+  box-shadow:
+    0 16px 32px rgba(0,0,0,0.15),
+    0 0 24px rgba(0,180,255,0.1);
+  font-family: "Inter", sans-serif;
+  color: #111;
+  transform: scale(0.9) translateY(-20px);
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+  backdrop-filter: blur(6px); /* only modal blurs */
+}
+
+.modal-card.animate-in {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+.modal-card.loading {
+  pointer-events: none;
+  transform: scale(1.02);
+  filter: brightness(0.95);
+}
+
+.modal-card h3 {
+  font-size: 1.35rem;
+  margin-bottom: 14px;
+  background: linear-gradient(90deg, #00aaff, #ffaa00);
+  background-clip: text;          /* Standard property */
+  -webkit-background-clip: text;  /* WebKit prefix for Chrome/Safari */
+  -webkit-text-fill-color: transparent;
+}
+
+.modal-card p {
+  font-size: 1rem;
+  margin-bottom: 28px;
+  color: #333;
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+}
+
+.modal-btn {
+  padding: 10px 20px;
+  border-radius: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 12px rgba(0,180,255,0.25);
+}
+
+.modal-btn.cancel {
+  background: rgba(255,255,255,0.7);
+  color: #333;
+  backdrop-filter: blur(4px);
+}
+
+.modal-btn.cancel:hover {
+  background: rgba(255,255,255,0.85);
+  box-shadow: 0 6px 20px rgba(0,180,255,0.3);
+}
+
+.modal-btn.confirm {
+  background: linear-gradient(135deg, #ff4d6d, #ff80a0);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.modal-btn.confirm:hover {
+  transform: scale(1.05);
+  box-shadow:
+    0 8px 24px rgba(255,77,109,0.5),
+    0 0 12px rgba(255,180,200,0.4);
+}
+
+.spinner {
+  border: 4px solid rgba(255,255,255,0.25);
+  border-top: 4px solid #00aaff;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  margin: 18px auto;
+  animation: spin 0.9s linear infinite;
+  box-shadow: 0 0 12px #00aaff80, 0 0 24px #00aaff40;
+}
+
+.post-card.fade-in {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.35s ease, transform 0.35s ease, box-shadow 0.35s ease;
+  box-shadow: 0 4px 12px rgba(0,180,255,0.1);
+}
+
+.post-card.fade-out {
+  opacity: 0;
+  transform: translateY(-24px) scale(0.97);
+  box-shadow: 0 0 0 rgba(0,180,255,0);
+  transition: opacity 0.35s ease, transform 0.35s ease, box-shadow 0.35s ease;
+}
+
+.toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 14px 28px;
+  border-radius: 18px;
+  font-weight: 600;
+  z-index: 10001;
+  opacity: 0.95;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 6px 24px rgba(0,180,255,0.2);
+}
+
+.toast.success { background: linear-gradient(135deg, #4caf50, #00ff90); color: #fff; }
+.toast.error { background: linear-gradient(135deg, #ff4d6d, #ff80a0); color: #fff; }
+
+.no-posts-message {
+  text-align: center;
+  margin: 32px 0;
+  font-size: 1.1rem;
+  color: #555;
+
+  padding: 16px 24px;
+  border-radius: 16px;
+
 }

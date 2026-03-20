@@ -28,8 +28,23 @@ export default function Profile() {
   const observerRef = useRef(null);
   const [activeCommentPost, setActiveCommentPost] = useState(null);
 
+  const [activeMenuPostId, setActiveMenuPostId] = useState(null);
+  const dropdownRef = useRef(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  
+  const [deleteModal, setDeleteModal] = useState({
+    visible: false,
+    postId: null,
+  });
+  const [actionResult, setActionResult] = useState(null); 
+  const [deletingPost, setDeletingPost] = useState(false); 
+  const [disappearingPosts, setDisappearingPosts] = useState([]); 
+  const [following, setFollowing] = useState(false); // new state
+  const [followLoading, setFollowLoading] = useState(false);
+
   const LIMIT = 5;
   const navigate = useNavigate();
+  
 
   /* ================= FETCH DATA ================= */
 
@@ -59,6 +74,122 @@ export default function Profile() {
       year: "numeric"
     });
   };
+
+  const handleEditPost = (post) => {
+    // Option 1: navigate to edit page
+    navigate(`/edit-post/${post.post_id}`, {
+      state: { post }
+    });
+
+    // Option 2 (later): open modal instead
+  };
+
+  const fetchCurrentUser = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      const res = await fetch("http://localhost:5000/api/main/me", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const data = await res.json();
+
+      if (res.ok) setCurrentUser(data.user);
+
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const isOwnProfile = currentUser?.id === user?.id;
+
+  const toggleMenu = (postId) => {
+    setActiveMenuPostId(prev => (prev === postId ? null : postId));
+  };
+
+  const promptDeletePost = (postId) => {
+    setDeleteModal({ visible: true, postId });
+  };
+
+  const handleConfirmDelete = async () => {
+    const { postId } = deleteModal;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    setDeletingPost(true); // show spinner
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/profile/${postId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) throw new Error("Delete failed");
+
+      // Animate card disappearance
+      setDisappearingPosts(prev => [...prev, postId]);
+
+      setTimeout(() => {
+        setPosts(prev => prev.filter(p => p.post_id !== postId));
+        setDisappearingPosts(prev => prev.filter(id => id !== postId));
+      }, 300); // match CSS animation duration
+
+      setActionResult({ type: "success", message: "Post deleted successfully!" });
+    } catch (err) {
+      console.error(err);
+      setActionResult({ type: "error", message: "Failed to delete post!" });
+    } finally {
+      setDeletingPost(false);
+      setDeleteModal({ visible: false, postId: null });
+      setTimeout(() => setActionResult(null), 3000);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    if (!deletingPost) setDeleteModal({ visible: false, postId: null });
+  };
+
+  const handleReportPost = async (postId) => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      const res = await fetch("http://localhost:5000/api/posts/report", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ postId })
+      });
+
+      if (!res.ok) throw new Error("Report failed");
+
+      alert("Post reported");
+
+    } catch (err) {
+      console.error(err);
+      alert("Failed to report post");
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target)
+      ) {
+        setActiveMenuPostId(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const fetchUser = async () => {
     const token = localStorage.getItem("token");
@@ -141,6 +272,7 @@ export default function Profile() {
   };
 
   useEffect(() => {
+    fetchCurrentUser();
     fetchUser();
     fetchPosts(true);
   }, [username]);
@@ -339,6 +471,69 @@ export default function Profile() {
     }
   };
 
+
+  // Check if current user follows this profile
+  const fetchFollowingStatus = async () => {
+    if (isOwnProfile) return; // no need
+
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/follow/status?username=${username}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json();
+      if (res.ok) setFollowing(data.following);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Call it when user or username changes
+  useEffect(() => {
+    if (user && !isOwnProfile) {
+      fetchFollowingStatus();
+    }
+  }, [user, isOwnProfile]);
+
+  // Follow / Unfollow action
+  const toggleFollow = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    setFollowLoading(true);
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/follow/toggle`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ username })
+        }
+      );
+
+      if (!res.ok) throw new Error("Failed");
+
+      // ✅ Optimistic UI: toggle state and update followers count
+      setFollowing(prev => !prev);
+      setUser(prev => ({
+        ...prev,
+        followers_count: prev.followers_count + (following ? -1 : 1)
+      }));
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update follow status");
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
   /* ================= RENDER ================= */
 
   if (!user) {
@@ -353,6 +548,34 @@ export default function Profile() {
   
   return (
     <div className="profile-page">
+
+      {/* ===== DELETE CONFIRM MODAL ===== */}
+      {deleteModal.visible && (
+        <div className="modal-overlay">
+          <div className={`modal-card ${deletingPost ? "loading" : "animate-in"}`}>
+            <h3>Confirm Delete</h3>
+            <p>Are you sure you want to delete this post?</p>
+
+            {deletingPost && (
+              <div className="spinner"></div>
+            )}
+
+            {!deletingPost && (
+              <div className="modal-actions">
+                <button className="modal-btn cancel" onClick={handleCancelDelete}>Cancel</button>
+                <button className="modal-btn confirm" onClick={handleConfirmDelete}>Delete</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== ACTION RESULT TOAST ===== */}
+      {actionResult && (
+        <div className={`toast ${actionResult.type}`}>
+          {actionResult.message}
+        </div>
+      )}
 
       {activeCommentPost && (
         <CommentSheet
@@ -379,12 +602,26 @@ export default function Profile() {
           <p>Status: Feeling nostalgic ✨</p>
 
           <div className="profile-actions">
-            <button
-              className="profile-btn edit-btn"
-              onClick={() => navigate("/edit-profile")}
-            >
-              Edit Profile
-            </button>
+            {isOwnProfile ? (
+              <button
+                className="profile-btn edit-btn"
+                onClick={() => navigate("/edit-profile")}
+              >
+                Edit Profile
+              </button>
+            ) : (
+              <button
+                className="profile-btn follow-btn"
+                onClick={toggleFollow}
+                disabled={followLoading} // disable while loading
+              >
+                {followLoading ? (
+                  <div className="button-spinner"></div>
+                ) : (
+                  following ? "Unfollow" : "Follow"
+                )}
+              </button>
+            )}
 
             <button className="profile-btn share-btn">
               Share Profile
@@ -393,12 +630,12 @@ export default function Profile() {
 
           <div className="profile-stats">
             <div className="stat">
-              <span className="stat-number">128</span>
+              <span className="stat-number">{user.followers_count || 0}</span>
               <span className="stat-label">Followers</span>
             </div>
 
             <div className="stat">
-              <span className="stat-number">76</span>
+              <span className="stat-number">{user.following_count || 0}</span>
               <span className="stat-label">Following</span>
             </div>
           </div>
@@ -406,15 +643,69 @@ export default function Profile() {
       </div>
 
       <div className="profile-posts">
-        <h3>Your Posts</h3>
+        <h3>Posts</h3>
+
+        {posts.length === 0 && !loadingPosts && (
+          <p className="no-posts-message">No posts yet</p>
+        )}
 
         {posts.map(post => (
-          <div key={post.post_id} className="post-card">
-
+          <div
+            key={post.post_id}
+            className={`post-card ${disappearingPosts.includes(post.post_id) ? "fade-out" : "fade-in"}`}
+          >
             {/* ===== MORE OPTIONS (TOP RIGHT) ===== */}
-            <div className="post-more">
+            <div
+              className="post-more-wrapper"
+              ref={activeMenuPostId === post.post_id ? dropdownRef : null}
+            >
+
+            <div
+              className="post-more"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleMenu(post.post_id);
+              }}
+            >
               ⋮
             </div>
+
+            {activeMenuPostId === post.post_id && (
+              <div className="post-dropdown">
+
+                {/* ✅ YOUR PROFILE ONLY */}
+                {isOwnProfile && (
+                  <>
+                    <div
+                      className="dropdown-item edit"
+                      onClick={() => handleEditPost(post)}
+                    >
+                    Edit
+                    </div>
+
+                    <div
+                      className="dropdown-item delete"
+                      onClick={() => promptDeletePost(post.post_id)}
+                    >
+                      Delete
+                    </div>
+                  </>
+                )}
+
+                {/* ✅ OTHER PEOPLE'S PROFILE */}
+                {!isOwnProfile && (
+                  <div
+                    className="dropdown-item report"
+                    onClick={() => handleReportPost(post.post_id)}
+                  >
+                  Report
+                  </div>
+                )}
+
+              </div>
+            )}
+
+          </div>
 
             <div className="post-header">
               <div className="post-user-info">
@@ -560,7 +851,6 @@ export default function Profile() {
               </div>
 
             </div>
-
           </div>
         ))}
 
