@@ -6,6 +6,8 @@ export default function EditProfile() {
   const [user, setUser] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [alert, setAlert] = useState({ message: "", type: "" }); 
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -40,6 +42,11 @@ export default function EditProfile() {
     fetchUser();
   }, []);
 
+  const showAlert = (message, type = "success", duration = 3000) => {
+    setAlert({ message, type });
+    setTimeout(() => setAlert({ message: "", type: "" }), duration);
+  };
+
   const handleChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -57,11 +64,13 @@ export default function EditProfile() {
     const token = localStorage.getItem("token");
     if (!token) return;
 
+    setLoading(true); // start loading
+
     let profilePicUrl = form.profile_pic;
     let profilePicKey = user?.profile_pic_key || null;
 
     try {
-      // 🔹 1. Upload image to backend (which uploads to R2)
+      // 1. Upload image
       if (selectedFile) {
         const uploadData = new FormData();
         uploadData.append("file", selectedFile);
@@ -70,17 +79,15 @@ export default function EditProfile() {
           "http://localhost:5000/api/main/upload-pfp",
           {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
             body: uploadData,
           }
         );
 
         const uploadResult = await uploadRes.json();
-
         if (!uploadRes.ok) {
-          alert("Image upload failed");
+          showAlert("Image upload failed", "error");
+          setLoading(false);
           return;
         }
 
@@ -88,35 +95,43 @@ export default function EditProfile() {
         profilePicKey = uploadResult.key;
       }
 
-      // 🔹 2. Update user profile
-      const res = await fetch(
-        "http://localhost:5000/api/main/edit-profile",
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            username: form.username,
-            profile_pic: profilePicUrl,
-            profile_pic_key: profilePicKey
-          }),
-        }
-      );
+      // 2. Update profile
+      const res = await fetch("http://localhost:5000/api/main/edit-profile", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          username: form.username,
+          profile_pic: profilePicUrl,
+          profile_pic_key: profilePicKey,
+        }),
+      });
 
       const data = await res.json();
 
       if (res.ok) {
-        alert("Profile updated successfully!");
+        showAlert("Profile updated successfully!", "success");
         setUser(data.user);
         setForm({ ...form, profile_pic: profilePicUrl });
+
+        // ✅ UPDATE LOCAL STORAGE
+        localStorage.setItem("username", data.user.username);
+
+        // (optional but good if you store it)
+        localStorage.setItem("profile_pic", data.user.profile_pic || "");
+
+        // redirect after a short delay
+        setTimeout(() => navigate(`/profile/${data.user.username}`), 1000);
       } else {
-        alert(data.error || "Update failed");
+        showAlert(data.error || "Update failed", "error");
       }
     } catch (err) {
       console.error(err);
-      alert("Update request failed");
+      showAlert("Update request failed", "error");
+    } finally {
+      setLoading(false); // stop loading
     }
   };
 
@@ -131,7 +146,17 @@ export default function EditProfile() {
 
   return (
     <div className="edit-profile-page">
+
+      
+
       <div className="edit-profile-card">
+
+        {alert.message && (
+          <div className={`custom-alert ${alert.type}`}>
+            {alert.message}
+          </div>
+        )}
+        
         <button
           className="edit-close-btn"
           onClick={() => navigate(-1)}
@@ -180,8 +205,8 @@ export default function EditProfile() {
 
           
 
-          <button type="submit">
-            Save Changes
+          <button type="submit" disabled={loading}>
+            {loading ? <span className="spinner"></span> : "Save Changes"}
           </button>
         </form>
       </div>
