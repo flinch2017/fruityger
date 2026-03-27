@@ -24,6 +24,7 @@ export default function CommentSheet({
 
   const inputRef = useRef(null);
   const token = localStorage.getItem("token");
+  
 
   /* ===============================
      FETCH COMMENTS
@@ -84,8 +85,35 @@ export default function CommentSheet({
           table: "comments",
           filter: `post_id=eq.${postId}`
         },
-        () => {
-          fetchComments();
+        async (payload) => {
+          const newComment = payload.new;
+
+          try {
+            // 🔥 fetch FULL comment with username + profile_pic
+            const res = await fetch(
+              `http://localhost:5000/api/comments/single/${newComment.comment_id}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`
+                }
+              }
+            );
+
+            const data = await res.json();
+
+            const fullComment = data.comment;
+
+            setComments(prev => {
+              if (prev.some(c => c.comment_id === fullComment.comment_id)) {
+                return prev;
+              }
+
+              return [fullComment, ...prev];
+            });
+
+          } catch (err) {
+            console.error(err);
+          }
         }
       )
       .subscribe();
@@ -142,7 +170,7 @@ export default function CommentSheet({
           replyingTo.comment_id;
       }
 
-      await fetch("http://localhost:5000/api/comments", {
+      const res = await fetch("http://localhost:5000/api/comments", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -154,6 +182,11 @@ export default function CommentSheet({
           parentId
         })
       });
+
+      const newComment = await res.json();
+
+      // ✅ instantly add correct comment
+      setComments(prev => [newComment, ...prev]);
 
       setText("");
       setReplyingTo(null);
@@ -498,13 +531,31 @@ const loadMoreReplies = (commentId) => {
 
         {replyingTo && (
           <div className="replying-banner">
-            Replying to @{replyingTo.username}
-            <span
-              className="reply-cancel"
+            
+            <div className="replying-left">
+              <div className="replying-avatar">
+                {replyingTo.profile_pic ? (
+                  <img src={replyingTo.profile_pic} alt="pfp" />
+                ) : (
+                  "👤"
+                )}
+              </div>
+
+              <div className="replying-text">
+                <span className="replying-label">Replying to</span>
+                <span className="replying-username">
+                  @{replyingTo.username}
+                </span>
+              </div>
+            </div>
+
+            <button
+              className="reply-cancel-btn"
               onClick={() => setReplyingTo(null)}
             >
               ✕
-            </span>
+            </button>
+
           </div>
         )}
 
@@ -515,10 +566,16 @@ const loadMoreReplies = (commentId) => {
             value={text}
             onChange={e => setText(e.target.value)}
             placeholder="Write a comment..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !loading) {
+                e.preventDefault();
+                sendComment();
+              }
+            }}
           />
 
           <button onClick={sendComment} disabled={loading}>
-            Post
+            {loading ? <span className="spinner" /> : "Post"}
           </button>
 
         </div>

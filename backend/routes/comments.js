@@ -107,18 +107,74 @@ router.post("/", authenticateToken, async (req, res) => {
         parent.rows[0].parent_comment_id || parentId;
     }
 
-    const result = await pool.query(`
+    // 1. Insert comment
+    const insert = await pool.query(`
       INSERT INTO comments
       (post_id, user_id, commented_text, parent_comment_id)
       VALUES ($1, $2, $3, $4)
       RETURNING *
     `, [postId, userId, text, finalParentId]);
 
-    res.status(201).json(result.rows[0]);
+    const newComment = insert.rows[0];
+
+    // 2. Get full data (JOIN users + likes)
+    const full = await pool.query(`
+      SELECT
+        c.comment_id,
+        c.post_id,
+        c.user_id,
+        c.commented_text,
+        c.parent_comment_id,
+        c.date_commented,
+
+        u.username,
+        u.profile_pic,
+
+        0::int AS like_count,
+        false AS is_liked
+
+      FROM comments c
+      JOIN users u ON u.id = c.user_id
+      WHERE c.comment_id = $1
+    `, [newComment.comment_id]);
+
+    res.status(201).json(full.rows[0]);
 
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create comment" });
+  }
+});
+
+// Add to your comments router
+router.get("/single/:commentId", authenticateToken, async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const result = await pool.query(`
+      SELECT
+        c.comment_id,
+        c.post_id,
+        c.user_id,
+        c.commented_text,
+        c.parent_comment_id,
+        c.date_commented,
+        u.username,
+        u.profile_pic,
+        0::int AS like_count,
+        false AS is_liked
+      FROM comments c
+      JOIN users u ON u.id = c.user_id
+      WHERE c.comment_id = $1
+    `, [commentId]);
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Comment not found" });
+    }
+
+    res.json({ comment: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch comment" });
   }
 });
 
