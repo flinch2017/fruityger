@@ -177,3 +177,24 @@
     padding: 8px 16px;
   }
 }
+
+.spinner-alpha-container {
+  display: flex;
+  justify-content: center; /* horizontal centering */
+  align-items: center;     /* vertical centering */
+  height: 150px;           /* adjust as needed to fill card space */
+}
+
+/* Spinner itself */
+.spinner-alpha {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(0, 212, 255, 0.3);
+  border-top-color: var(--aero-cyan);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

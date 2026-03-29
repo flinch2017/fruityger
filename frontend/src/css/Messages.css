@@ -27,9 +27,7 @@
 
 /* ================= MESSAGES LIST ================= */
 .messages-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
+  position: relative;
 }
 
 .messages-sidebar h2 {
@@ -50,6 +48,7 @@
   border: 1px solid var(--border-light);
   cursor: pointer;
   transition: all 0.2s ease;
+  margin-top: 10px;
 }
 
 .chat-preview:hover,
@@ -59,17 +58,66 @@
 }
 
 .chat-avatar {
-  width: 50px;
-  height: 50px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
+
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+
+  overflow: hidden;
+
+  /* 🌈 Aero gradient orb */
+  background: radial-gradient(
+    circle at 30% 30%,
+    #ffffff,
+    #b6f0ff 40%,
+    #4facfe 70%,
+    #00d4ff
+  );
+
+  /* 💡 glow + glass */
+  box-shadow:
+    0 6px 18px rgba(0, 180, 255, 0.45),
+    inset 0 2px 6px rgba(255,255,255,0.95),
+    inset 0 -4px 10px rgba(0,150,255,0.25);
+
+  position: relative;
+}
+
+
+
+.chat-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+
+  /* slight glass overlay feel */
+  mix-blend-mode: normal;
+}
+
+.avatar-initial {
+  font-size: 18px;
+  font-weight: bold;
   color: white;
-  background: linear-gradient(to bottom, var(--aero-sky), var(--aero-blue));
-  box-shadow: 0 5px 15px rgba(0, 180, 255, 0.4),
-              inset 0 2px 5px rgba(255, 255, 255, 0.8);
+  text-shadow: 0 0 8px rgba(0,200,255,0.8);
+}
+
+.chat-avatar span {
+  font-size: 20px;
+  color: white;
+  text-shadow: 0 0 10px rgba(0,200,255,0.8);
+}
+
+.chat-preview:hover .chat-avatar {
+  transform: scale(1.05);
+
+  box-shadow:
+    0 10px 25px rgba(0,200,255,0.7),
+    inset 0 2px 6px rgba(255,255,255,1),
+    inset 0 -6px 12px rgba(0,150,255,0.35);
 }
 
 .chat-preview div h4 {
@@ -130,4 +178,108 @@
   .chat-preview div p {
     font-size: 11px;
   }
+}
+
+/* ===============================
+   SEARCH BAR
+================================ */
+.chat-search {
+  width: 100%;
+  padding: 12px 16px;
+  margin: 5px 0 5px;
+  border-radius: 25px;
+  border: none;
+  outline: none;
+  font-size: 14px;
+
+  /* Glassy look */
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px);
+  box-shadow:
+    inset 0 2px 4px rgba(255,255,255,0.9),
+    0 4px 15px rgba(0,160,255,0.15);
+
+  transition: all 0.25s ease;
+}
+
+.chat-search:focus {
+  box-shadow:
+    inset 0 2px 4px rgba(255,255,255,1),
+    0 6px 20px rgba(0,160,255,0.25);
+}
+
+/* ===============================
+   SEARCH RESULTS
+================================ */
+
+
+.search-results {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 20; /* above chat-list */
+  max-height: 400px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px 0;
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(12px);
+  border-radius: 20px;
+  margin-top: 30px;
+}
+
+.search-result:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 10px 25px rgba(0,160,255,0.25),
+    inset 0 2px 5px rgba(255,255,255,0.9);
+}
+
+/* Align avatar inside search results */
+.search-result .chat-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #ddd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  overflow: hidden;
+}
+
+.search-result .chat-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.spinner-alpha-container {
+  display: flex;
+  justify-content: center; /* horizontal centering */
+  align-items: center;     /* vertical centering */
+  height: 150px;           /* adjust as needed to fill card space */
+}
+
+/* Spinner itself */
+.spinner-alpha {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(0, 212, 255, 0.3);
+  border-top-color: var(--aero-cyan);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.messages-sidebar.searching .chat-list {
+  filter: blur(4px);
+  pointer-events: none; /* prevent clicking while searching */
+  user-select: none;
+  transition: filter 0.2s ease;
 }

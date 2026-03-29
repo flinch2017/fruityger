@@ -54,8 +54,9 @@ export default function Signup() {
 
     // ✅ Signup successful
     console.log("User signed up:", data.user);
-    localStorage.setItem("token", data.token); // store JWT
-    // redirect to main app (feed, welcome, etc.)
+    localStorage.setItem("token", data.token);       // JWT token
+    localStorage.setItem("userId", data.user.id);    // user UUID
+    localStorage.setItem("username", data.user.username); // username
     window.location.href = "/feed"; 
   } catch (err) {
     console.error(err);

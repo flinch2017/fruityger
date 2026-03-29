@@ -12,6 +12,7 @@ import commentLikeRoutes from "./routes/commentLikes.js";
 import searchRoutes from "./routes/search.js";
 import followRoutes from "./routes/follow.js";
 import reportRoutes from "./routes/report.js";
+import messageRoutes from "./routes/messages.js";
 
 
 
@@ -39,6 +40,7 @@ app.use("/api/commentLikes", commentLikeRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/follow", followRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/messages", messageRoutes);
 
 
 
