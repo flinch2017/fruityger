@@ -3,23 +3,66 @@
   max-width: 1100px;
   margin: 80px auto 40px;
   padding: 0 24px;
+  font-family: "Segoe UI", sans-serif;
 }
-.search-header h2 {
+
+.search-title {
   font-size: 22px;
   margin-bottom: 30px;
   font-weight: 600;
+  color: #0077aa;
+  text-shadow: 0 0 8px rgba(0, 200, 255, 0.3);
 }
 
-.search-section {
-  margin-bottom: 40px;
+/* 🔥 Tabs */
+.search-tabs {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 25px;
 }
 
-.search-section h3 {
-  font-size: 16px;
-  margin-bottom: 15px;
-  color: #888;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+.search-tabs button {
+  flex: 1;
+  padding: 10px 0;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 50px;
+  border: none;
+  background: linear-gradient(to bottom, #ffffff, #eaf8ff);
+  box-shadow:
+    0 4px 12px rgba(0, 180, 255, 0.25),
+    inset 0 1px 2px rgba(255,255,255,0.9);
+  color: #0077aa;
+  transition: all 0.25s ease;
+}
+
+.search-tabs button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0,180,255,0.35);
+}
+
+.search-tabs button.active {
+  background: linear-gradient(to bottom, #7ee0ff, #00bfff);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(0,150,255,0.4), inset 0 1px 3px rgba(255,255,255,0.9);
+}
+
+/* 🔥 Aero cards */
+.aero-card {
+  backdrop-filter: blur(12px);
+  background: linear-gradient(160deg, rgba(255,255,255,0.75), rgba(210,245,255,0.45));
+  border-radius: 25px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(255,255,255,0.9);
+  box-shadow: 0 10px 25px rgba(0,160,255,0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.aero-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 30px rgba(0,160,255,0.35);
 }
 
 /* USER CARD */
@@ -27,26 +70,20 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
   cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.search-user-card:hover {
-  background: #f5f5f5;
 }
 
 .avatar-placeholder {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #ddd;
+  background: #c2f3ff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,180,255,0.25), inset 0 1px 2px rgba(255,255,255,0.9);
 }
 
 .avatar-placeholder img {
@@ -55,45 +92,47 @@
   object-fit: cover;
 }
 
-/* POST CARD */
-.search-post-card {
-  background: #fafafa;
-  padding: 15px;
-  border-radius: 12px;
-  margin-bottom: 12px;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.search-post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-}
-
-.search-post-card strong {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 14px;
-}
-
-.search-post-card p {
-  font-size: 14px;
-  color: #444;
-}
-
-/* HASHTAG */
-.search-hashtag {
+/* HASHTAG PILLS */
+.aero-pill {
   display: inline-block;
-  background: #f0f0f0;
-  padding: 6px 12px;
-  border-radius: 20px;
+  background: linear-gradient(to bottom, #ffffff, #eaf8ff);
+  border-radius: 50px;
+  padding: 6px 14px;
   margin: 5px 8px 5px 0;
   font-size: 14px;
+  color: #0077aa;
   cursor: pointer;
-  transition: background 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0,160,255,0.25), inset 0 1px 2px rgba(255,255,255,0.9);
+  transition: all 0.25s ease;
 }
 
-.search-hashtag:hover {
-  background: #e2e2e2;
+.aero-pill:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0,160,255,0.35);
+}
+
+
+
+.search-section.loading {
+  min-height: 200px; /* or 50vh */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #eee;
+  border-top: 4px solid #00bfff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* EMPTY STATE */
@@ -107,79 +146,8 @@
   .search-page {
     margin-top: 70px;
   }
-
-  .search-post-card {
+  .aero-card {
     padding: 12px;
+    border-radius: 20px;
   }
-}
-
-
-/* 🔥 Tabs */
-.search-tabs {
-  display: flex;
-  gap: 20px;
-  border-bottom: 1px solid #eee;
-  margin-bottom: 25px;
-}
-
-.search-tabs button {
-  background: none;
-  border: none;
-  padding: 12px 0;
-  font-size: 14px;
-  cursor: pointer;
-  color: #777;
-  position: relative;
-  font-weight: 500;
-}
-
-.search-tabs button:hover {
-  color: #000;
-}
-
-.search-tabs button.active {
-  color: #000;
-  font-weight: 600;
-}
-
-.search-tabs button.active::after {
-  content: "";
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background: #000;
-  border-radius: 2px;
-}
-
-.search-loading {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 60px 0;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #eee;
-  border-top: 4px solid #ff4d6d; /* your brand color */
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.search-user-card.clickable {
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.search-user-card.clickable:hover {
-  background: #f5f5f5;
 }

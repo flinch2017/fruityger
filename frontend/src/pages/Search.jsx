@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import "../css/Search.css";
 
 export default function Search() {
@@ -22,112 +21,95 @@ export default function Search() {
     setLoading(true);
 
     fetch(`/api/search?q=${encodeURIComponent(query)}`)
-        .then(res => res.json())
-        .then(data => setResult(data))
-        .catch(console.error)
-        .finally(() => setLoading(false));
-
-    }, [query]);
+      .then(res => res.json())
+      .then(data => setResult(data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [query]);
 
   return (
     <div className="search-page">
       <div className="search-header">
-        <h2>Results for "{query}"</h2>
+        <h2 className="search-title">Results for "{query}"</h2>
       </div>
-
-      
 
       {/* 🔥 Tabs */}
       <div className="search-tabs">
-        <button
-          className={activeTab === "profiles" ? "active" : ""}
-          onClick={() => setActiveTab("profiles")}
-        >
-          Profiles
-        </button>
-
-        <button
-          className={activeTab === "posts" ? "active" : ""}
-          onClick={() => setActiveTab("posts")}
-        >
-          Posts
-        </button>
-
-        <button
-          className={activeTab === "hashtags" ? "active" : ""}
-          onClick={() => setActiveTab("hashtags")}
-        >
-          Hashtags
-        </button>
+        {["profiles", "posts", "hashtags"].map(tab => (
+          <button
+            key={tab}
+            className={activeTab === tab ? "active" : ""}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+          </button>
+        ))}
       </div>
 
-      {/* 🔥 TAB CONTENT */}
+      {/* 🔥 Tab Content */}
+      <section className={`search-section ${loading ? "loading" : ""}`}>
+        {loading ? (
+          <div className="search-loading">
+            <div className="spinner"></div>
+          </div>
+        ) : (
+          <>
+            {activeTab === "profiles" && (
+              <>
+                {result.users.length === 0 ? (
+                  <p className="empty-text">No profiles found</p>
+                ) : (
+                  result.users.map(u => (
+                    <div
+                      key={u.id}
+                      className="search-user-card aero-card clickable"
+                      onClick={() => navigate(`/profile/${u.username}`)}
+                    >
+                      <div className="avatar-placeholder">
+                        {u.profile_pic ? (
+                          <img src={u.profile_pic} alt={u.username} />
+                        ) : (
+                          "👤"
+                        )}
+                      </div>
+                      <span>{u.username}</span>
+                    </div>
+                  ))
+                )}
+              </>
+            )}
 
-      {/* 🔥 TAB CONTENT */}
+            {activeTab === "posts" && (
+              <>
+                {result.posts.length === 0 ? (
+                  <p className="empty-text">No posts found</p>
+                ) : (
+                  result.posts.map(p => (
+                    <div key={p.post_id} className="search-post-card aero-card">
+                      <strong>{p.username}</strong>
+                      <p>{p.caption}</p>
+                    </div>
+                  ))
+                )}
+              </>
+            )}
 
-<section className="search-section">
-  {loading ? (
-    <div className="search-loading">
-      <div className="spinner"></div>
-    </div>
-  ) : (
-    <>
-      {activeTab === "profiles" && (
-        <>
-          {result.users.length === 0 ? (
-            <p className="empty-text">No profiles found</p>
-          ) : (
-            result.users.map(u => (
-              <div
-                key={u.id}
-                className="search-user-card clickable"
-                onClick={() => navigate(`/profile/${u.username}`)}
-                >
-                <div className="avatar-placeholder">
-                  {u.profile_pic ? (
-                    <img src={u.profile_pic} alt={u.username} />
-                  ) : (
-                    "👤"
-                  )}
-                </div>
-                <span>{u.username}</span>
-              </div>
-            ))
-          )}
-        </>
-      )}
-
-      {activeTab === "posts" && (
-        <>
-          {result.posts.length === 0 ? (
-            <p className="empty-text">No posts found</p>
-          ) : (
-            result.posts.map(p => (
-              <div key={p.post_id} className="search-post-card">
-                <strong>{p.username}</strong>
-                <p>{p.caption}</p>
-              </div>
-            ))
-          )}
-        </>
-      )}
-
-      {activeTab === "hashtags" && (
-        <>
-          {result.hashtags.length === 0 ? (
-            <p className="empty-text">No hashtags found</p>
-          ) : (
-            result.hashtags.map(h => (
-              <div key={h.tag} className="search-hashtag">
-                #{h.tag}
-              </div>
-            ))
-          )}
-        </>
-      )}
-    </>
-  )}
-</section>
+            {activeTab === "hashtags" && (
+              <>
+                {result.hashtags.length === 0 ? (
+                  <p className="empty-text">No hashtags found</p>
+                ) : (
+                  result.hashtags.map(h => (
+                    <div key={h.tag} className="search-hashtag aero-pill">
+                      #{h.tag}
+                    </div>
+                  ))
+                )}
+              </>
+            )}
+          </>
+        )}
+      </section>
     </div>
   );
 }

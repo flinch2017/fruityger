@@ -18,6 +18,7 @@ import EditProfile from "./pages/EditProfile"; // <-- import it
 import CreatePost from "./pages/CreatePost"; // <-- import it
 import CommentSheet from "./components/CommentSheet";
 import Search from "./pages/Search";
+import ReportPage from "./pages/ReportPage";
 
 
 import "./css/App.css";
@@ -173,7 +174,16 @@ function App() {
             </PrivateRoute>
           }
         />
-        
+        <Route
+          path="/report"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <ReportPage />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
       </Routes>
     </>
   );

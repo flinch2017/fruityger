@@ -17,46 +17,52 @@ export default function Login() {
   }, []);
 
     const handleSubmit = async (e) => {
-  e.preventDefault();
+      e.preventDefault();
 
-  if (!email || !password) {
-    alert("Please enter email and password");
-    return;
-  }
+      if (!email || !password) {
+        alert("Please enter email and password");
+        return;
+      }
 
-  if (!captchaValue) {
-    alert("Please verify that you are not a robot");
-    return;
-  }
+      if (!captchaValue) {
+        alert("Please verify that you are not a robot");
+        return;
+      }
 
-  try {
-    const response = await fetch("http://localhost:5000/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, recaptchaToken: captchaValue }),
-    });
+      try {
+        const response = await fetch("http://localhost:5000/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password, recaptchaToken: captchaValue }),
+        });
 
-    const data = await response.json();
+        const data = await response.json();
 
-    if (!response.ok) {
-      alert(data.error || "Login failed");
-      setCaptchaValue(null); // reset captcha
-      return;
-    }
+        if (!response.ok) {
+          alert(data.error || "Login failed");
+          setCaptchaValue(null); // reset captcha
+          return;
+        }
 
-    console.log("Logged in user:", data.user);
-    localStorage.setItem("token", data.token);
+        console.log("Logged in user:", data.user);
 
-    // ⭐ Save username for profile routing
-    localStorage.setItem("username", data.user.username);
+        // Save token
+        localStorage.setItem("token", data.token);
 
-    window.location.href = "/feed";
-  } catch (err) {
-    console.error(err);
-    alert("Login request failed");
-    setCaptchaValue(null); // reset captcha
-  }
-};
+        // ⭐ Save user ID (UUID) for comment menus
+        localStorage.setItem("userId", data.user.id);
+
+        // Save username for profile routing
+        localStorage.setItem("username", data.user.username);
+
+        window.location.href = "/feed";
+
+      } catch (err) {
+        console.error(err);
+        alert("Login request failed");
+        setCaptchaValue(null); // reset captcha
+      }
+    };
 
     return (
     <div className="welcome">

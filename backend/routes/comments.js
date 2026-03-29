@@ -178,4 +178,39 @@ router.get("/single/:commentId", authenticateToken, async (req, res) => {
   }
 });
 
+router.delete("/:commentId", authenticateToken, async (req, res) => {
+  const { commentId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    // Check if comment exists and fetch its owner + post author
+    const result = await pool.query(
+      `SELECT user_id, post_id FROM comments WHERE comment_id = $1`,
+      [commentId]
+    );
+
+    const comment = result.rows[0];
+    if (!comment) return res.status(404).json({ error: "Comment not found" });
+
+    // Check if requester is comment author OR post author
+    const postResult = await pool.query(
+      `SELECT user_id FROM posts WHERE post_id = $1`,
+      [comment.post_id]
+    );
+    const postAuthorId = postResult.rows[0].user_id;
+
+    if (comment.user_id !== userId && postAuthorId !== userId) {
+      return res.status(403).json({ error: "Not authorized to delete this comment" });
+    }
+
+    // Delete the comment (will cascade to replies)
+    await pool.query(`DELETE FROM comments WHERE comment_id = $1`, [commentId]);
+
+    res.json({ success: true, commentId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import "../css/CommentSheet.css";
 import { formatRelativeTime } from "../utils/timeFormatter";
 import supabase from "../lib/supabaseClient";
@@ -22,13 +23,70 @@ export default function CommentSheet({
   const [initialLoading, setInitialLoading] = useState(true);
   const REPLY_PAGE_SIZE = 5;
 
+  const [activeMenu, setActiveMenu] = useState(null);
+  
+
   const inputRef = useRef(null);
+  const userId = localStorage.getItem("userId"); // or fetch it from token payload
   const token = localStorage.getItem("token");
+  
+
+  const toggleMenu = (id) => {
+    setActiveMenu(prev => (prev === id ? null : id));
+  };
+
+  const closeMenu = () => setActiveMenu(null);
+
+  useEffect(() => {
+    const handleClick = () => setActiveMenu(null);
+    window.addEventListener("click", handleClick);
+    return () => window.removeEventListener("click", handleClick);
+  }, []);
+
+
+
+
+
+
+  function CommentMenu({ comment, postAuthorId, userId, deleteComment, closeMenu }) {
+    const navigate = useNavigate();
+    const canDelete = comment.user_id === userId || postAuthorId === userId;
+    const canReport = comment.user_id !== userId;
+
+    return (
+      <div className="comment-menu-dropdown">
+        {canDelete && (
+          <div
+            className="comment-menu-item"
+            onClick={() => {
+              deleteComment(comment.comment_id);
+              closeMenu();
+            }}
+          >
+            Delete
+          </div>
+        )}
+
+        {canReport && (
+          <div
+            className="comment-menu-item"
+            onClick={() => {
+              navigate(`/report?type=comment&id=${comment.comment_id}`);
+              closeMenu();
+            }}
+          >
+            Report
+          </div>
+        )}
+      </div>
+    );
+  }
   
 
   /* ===============================
      FETCH COMMENTS
   =============================== */
+
 
   async function fetchComments(pageNumber = 1) {
 
@@ -66,6 +124,34 @@ export default function CommentSheet({
       setInitialLoading(false);
     }
   }
+
+
+  const deleteComment = async (commentId) => {
+    if (!token) return;
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/comments/${commentId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to delete comment");
+        return;
+      }
+
+      // Remove comment from state
+      setComments(prev => prev.filter(c => c.comment_id !== commentId));
+
+      closeMenu();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete comment");
+    }
+  };
 
   /* ===============================
      REALTIME SUBSCRIPTION
@@ -185,8 +271,7 @@ export default function CommentSheet({
 
       const newComment = await res.json();
 
-      // ✅ instantly add correct comment
-      setComments(prev => [newComment, ...prev]);
+      
 
       setText("");
       setReplyingTo(null);
@@ -359,6 +444,8 @@ const loadMoreReplies = (commentId) => {
 
                 <div className="comment-content">
 
+                
+
                   <div className="comment-username">
 
                     <div className="comment-avatar">
@@ -422,6 +509,28 @@ const loadMoreReplies = (commentId) => {
                       ❤️ {c.like_count || 0}
                     </button>
 
+                    <div
+                      className="comment-menu-wrapper"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        className="comment-menu-btn"
+                        onClick={() => toggleMenu(c.comment_id)}
+                      >
+                        ⋯
+                      </button>
+
+                      {activeMenu === c.comment_id && (
+                        <CommentMenu
+                          comment={c}
+                          postAuthorId={postAuthorId}
+                          userId={userId}
+                          deleteComment={deleteComment}
+                          closeMenu={closeMenu}
+                        />
+                      )}
+                    </div>
+
                   </div>
 
                   {replies.length > 0 && !expanded && (
@@ -445,6 +554,8 @@ const loadMoreReplies = (commentId) => {
                       <>
                         {visibleReplies.map(r => (
                           <div key={r.comment_id} className="thread-wrapper">
+
+                          
 
                             <div className="thread-author">
 
@@ -498,6 +609,28 @@ const loadMoreReplies = (commentId) => {
                               >
                                 ❤️ {r.like_count || 0}
                               </button>
+
+                              <div
+                                className="comment-menu-wrapper"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  className="comment-menu-btn"
+                                  onClick={() => toggleMenu(r.comment_id)}
+                                >
+                                  ⋯
+                                </button>
+
+                                {activeMenu === r.comment_id && (
+                                  <CommentMenu
+                                    comment={r}
+                                    postAuthorId={postAuthorId}
+                                    userId={userId}
+                                    deleteComment={deleteComment}
+                                    closeMenu={closeMenu}
+                                  />
+                                )}
+                              </div>
 
                             </div>
 
