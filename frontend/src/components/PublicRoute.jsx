@@ -17,7 +17,14 @@ export default function PublicRoute({ children }) {
         return;
       }
 
-      setStatus(session.data?.user?.email_verified ? "verified" : "unverified");
+      const user = session.data?.user;
+
+      if (!user?.email_verified) {
+        setStatus("unverified");
+        return;
+      }
+
+      setStatus(user?.interests_completed ? "verified" : "onboarding");
     };
 
     checkSession();
@@ -33,6 +40,10 @@ export default function PublicRoute({ children }) {
 
   if (status === "verified") {
     return <Navigate to="/feed" replace />;
+  }
+
+  if (status === "onboarding") {
+    return <Navigate to="/onboarding/interests" replace />;
   }
 
   if (status === "unverified") {

@@ -1,6 +1,7 @@
 import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
+import { ensureHashtagSchema, removePostHashtags, syncPostHashtags } from "../utils/hashtags.js";
 
 const router = express.Router();
 
@@ -161,6 +162,7 @@ router.put("/:postId", authenticateToken, async (req, res) => {
   const { caption } = req.body;
 
   try {
+    await ensureHashtagSchema();
     const postCheck = await pool.query(
       "SELECT user_id FROM posts WHERE post_id = $1",
       [postId]
@@ -184,6 +186,8 @@ router.put("/:postId", authenticateToken, async (req, res) => {
       [caption ?? "", postId]
     );
 
+    await syncPostHashtags(postId, caption ?? "");
+
     return res.json({ post: rows[0] });
   } catch (err) {
     console.error(err);
@@ -197,6 +201,7 @@ router.delete("/:postId", authenticateToken, async (req, res) => {
   const userId = req.user.id;
 
   try {
+    await ensureHashtagSchema();
     // ✅ Check if post exists + ownership
     const postCheck = await pool.query(
       "SELECT user_id FROM posts WHERE post_id = $1",
@@ -215,6 +220,7 @@ router.delete("/:postId", authenticateToken, async (req, res) => {
 
     await pool.query("DELETE FROM comments WHERE post_id = $1", [postId]);
     await pool.query("DELETE FROM likes WHERE post_id = $1", [postId]);
+    await removePostHashtags(postId);
     await pool.query("DELETE FROM post_media WHERE post_id = $1", [postId]);
 
     // ✅ Delete the post

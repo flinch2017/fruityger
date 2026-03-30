@@ -3,6 +3,7 @@ import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { deleteR2Object } from "../utils/r2Delete.js";
+import { ensureUserOnboardingSchema, normalizeInterests } from "../utils/userOnboarding.js";
 
 const router = express.Router();
 
@@ -33,10 +34,11 @@ async function ensureBlockedUsersTable() {
 router.get("/user/:username", authenticateToken, async (req, res) => {
   try {
     await ensureBlockedUsersTable();
+    await ensureUserOnboardingSchema();
     const { username } = req.params;
 
     const { rows } = await pool.query(
-      `SELECT id, username, email, profile_pic, created_at
+      `SELECT id, username, email, profile_pic, interests, interests_completed, created_at
        FROM users
        WHERE username = $1`,
       [username]
@@ -87,8 +89,9 @@ router.get("/user/:username", authenticateToken, async (req, res) => {
 router.get("/me", authenticateToken, async (req, res) => {
   try {
     await ensureBlockedUsersTable();
+    await ensureUserOnboardingSchema();
     const { rows } = await pool.query(
-      `SELECT id, username, email, profile_pic, created_at
+      `SELECT id, username, email, profile_pic, interests, interests_completed, created_at
        FROM users
        WHERE id = $1`,
       [req.user.id]
@@ -111,6 +114,37 @@ router.get("/me", authenticateToken, async (req, res) => {
     user.blocked_by_them = false;
 
     res.json({ user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.put("/onboarding/interests", authenticateToken, async (req, res) => {
+  const interests = normalizeInterests(req.body?.interests);
+
+  if (interests.length === 0) {
+    return res.status(400).json({ error: "Choose at least one interest" });
+  }
+
+  try {
+    await ensureUserOnboardingSchema();
+
+    const { rows } = await pool.query(
+      `
+      UPDATE users
+      SET interests = $1::jsonb,
+          interests_completed = TRUE
+      WHERE id = $2
+      RETURNING id, username, email, profile_pic, interests, interests_completed, created_at
+      `,
+      [JSON.stringify(interests), req.user.id]
+    );
+
+    res.json({
+      user: rows[0],
+      message: "Interests saved successfully",
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
@@ -322,6 +356,8 @@ router.put("/edit-profile", authenticateToken, async (req, res) => {
   try {
 
     // ⭐ Get old profile picture key
+    await ensureUserOnboardingSchema();
+
     const userResult = await pool.query(
       "SELECT profile_pic_key FROM users WHERE id=$1",
       [req.user.id]
@@ -339,7 +375,7 @@ router.put("/edit-profile", authenticateToken, async (req, res) => {
           profile_pic=$2,
           profile_pic_key=$3
       WHERE id=$4
-      RETURNING id, username, email, profile_pic, created_at
+      RETURNING id, username, email, profile_pic, interests, interests_completed, created_at
     `;
 
     const params = [

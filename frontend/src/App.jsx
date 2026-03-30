@@ -3,6 +3,10 @@ import Header from "./components/Header";
 import Feed from "./components/Feed";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
+import VerifyCurrentPassword from "./pages/VerifyCurrentPassword";
+import ChangeEmail from "./pages/ChangeEmail";
+import ChangePassword from "./pages/ChangePassword";
+import ConfirmEmailChange from "./pages/ConfirmEmailChange";
 import Notifications from "./pages/Notifications";
 import Messages from "./pages/Messages";
 import Chat from "./pages/Chat";
@@ -11,16 +15,19 @@ import WelcomeHeader from "./components/WelcomeHeader";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import VerifyEmail from "./pages/VerifyEmail";
+import ChooseInterests from "./pages/ChooseInterests";
 import ScrollToTop from "./components/ScrollToTop";
 import PrivateRoute from "./components/PrivateRoute";
 import PublicRoute from "./components/PublicRoute";
 import VerificationRoute from "./components/VerificationRoute";
+import OnboardingRoute from "./components/OnboardingRoute";
 import NotFound from "./pages/NotFound"; // <-- import it
 import EditProfile from "./pages/EditProfile"; // <-- import it
 import CreatePost from "./pages/CreatePost"; // <-- import it
 import EditPost from "./pages/EditPost";
 import CommentSheet from "./components/CommentSheet";
 import Search from "./pages/Search";
+import HashtagPage from "./pages/HashtagPage";
 import ReportPage from "./pages/ReportPage";
 import FollowListPage from "./pages/FollowListPage";
 import PostDetail from "./pages/PostDetail";
@@ -101,6 +108,16 @@ function App() {
             </VerificationRoute>
           }
         />
+        <Route
+          path="/onboarding/interests"
+          element={
+            <OnboardingRoute>
+              <StandaloneLayout>
+                <ChooseInterests />
+              </StandaloneLayout>
+            </OnboardingRoute>
+          }
+        />
 
         {/* Protected pages */}
         <Route
@@ -122,6 +139,44 @@ function App() {
                 <Settings />
               </MainLayout>
             </PrivateRoute>
+          }
+        />
+        <Route
+          path="/settings/verify-current-password"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <VerifyCurrentPassword />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/settings/change-email"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <ChangeEmail />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/settings/change-password"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <ChangePassword />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/confirm-email-change"
+          element={
+            <StandaloneLayout>
+              <ConfirmEmailChange />
+            </StandaloneLayout>
           }
         />
         <Route
@@ -208,6 +263,16 @@ function App() {
             <PrivateRoute>
               <MainLayout>
                 <Search />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/hashtag/:tag"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <HashtagPage />
               </MainLayout>
             </PrivateRoute>
           }

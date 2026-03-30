@@ -66,16 +66,26 @@ export default function Login() {
 
       persistAuthSession(data);
       const requiresVerification = data.requiresVerification || !data.user?.email_verified;
+      const requiresInterests = !requiresVerification && !data.user?.interests_completed;
 
       setCustomMessage(
         "success",
         requiresVerification
           ? "Login successful. Please verify your email to continue."
-          : "Login successful. Redirecting to your feed..."
+          : requiresInterests
+            ? "Login successful. Let's tune your interests first."
+            : "Login successful. Redirecting to your feed..."
       );
 
       setTimeout(() => {
-        navigate(requiresVerification ? "/verify-email" : "/feed", { replace: true });
+        navigate(
+          requiresVerification
+            ? "/verify-email"
+            : requiresInterests
+              ? "/onboarding/interests"
+              : "/feed",
+          { replace: true }
+        );
       }, 500);
     } catch (err) {
       console.error(err);

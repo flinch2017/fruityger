@@ -1,0 +1,189 @@
+.hashtag-page {
+  width: 100%;
+  max-width: 1120px;
+  margin: 80px auto 42px;
+  padding: 0 24px;
+  font-family: "Segoe UI", sans-serif;
+}
+
+.hashtag-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+  padding: 24px 26px;
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), transparent 42%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(205, 242, 255, 0.72));
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 18px 46px rgba(0, 155, 220, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(18px);
+}
+
+.hashtag-kicker {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #1b90b5;
+}
+
+.hashtag-hero h1 {
+  margin: 0;
+  color: #0c7697;
+  font-size: clamp(2rem, 4vw, 2.8rem);
+  text-shadow: 0 0 14px rgba(0, 207, 255, 0.18);
+}
+
+.hashtag-meta {
+  margin: 8px 0 0;
+  color: #4f7586;
+  font-size: 0.96rem;
+}
+
+.hashtag-save-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 14px 22px;
+  color: #fff;
+  font-size: 0.96rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: linear-gradient(145deg, #00e0ff, #00bfff, #4facfe);
+  box-shadow:
+    0 10px 22px rgba(0, 200, 255, 0.34),
+    inset 0 0 15px rgba(255, 255, 255, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.hashtag-save-btn:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 14px 28px rgba(0, 200, 255, 0.4),
+    inset 0 0 18px rgba(255, 255, 255, 0.36);
+}
+
+.hashtag-save-btn.saved {
+  background: linear-gradient(145deg, #8ceec4, #45d2aa, #16b58b);
+}
+
+.hashtag-save-btn:disabled {
+  cursor: wait;
+  opacity: 0.88;
+  transform: none;
+}
+
+.hashtag-inline-error,
+.hashtag-state,
+.hashtag-empty {
+  padding: 18px 20px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  color: #4a7081;
+  box-shadow: 0 14px 30px rgba(0, 155, 220, 0.12);
+}
+
+.hashtag-inline-error {
+  margin-bottom: 18px;
+  color: #9e3557;
+}
+
+.hashtag-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hashtag-tile {
+  padding: 0;
+  border: none;
+  border-radius: 22px;
+  overflow: hidden;
+  cursor: pointer;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(215, 245, 255, 0.82));
+  box-shadow:
+    0 16px 34px rgba(0, 155, 220, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hashtag-tile:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 22px 42px rgba(0, 155, 220, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.hashtag-tile-media {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(224, 250, 255, 0.96), rgba(180, 236, 255, 0.86));
+}
+
+.hashtag-tile-media img,
+.hashtag-tile-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.hashtag-text-fallback {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  padding: 20px;
+  align-items: flex-end;
+  color: #0d6584;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.hashtag-tile-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 20%, rgba(8, 74, 96, 0.7) 100%);
+}
+
+.hashtag-tile-stats {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+@media (max-width: 920px) {
+  .hashtag-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .hashtag-page {
+    margin-top: 72px;
+    padding: 0 16px;
+  }
+
+  .hashtag-hero {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hashtag-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

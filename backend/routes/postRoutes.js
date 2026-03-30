@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { r2 } from "../utils/r2.js";
 import { authenticateToken } from "../middleware/auth.js";
+import { ensureHashtagSchema, syncPostHashtags } from "../utils/hashtags.js";
 
 const router = express.Router();
 
@@ -27,6 +28,7 @@ router.post(
     async (req, res) => {
 
         try {
+            await ensureHashtagSchema();
 
             const { caption } = req.body;
             const files = req.files || [];
@@ -39,6 +41,8 @@ router.post(
                  VALUES ($1,$2,$3)`,
                 [postId, req.user.id, caption]
             );
+
+            await syncPostHashtags(postId, caption);
 
             /* ===================================================
                Upload Media Files → Cloudflare R2

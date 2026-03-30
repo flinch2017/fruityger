@@ -15,6 +15,7 @@ import reportRoutes from "./routes/report.js";
 import messageRoutes from "./routes/messages.js";
 import notificationRoutes from "./routes/notifications.js";
 import { cleanupExpiredUnverifiedUsers, ensureEmailVerificationSchema } from "./utils/emailVerification.js";
+import { backfillPostHashtags, ensureHashtagSchema } from "./utils/hashtags.js";
 
 
 
@@ -55,6 +56,12 @@ app.get("/", (req, res) => {
 ensureEmailVerificationSchema()
   .then(() => cleanupExpiredUnverifiedUsers())
   .catch((err) => console.error("Email verification bootstrap failed:", err));
+
+ensureHashtagSchema()
+  .then(() => backfillPostHashtags())
+  .catch((err) => {
+    console.error("Hashtag bootstrap failed:", err);
+  });
 
 setInterval(() => {
   cleanupExpiredUnverifiedUsers().catch((err) => {

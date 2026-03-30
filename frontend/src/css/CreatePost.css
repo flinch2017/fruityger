@@ -100,18 +100,19 @@
 .cancel-btn,
 .submit-btn {
   flex: 1;
-
-  padding: 14px;
+  min-height: 52px;
+  padding: 14px 18px;
 
   border-radius: 50px;
 
   border: none;
 
+  font-size: 15px;
   font-weight: bold;
 
   cursor: pointer;
 
-  transition: all 0.25s ease;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
 }
 
 /* Cancel */
@@ -119,10 +120,16 @@
 .cancel-btn {
   background: linear-gradient(to bottom, #ffffff, #eaf8ff);
   color: #0077aa;
+  box-shadow:
+    0 6px 16px rgba(0, 160, 255, 0.14),
+    inset 0 1px 3px rgba(255,255,255,0.95);
 }
 
 .cancel-btn:hover {
   transform: translateY(-2px);
+  box-shadow:
+    0 10px 22px rgba(0, 160, 255, 0.18),
+    inset 0 1px 3px rgba(255,255,255,0.95);
 }
 
 /* Submit */
@@ -140,6 +147,36 @@
   transform: translateY(-3px);
   box-shadow:
     0 10px 25px rgba(0,150,255,0.6);
+}
+
+.submit-btn:disabled {
+  cursor: wait;
+  opacity: 0.88;
+  transform: none;
+}
+
+.cancel-btn:disabled {
+  cursor: wait;
+  opacity: 0.76;
+  transform: none;
+}
+
+.submit-btn-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  font-size: 15px;
+}
+
+.submit-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.38);
+  border-top-color: #ffffff;
+  animation: create-post-spin 0.7s linear infinite;
 }
 
 /* ===============================
@@ -198,11 +235,27 @@
   transform: translateY(-2px) scale(1.08);
 }
 
+.attachment-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+  transform: none;
+}
+
 /* Attachment text */
-.attachment-count {
+.attachment-count,
+.attachment-count-badge {
   font-size: 14px;
   color: #0077aa;
-  opacity: 0.8;
+  opacity: 0.9;
+}
+
+.attachment-count-badge {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow:
+    0 8px 16px rgba(0, 170, 255, 0.12),
+    inset 0 1px 0 rgba(255,255,255,0.95);
 }
 
 /* ===============================
@@ -263,6 +316,12 @@
   transform: scale(1.1);
 }
 
+.remove-preview-btn:disabled {
+  cursor: wait;
+  opacity: 0.7;
+  transform: none;
+}
+
 
 /* ===============================
    COMPOSER WARNING BOX
@@ -314,6 +373,10 @@
   50% { transform: translateX(4px); }
   75% { transform: translateX(-4px); }
   100% { transform: translateX(0); }
+}
+
+@keyframes create-post-spin {
+  to { transform: rotate(360deg); }
 }
 
 .shake {

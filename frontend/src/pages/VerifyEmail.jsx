@@ -92,8 +92,8 @@ export default function VerifyEmail() {
       }
 
       persistAuthSession({ user: data.user });
-      setFeedback({ type: "success", message: "Email verified. Redirecting to your feed..." });
-      setTimeout(() => navigate("/feed", { replace: true }), 700);
+      setFeedback({ type: "success", message: "Email verified. One more step to tune your feed..." });
+      setTimeout(() => navigate("/onboarding/interests", { replace: true }), 700);
     } catch (err) {
       console.error(err);
       setFeedback({ type: "error", message: "Verification request failed." });

@@ -2,7 +2,7 @@ import { Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { fetchAuthSession } from "../utils/authSession";
 
-export default function VerificationRoute({ children }) {
+export default function OnboardingRoute({ children }) {
   const [status, setStatus] = useState("loading");
 
   useEffect(() => {
@@ -24,7 +24,7 @@ export default function VerificationRoute({ children }) {
         return;
       }
 
-      setStatus(user?.interests_completed ? "verified" : "onboarding");
+      setStatus(user?.interests_completed ? "complete" : "incomplete");
     };
 
     checkSession();
@@ -42,12 +42,12 @@ export default function VerificationRoute({ children }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (status === "verified") {
-    return <Navigate to="/feed" replace />;
+  if (status === "unverified") {
+    return <Navigate to="/verify-email" replace />;
   }
 
-  if (status === "onboarding") {
-    return <Navigate to="/onboarding/interests" replace />;
+  if (status === "complete") {
+    return <Navigate to="/feed" replace />;
   }
 
   return children;

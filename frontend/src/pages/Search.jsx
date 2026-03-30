@@ -4,6 +4,12 @@ import CommentSheet from "../components/CommentSheet";
 import "../css/Search.css";
 import "../css/CommentSheet.css";
 
+const SEARCH_TABS = [
+  { key: "profiles", label: "Profiles", resultKey: "users" },
+  { key: "posts", label: "Posts", resultKey: "posts" },
+  { key: "hashtags", label: "Hashtags", resultKey: "hashtags" },
+];
+
 export default function Search() {
   const location = useLocation();
   const query = new URLSearchParams(location.search).get("q");
@@ -33,6 +39,18 @@ export default function Search() {
   });
   const [deletingPost, setDeletingPost] = useState(false);
   const [actionResult, setActionResult] = useState(null);
+
+  const orderedTabs = [...SEARCH_TABS].sort((a, b) => {
+    const aCount = result[a.resultKey]?.length || 0;
+    const bCount = result[b.resultKey]?.length || 0;
+
+    if (bCount !== aCount) {
+      return bCount - aCount;
+    }
+
+    return SEARCH_TABS.findIndex((tab) => tab.key === a.key) -
+      SEARCH_TABS.findIndex((tab) => tab.key === b.key);
+  });
 
   const formatDate = (dateString) => {
     if (!dateString) return "";
@@ -111,7 +129,25 @@ export default function Search() {
         : undefined
     })
       .then(res => res.json())
-      .then(data => setResult(data))
+      .then(data => {
+        setResult(data);
+
+        const topTab = [...SEARCH_TABS].sort((a, b) => {
+          const aCount = data[a.resultKey]?.length || 0;
+          const bCount = data[b.resultKey]?.length || 0;
+
+          if (bCount !== aCount) {
+            return bCount - aCount;
+          }
+
+          return SEARCH_TABS.findIndex((tab) => tab.key === a.key) -
+            SEARCH_TABS.findIndex((tab) => tab.key === b.key);
+        })[0];
+
+        if (topTab) {
+          setActiveTab(topTab.key);
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [query]);
@@ -328,13 +364,13 @@ export default function Search() {
 
       {/* 🔥 Tabs */}
       <div className="search-tabs">
-        {["profiles", "posts", "hashtags"].map(tab => (
+        {orderedTabs.map(tab => (
           <button
-            key={tab}
-            className={activeTab === tab ? "active" : ""}
-            onClick={() => setActiveTab(tab)}
+            key={tab.key}
+            className={activeTab === tab.key ? "active" : ""}
+            onClick={() => setActiveTab(tab.key)}
           >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {tab.label}
           </button>
         ))}
       </div>
@@ -576,11 +612,27 @@ export default function Search() {
                 {result.hashtags.length === 0 ? (
                   <p className="empty-text">No hashtags found</p>
                 ) : (
-                  result.hashtags.map(h => (
-                    <div key={h.tag} className="search-hashtag aero-pill">
-                      #{h.tag}
-                    </div>
-                  ))
+                  <div className="search-hashtags-list">
+                    {result.hashtags.map(h => (
+                      <button
+                        key={h.tag}
+                        type="button"
+                        className="search-hashtag-card"
+                        onClick={() => navigate(`/hashtag/${h.tag}`)}
+                      >
+                        <div className="search-hashtag-card-main">
+                          <span className="search-hashtag-tag">#{h.tag}</span>
+                          <span className="search-hashtag-count">
+                            {(h.post_count || 0).toLocaleString()} posts
+                          </span>
+                        </div>
+
+                        {h.is_saved && (
+                          <span className="search-hashtag-saved">Saved</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </>
             )}

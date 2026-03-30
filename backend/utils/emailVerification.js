@@ -92,6 +92,50 @@ export const sendVerificationEmail = async ({ to, username, code }) => {
   });
 };
 
+export const sendEmailChangeConfirmationEmail = async ({
+  to,
+  username,
+  confirmUrl,
+}) => {
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  if (!from) {
+    throw new Error("Email sender is not configured");
+  }
+
+  const transporter = getTransporter();
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: "Confirm your new Fruityger email",
+    text: [
+      `Hi ${username || "there"},`,
+      "",
+      "We received a request to change the email on your Fruityger account.",
+      "Click the link below to confirm your new email address:",
+      confirmUrl,
+      "",
+      `This link expires in ${VERIFICATION_WINDOW_HOURS} hours.`,
+      "",
+      "If you did not request this change, you can ignore this email.",
+    ].join("\n"),
+    html: `
+      <div style="font-family:Segoe UI,sans-serif;background:#f3fcff;padding:24px;color:#13566f">
+        <div style="max-width:520px;margin:0 auto;background:rgba(255,255,255,0.96);border-radius:24px;padding:28px;border:1px solid rgba(255,255,255,0.9);box-shadow:0 18px 40px rgba(0,160,220,0.12)">
+          <h2 style="margin:0 0 12px;color:#0f84ab">Confirm your new Fruityger email</h2>
+          <p style="margin:0 0 18px;line-height:1.6">Hi ${username || "there"}, click the button below to finish changing the email on your account.</p>
+          <div style="margin:24px 0;text-align:center">
+            <a href="${confirmUrl}" style="display:inline-block;padding:14px 22px;border-radius:999px;background:linear-gradient(145deg,#00e0ff,#00bfff,#4facfe);color:#ffffff;text-decoration:none;font-weight:700;box-shadow:0 10px 22px rgba(0,160,220,0.24)">
+              Confirm new email
+            </a>
+          </div>
+          <p style="margin:0;line-height:1.6">This link expires in ${VERIFICATION_WINDOW_HOURS} hours.</p>
+        </div>
+      </div>
+    `,
+  });
+};
+
 const deleteUserCompletely = async (client, userId) => {
   const postIdsResult = await client.query(
     `SELECT post_id FROM posts WHERE user_id = $1`,

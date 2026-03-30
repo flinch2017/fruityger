@@ -3,6 +3,8 @@ export const clearAuthStorage = () => {
   localStorage.removeItem("userId");
   localStorage.removeItem("username");
   localStorage.removeItem("emailVerified");
+  localStorage.removeItem("interestsCompleted");
+  localStorage.removeItem("pendingEmail");
   localStorage.removeItem("verificationEmail");
 };
 
@@ -23,8 +25,18 @@ export const persistAuthSession = (data) => {
     localStorage.setItem("verificationEmail", data.user.email);
   }
 
+  if (typeof data?.user?.pending_email === "string" && data.user.pending_email) {
+    localStorage.setItem("pendingEmail", data.user.pending_email);
+  } else {
+    localStorage.removeItem("pendingEmail");
+  }
+
   if (typeof data?.user?.email_verified === "boolean") {
     localStorage.setItem("emailVerified", String(data.user.email_verified));
+  }
+
+  if (typeof data?.user?.interests_completed === "boolean") {
+    localStorage.setItem("interestsCompleted", String(data.user.interests_completed));
   }
 };
 

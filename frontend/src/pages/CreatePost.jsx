@@ -1,6 +1,6 @@
-import React, { useState, useRef } from "react";
-import "../css/CreatePost.css";
+import React, { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import "../css/CreatePost.css";
 
 export default function CreatePost() {
   const navigate = useNavigate();
@@ -9,51 +9,65 @@ export default function CreatePost() {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [warning, setWarning] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const MAX_ATTACHMENTS = 4;
   const MAX_TOTAL_SIZE_MB = 50;
 
-  const handleFileChange = (e) => {
-    const files = Array.from(e.target.files);
+  const showWarning = (message) => {
+    setWarning(message);
+
+    setTimeout(() => {
+      setWarning("");
+    }, 3000);
+  };
+
+  const getTotalAttachmentSizeMB = (files) => {
+    const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+    return totalBytes / (1024 * 1024);
+  };
+
+  const handleFileChange = (event) => {
+    const files = Array.from(event.target.files || []);
 
     if (!files.length) return;
 
-    // Attachment count limit
     if (attachments.length >= MAX_ATTACHMENTS) {
-        showWarning(`Attachment limit reached (${MAX_ATTACHMENTS}/4)`);
-        return;
+      showWarning(`Attachment limit reached (${MAX_ATTACHMENTS}/4)`);
+      return;
     }
 
     if (attachments.length + files.length > MAX_ATTACHMENTS) {
-        showWarning(`You can only attach up to ${MAX_ATTACHMENTS} files.`);
-        return;
+      showWarning(`You can only attach up to ${MAX_ATTACHMENTS} files.`);
+      return;
     }
 
-    // Total size limit check 🔥
-    const totalSizeMB =
-        getTotalAttachmentSizeMB([
-        ...attachments.map(a => a.file),
-        ...files
-        ]);
+    const totalSizeMB = getTotalAttachmentSizeMB([
+      ...attachments.map((attachment) => attachment.file),
+      ...files,
+    ]);
 
     if (totalSizeMB > MAX_TOTAL_SIZE_MB) {
-        showWarning(`Total upload size cannot exceed ${MAX_TOTAL_SIZE_MB}MB.`);
-        return;
+      showWarning(`Total upload size cannot exceed ${MAX_TOTAL_SIZE_MB}MB.`);
+      return;
     }
 
     setWarning("");
 
-    const previews = files.map(file => ({
-        file,
-        preview: URL.createObjectURL(file),
-        type: file.type.startsWith("video") ? "video" : "image"
+    const previews = files.map((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+      type: file.type.startsWith("video") ? "video" : "image",
     }));
 
-    setAttachments(prev => [...prev, ...previews]);
-    };
+    setAttachments((current) => [...current, ...previews]);
+    event.target.value = "";
+  };
 
-  const removeAttachment = (index) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index));
+  const removeAttachment = (indexToRemove) => {
+    setAttachments((current) =>
+      current.filter((_, index) => index !== indexToRemove)
+    );
   };
 
   const openFilePicker = () => {
@@ -61,128 +75,128 @@ export default function CreatePost() {
   };
 
   const handlePost = async () => {
+    if ((!text.trim() && attachments.length === 0) || submitting) {
+      return;
+    }
 
-  if (!text.trim() && attachments.length === 0) return;
+    const formData = new FormData();
+    formData.append("caption", text);
 
-  const formData = new FormData();
+    attachments.forEach((attachment) => {
+      formData.append("media", attachment.file);
+    });
 
-  formData.append("caption", text);
+    const token = localStorage.getItem("token");
+    setSubmitting(true);
 
-  attachments.forEach(att => {
-    formData.append("media", att.file);
-  });
+    try {
+      const res = await fetch("http://localhost:5000/api/posts/create", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
 
-  const token = localStorage.getItem("token");
+      const data = await res.json();
 
-  const res = await fetch("http://localhost:5000/api/posts/create", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`
-    },
-    body: formData
-  });
+      if (data.success) {
+        navigate("/feed");
+        return;
+      }
 
-  const data = await res.json();
-
-  if (data.success) {
-    navigate("/feed");
-  }
-};
-
-  const showWarning = (msg) => {
-    setWarning(msg);
-
-    setTimeout(() => {
-        setWarning("");
-    }, 3000);
+      showWarning(data.error || "Post creation failed.");
+    } catch (error) {
+      console.error(error);
+      showWarning("Post creation failed.");
+    } finally {
+      setSubmitting(false);
+    }
   };
-
-  const getTotalAttachmentSizeMB = (files) => {
-  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
-  return totalBytes / (1024 * 1024);
-};
 
   return (
     <main className="create-post-page">
-
       <div className="create-post-card">
-
-        <h2 className="create-title">✨ Create Post</h2>
+        <h2 className="create-title">Create Post</h2>
 
         <textarea
           className="create-textarea"
           placeholder="What's happening in your world today?"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(event) => setText(event.target.value)}
         />
 
-        {/* Warning UI Message */}
-        {warning && (
-        <div className="composer-warning">
-            ⚠️ {warning}
-        </div>
-        )}
+        {warning && <div className="composer-warning">{warning}</div>}
 
-        {/* Attachment Section */}
         <div className="attachment-area">
-
-        <button
+          <button
+            type="button"
             className={`attachment-btn ${attachments.length >= MAX_ATTACHMENTS ? "shake" : ""}`}
             onClick={openFilePicker}
-            disabled={attachments.length >= MAX_ATTACHMENTS}
-        >
-            📎
-        </button>
+            disabled={attachments.length >= MAX_ATTACHMENTS || submitting}
+          >
+            +
+          </button>
 
-        <span className="attachment-count-badge">
+          <span className="attachment-count-badge">
             {attachments.length} / {MAX_ATTACHMENTS}
-        </span>
+          </span>
 
-        <input
+          <input
             ref={fileInputRef}
             type="file"
             accept="image/*,video/*"
             multiple
             hidden
             onChange={handleFileChange}
-        />
-
+          />
         </div>
 
-        {/* Preview Grid */}
         {attachments.length > 0 && (
           <div className="preview-grid">
-            {attachments.map((att, index) => (
+            {attachments.map((attachment, index) => (
               <div key={index} className="preview-item">
-
-                {att.type === "image" ? (
-                  <img src={att.preview} alt="preview" />
+                {attachment.type === "image" ? (
+                  <img src={attachment.preview} alt="preview" />
                 ) : (
-                  <video src={att.preview} controls />
+                  <video src={attachment.preview} controls />
                 )}
 
                 <button
+                  type="button"
                   className="remove-preview-btn"
                   onClick={() => removeAttachment(index)}
+                  disabled={submitting}
                 >
-                  ✕
+                  x
                 </button>
-
               </div>
             ))}
           </div>
         )}
 
         <div className="create-actions">
-          <button className="cancel-btn" onClick={() => navigate("/feed")}>
+          <button
+            type="button"
+            className="cancel-btn"
+            onClick={() => navigate("/feed")}
+            disabled={submitting}
+          >
             Cancel
           </button>
 
-          <button className="submit-btn" onClick={handlePost}>
-            Post ✨
+          <button
+            type="button"
+            className="submit-btn"
+            onClick={handlePost}
+            disabled={submitting}
+          >
+            <span className="submit-btn-content">
+              {submitting && <span className="submit-spinner" aria-hidden="true"></span>}
+              <span>{submitting ? "Posting..." : "Post"}</span>
+            </span>
           </button>
         </div>
-
       </div>
     </main>
   );
