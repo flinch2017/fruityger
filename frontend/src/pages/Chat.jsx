@@ -5,6 +5,7 @@ import "../css/Chat.css";
 
 export default function Chat() {
   const menuRef = useRef(null);
+  const headerMenuRef = useRef(null);
   const { chatId } = useParams();
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
@@ -15,6 +16,9 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [blockedByMe, setBlockedByMe] = useState(false);
+  const [blockedByThem, setBlockedByThem] = useState(false);
 
   const messagesEndRef = useRef(null);
 
@@ -75,6 +79,8 @@ export default function Chat() {
 
         setOtherUser(other);
         setMessages(data.messages || []);
+        setBlockedByMe(Boolean(chat.blocked_by_me));
+        setBlockedByThem(Boolean(chat.blocked_by_them));
         dispatchMessagesRefresh();
       } catch (err) {
         console.error(err);
@@ -140,7 +146,7 @@ export default function Chat() {
   }, [chatId, token, userId]);
 
   const sendMessage = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || blockedByMe || blockedByThem) return;
 
     try {
       const res = await fetch("http://localhost:5000/api/messages/send", {
@@ -221,10 +227,75 @@ export default function Chat() {
     navigate(`/report?type=message&id=${msg.id}`);
   };
 
+  const handleDeleteConversation = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/messages/delete-chats", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ chatIds: [chatId] }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete conversation");
+      }
+
+      setHeaderMenuOpen(false);
+      dispatchMessagesRefresh();
+      navigate("/messages");
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Failed to delete conversation.");
+    }
+  };
+
+  const handleBlockUser = async () => {
+    try {
+      const endpoint = blockedByMe
+        ? "http://localhost:5000/api/main/unblock-user"
+        : "http://localhost:5000/api/main/block-user";
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ blockedUserId: otherUser.id }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || `Failed to ${blockedByMe ? "unblock" : "block"} user`);
+      }
+
+      setHeaderMenuOpen(false);
+      setBlockedByMe((prev) => !prev);
+      setInput("");
+    } catch (err) {
+      console.error(err);
+      alert(err.message || `Failed to ${blockedByMe ? "unblock" : "block"} user.`);
+    }
+  };
+
+  const handleReportUser = () => {
+    setHeaderMenuOpen(false);
+    navigate(`/report?type=user&id=${otherUser.id}`);
+  };
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         setOpenMenuId(null);
+      }
+
+      if (headerMenuRef.current && !headerMenuRef.current.contains(e.target)) {
+        setHeaderMenuOpen(false);
       }
     };
 
@@ -248,7 +319,42 @@ export default function Chat() {
         <button className="back-btn" onClick={() => navigate(-1)}>
           ←
         </button>
-        <h3>{otherUser.username}</h3>
+        <button
+          type="button"
+          className="chat-user-link"
+          onClick={() => navigate(`/profile/${otherUser.username}`)}
+        >
+          <div className="chat-user-avatar">
+            {otherUser.profile_pic ? (
+              <img src={otherUser.profile_pic} alt={otherUser.username} />
+            ) : (
+              "👤"
+            )}
+          </div>
+          <h3>{otherUser.username}</h3>
+        </button>
+        <div className="chat-header-menu-wrap" ref={headerMenuRef}>
+          <button
+            className="chat-header-menu-btn"
+            onClick={() => setHeaderMenuOpen((prev) => !prev)}
+          >
+            ⚙
+          </button>
+
+          {headerMenuOpen && (
+            <div className="chat-header-dropdown">
+              <button className="chat-header-dropdown-item" onClick={handleDeleteConversation}>
+                Delete this conversation
+              </button>
+              <button className="chat-header-dropdown-item danger" onClick={handleBlockUser}>
+                {blockedByMe ? "Unblock this user" : "Block this user"}
+              </button>
+              <button className="chat-header-dropdown-item danger" onClick={handleReportUser}>
+                Report
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="chat-messages">
@@ -335,16 +441,22 @@ export default function Chat() {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="chat-input">
-        <input
-          type="text"
-          placeholder="Type a message..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-        />
-        <button onClick={sendMessage}>Send</button>
-      </div>
+      {blockedByMe || blockedByThem ? (
+        <div className="chat-blocked-banner">
+          Sorry you can't message this user
+        </div>
+      ) : (
+        <div className="chat-input">
+          <input
+            type="text"
+            placeholder="Type a message..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+          />
+          <button onClick={sendMessage}>Send</button>
+        </div>
+      )}
     </div>
   );
 }

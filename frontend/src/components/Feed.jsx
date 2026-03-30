@@ -505,7 +505,29 @@ export default function Feed() {
         </div>
 
         {posts.length === 0 && !loadingPosts && (
-          <p className="feed-empty">No posts in your feed yet</p>
+          <div className="feed-empty-state">
+            <div className="feed-empty-orb-wrap">
+              <div className="feed-empty-orb">
+                <div className="feed-empty-orb-highlight"></div>
+                <div className="feed-empty-face">
+                  <span className="feed-empty-eye left"></span>
+                  <span className="feed-empty-eye right"></span>
+                  <span className="feed-empty-smile"></span>
+                </div>
+                <div className="feed-empty-wing left"></div>
+                <div className="feed-empty-wing right"></div>
+                <div className="feed-empty-shadow"></div>
+              </div>
+            </div>
+
+            <div className="feed-empty-text">
+              <h3>It&apos;s a little quiet here</h3>
+              <p>
+                Your feed is still empty. Follow more fruity people or come back
+                soon for fresh posts drifting in.
+              </p>
+            </div>
+          </div>
         )}
 
         {posts.map((post) => (

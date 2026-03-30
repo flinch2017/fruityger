@@ -2,7 +2,7 @@ import { Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { fetchAuthSession } from "../utils/authSession";
 
-export default function PrivateRoute({ children }) {
+export default function VerificationRoute({ children }) {
   const [status, setStatus] = useState("loading");
 
   useEffect(() => {
@@ -35,8 +35,8 @@ export default function PrivateRoute({ children }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (status === "unverified") {
-    return <Navigate to="/verify-email" replace />;
+  if (status === "verified") {
+    return <Navigate to="/feed" replace />;
   }
 
   return children;

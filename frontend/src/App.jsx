@@ -10,9 +10,11 @@ import Welcome from "./pages/Welcome";
 import WelcomeHeader from "./components/WelcomeHeader";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import VerifyEmail from "./pages/VerifyEmail";
 import ScrollToTop from "./components/ScrollToTop";
 import PrivateRoute from "./components/PrivateRoute";
 import PublicRoute from "./components/PublicRoute";
+import VerificationRoute from "./components/VerificationRoute";
 import NotFound from "./pages/NotFound"; // <-- import it
 import EditProfile from "./pages/EditProfile"; // <-- import it
 import CreatePost from "./pages/CreatePost"; // <-- import it
@@ -89,6 +91,16 @@ function App() {
             </PublicRoute>
           }
         />
+        <Route
+          path="/verify-email"
+          element={
+            <VerificationRoute>
+              <StandaloneLayout>
+                <VerifyEmail />
+              </StandaloneLayout>
+            </VerificationRoute>
+          }
+        />
 
         {/* Protected pages */}
         <Route
@@ -163,17 +175,21 @@ function App() {
         <Route
           path="/edit-profile"
           element={
-            <MainLayout>
-              <EditProfile />
-            </MainLayout>
+            <PrivateRoute>
+              <MainLayout>
+                <EditProfile />
+              </MainLayout>
+            </PrivateRoute>
           }
         />
         <Route
           path="/create"
           element={
-            <MainLayout>
-              <CreatePost />
-            </MainLayout>
+            <PrivateRoute>
+              <MainLayout>
+                <CreatePost />
+              </MainLayout>
+            </PrivateRoute>
           }
         />
         <Route
@@ -186,7 +202,16 @@ function App() {
             </PrivateRoute>
           }
         />
-        <Route path="/search" element={<MainLayout><Search /></MainLayout>} />
+        <Route
+          path="/search"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <Search />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
         <Route
           path="/profile/:username"
           element={

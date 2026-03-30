@@ -13,11 +13,142 @@
   gap: 24px;
 }
 
-.feed-empty {
+.feed-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 38px 20px 46px;
+  margin: 8px 0 10px;
+  border-radius: 34px;
+  background:
+    radial-gradient(circle at top, rgba(175, 243, 255, 0.72), transparent 48%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(218, 246, 255, 0.84));
+  border: 1px solid rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 20px 44px rgba(0, 165, 220, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96);
   text-align: center;
-  color: #5c6f7a;
+}
+
+.feed-empty-orb-wrap {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding-top: 6px;
+}
+
+.feed-empty-orb {
+  position: relative;
+  width: 126px;
+  height: 126px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.28) 24%, transparent 25%),
+    linear-gradient(180deg, #dfffff 0%, #9cecff 42%, #50d8ff 100%);
+  box-shadow:
+    0 22px 38px rgba(0, 190, 255, 0.24),
+    inset 0 5px 12px rgba(255, 255, 255, 0.9),
+    inset 0 -10px 18px rgba(0, 112, 184, 0.18);
+  animation: feed-float-orb 3.8s ease-in-out infinite;
+}
+
+.feed-empty-orb-highlight {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  width: 34px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.72);
+  filter: blur(2px);
+  transform: rotate(-18deg);
+}
+
+.feed-empty-face {
+  position: absolute;
+  inset: 0;
+}
+
+.feed-empty-eye {
+  position: absolute;
+  top: 50px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #0c7aa0;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.34);
+}
+
+.feed-empty-eye.left {
+  left: 40px;
+}
+
+.feed-empty-eye.right {
+  right: 40px;
+}
+
+.feed-empty-smile {
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  width: 34px;
+  height: 18px;
+  border-bottom: 4px solid #0c7aa0;
+  border-radius: 0 0 26px 26px;
+  transform: translateX(-50%);
+}
+
+.feed-empty-wing {
+  position: absolute;
+  top: 44px;
+  width: 34px;
+  height: 50px;
+  border-radius: 60% 40% 56% 44%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(185, 242, 255, 0.34));
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  z-index: -1;
+}
+
+.feed-empty-wing.left {
+  left: -12px;
+  transform: rotate(-28deg);
+  animation: feed-flutter-left 2.4s ease-in-out infinite;
+}
+
+.feed-empty-wing.right {
+  right: -12px;
+  transform: rotate(28deg);
+  animation: feed-flutter-right 2.4s ease-in-out infinite;
+}
+
+.feed-empty-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: -22px;
+  width: 86px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(63, 169, 212, 0.2);
+  transform: translateX(-50%);
+  filter: blur(4px);
+  animation: feed-shadow-breathe 3.8s ease-in-out infinite;
+}
+
+.feed-empty-text h3 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f7998;
+}
+
+.feed-empty-text p {
+  margin: 0;
+  max-width: 420px;
+  color: #55727f;
   font-size: 15px;
-  padding: 48px 16px;
+  line-height: 1.6;
 }
 
 .feed-pull-indicator {
@@ -488,6 +619,48 @@
   }
 }
 
+@keyframes feed-float-orb {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes feed-flutter-left {
+  0%,
+  100% {
+    transform: rotate(-28deg);
+  }
+  50% {
+    transform: rotate(-18deg);
+  }
+}
+
+@keyframes feed-flutter-right {
+  0%,
+  100% {
+    transform: rotate(28deg);
+  }
+  50% {
+    transform: rotate(18deg);
+  }
+}
+
+@keyframes feed-shadow-breathe {
+  0%,
+  100% {
+    transform: translateX(-50%) scaleX(1);
+    opacity: 0.75;
+  }
+  50% {
+    transform: translateX(-50%) scaleX(0.88);
+    opacity: 0.5;
+  }
+}
+
 @media (max-width: 768px) {
   .feed-page {
     padding: 76px 10px 24px;
@@ -499,5 +672,42 @@
 
   .feed-carousel-arrow {
     display: none;
+  }
+
+  .feed-empty-state {
+    padding: 30px 16px 38px;
+    border-radius: 26px;
+  }
+
+  .feed-empty-orb {
+    width: 108px;
+    height: 108px;
+  }
+
+  .feed-empty-eye {
+    top: 42px;
+    width: 10px;
+    height: 10px;
+  }
+
+  .feed-empty-eye.left {
+    left: 35px;
+  }
+
+  .feed-empty-eye.right {
+    right: 35px;
+  }
+
+  .feed-empty-smile {
+    bottom: 30px;
+    width: 28px;
+  }
+
+  .feed-empty-text h3 {
+    font-size: 19px;
+  }
+
+  .feed-empty-text p {
+    font-size: 14px;
   }
 }

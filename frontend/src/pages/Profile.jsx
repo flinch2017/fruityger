@@ -41,6 +41,9 @@ export default function Profile() {
   const [disappearingPosts, setDisappearingPosts] = useState([]); 
   const [following, setFollowing] = useState(false); // new state
   const [followLoading, setFollowLoading] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef(null);
+  const [isBlockedProfile, setIsBlockedProfile] = useState(false);
 
   const LIMIT = 5;
   const navigate = useNavigate();
@@ -155,6 +158,61 @@ export default function Profile() {
     navigate(`/report?type=post&id=${postId}`);
   };
 
+  const handleBlockUser = async () => {
+    const token = localStorage.getItem("token");
+    if (!token || !user?.id) return;
+
+    try {
+      const endpoint = user?.blocked_by_me
+        ? "http://localhost:5000/api/main/unblock-user"
+        : "http://localhost:5000/api/main/block-user";
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ blockedUserId: user.id }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || `Failed to ${user?.blocked_by_me ? "unblock" : "block"} user`);
+      }
+
+      setProfileMenuOpen(false);
+      const nextBlockedByMe = !user?.blocked_by_me;
+
+      setUser(prev => ({
+        ...prev,
+        blocked_by_me: nextBlockedByMe,
+      }));
+
+      const nextBlockedState = nextBlockedByMe || Boolean(user?.blocked_by_them);
+      setIsBlockedProfile(nextBlockedState);
+
+      if (nextBlockedState) {
+        setPosts([]);
+        setOffset(0);
+        setHasMore(false);
+      } else {
+        setOffset(0);
+        setHasMore(true);
+        fetchPosts(true);
+      }
+    } catch (err) {
+      console.error(err);
+      alert(err.message || `Failed to ${user?.blocked_by_me ? "unblock" : "block"} user`);
+    }
+  };
+
+  const handleReportUser = () => {
+    setProfileMenuOpen(false);
+    navigate(`/report?type=user&id=${user.id}`);
+  };
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (
@@ -162,6 +220,13 @@ export default function Profile() {
         !dropdownRef.current.contains(e.target)
       ) {
         setActiveMenuPostId(null);
+      }
+
+      if (
+        profileMenuRef.current &&
+        !profileMenuRef.current.contains(e.target)
+      ) {
+        setProfileMenuOpen(false);
       }
     };
 
@@ -190,7 +255,10 @@ export default function Profile() {
 
       const data = await res.json();
 
-      if (res.ok) setUser(data.user);
+      if (res.ok) {
+        setUser(data.user);
+        setIsBlockedProfile(Boolean(data.user?.blocked_by_me || data.user?.blocked_by_them));
+      }
 
     } catch (err) {
       console.error(err);
@@ -228,6 +296,13 @@ export default function Profile() {
       const data = await res.json();
 
       if (res.ok) {
+        if (data.isBlocked) {
+          setPosts([]);
+          setOffset(0);
+          setHasMore(false);
+          setLoadingPosts(false);
+          return;
+        }
 
         if (!data.posts || data.posts.length === 0) {
           setHasMore(false);
@@ -572,6 +647,28 @@ export default function Profile() {
 
 
       <div className="profile-card">
+        {!isOwnProfile && (
+          <div className="profile-card-menu-wrap" ref={profileMenuRef}>
+            <button
+              className="profile-card-menu-btn"
+              onClick={() => setProfileMenuOpen(prev => !prev)}
+            >
+              ⋯
+            </button>
+
+            {profileMenuOpen && (
+              <div className="profile-card-dropdown">
+                <button className="profile-card-dropdown-item danger" onClick={handleBlockUser}>
+                  {user?.blocked_by_me ? "Unblock this user" : "Block this user"}
+                </button>
+                <button className="profile-card-dropdown-item danger" onClick={handleReportUser}>
+                  Report
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="profile-info">
           <div className="profile-avatar">
             {user.profile_pic ?
@@ -590,7 +687,7 @@ export default function Profile() {
               >
                 Edit Profile
               </button>
-            ) : (
+            ) : !isBlockedProfile ? (
               <button
                 className="profile-btn follow-btn"
                 onClick={toggleFollow}
@@ -602,11 +699,20 @@ export default function Profile() {
                   following ? "Unfollow" : "Follow"
                 )}
               </button>
-            )}
+            ) : user?.blocked_by_me ? (
+              <button
+                className="profile-btn follow-btn"
+                onClick={handleBlockUser}
+              >
+                Unblock
+              </button>
+            ) : null}
 
-            <button className="profile-btn share-btn">
-              Share Profile
-            </button>
+            {!(isBlockedProfile && !user?.blocked_by_me) && (
+              <button className="profile-btn share-btn">
+                Share Profile
+              </button>
+            )}
           </div>
 
           <div className="profile-stats">
@@ -636,11 +742,17 @@ export default function Profile() {
       <div className="profile-posts">
         <h3>Posts</h3>
 
-        {posts.length === 0 && !loadingPosts && (
+        {isBlockedProfile && !isOwnProfile ? (
+          <p className="no-posts-message">
+            {user?.blocked_by_me
+              ? "You blocked this user, so their posts are hidden."
+              : "You can't view this user's posts."}
+          </p>
+        ) : posts.length === 0 && !loadingPosts && (
           <p className="no-posts-message">No posts yet</p>
         )}
 
-        {posts.map(post => (
+        {!isBlockedProfile && posts.map(post => (
           <div
             key={post.post_id}
             className={`post-card ${disappearingPosts.includes(post.post_id) ? "fade-out" : "fade-in"}`}

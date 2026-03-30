@@ -1,12 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import CommentSheet from "../components/CommentSheet";
 import "../css/Search.css";
+import "../css/CommentSheet.css";
 
 export default function Search() {
   const location = useLocation();
   const query = new URLSearchParams(location.search).get("q");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const videoRefs = useRef({});
+  const observerRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const currentUserId = localStorage.getItem("userId");
 
   const [activeTab, setActiveTab] = useState("profiles");
   const [result, setResult] = useState({
@@ -14,21 +20,308 @@ export default function Search() {
     posts: [],
     hashtags: []
   });
+  const [activeIndexMap, setActiveIndexMap] = useState({});
+  const [dragging, setDragging] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [touchStartY, setTouchStartY] = useState(0);
+  const [likingMap, setLikingMap] = useState({});
+  const [activeCommentPost, setActiveCommentPost] = useState(null);
+  const [activeMenuPostId, setActiveMenuPostId] = useState(null);
+  const [deleteModal, setDeleteModal] = useState({
+    visible: false,
+    postId: null
+  });
+  const [deletingPost, setDeletingPost] = useState(false);
+  const [actionResult, setActionResult] = useState(null);
+
+  const formatDate = (dateString) => {
+    if (!dateString) return "";
+
+    const now = new Date();
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return "";
+
+    const diffMs = now - date;
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    const diffWeeks = Math.floor(diffDays / 7);
+
+    if (diffSeconds < 60) return "Just now";
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffWeeks < 4) return `${diffWeeks}w ago`;
+
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
+  };
+
+  const moveSlide = (postId, direction, mediaLength) => {
+    setActiveIndexMap((prev) => {
+      const current = prev[postId] || 0;
+      let nextIndex = current + direction;
+
+      if (nextIndex < 0) nextIndex = mediaLength - 1;
+      if (nextIndex >= mediaLength) nextIndex = 0;
+
+      return { ...prev, [postId]: nextIndex };
+    });
+  };
+
+  const handlePointerStart = (e) => {
+    const touch = e.touches ? e.touches[0] : e;
+    setDragging(true);
+    setDragStartX(touch.clientX);
+    setTouchStartY(touch.clientY);
+  };
+
+  const handlePointerMove = (e, postId, mediaLength) => {
+    if (!dragging) return;
+
+    const touch = e.touches ? e.touches[0] : e;
+    const dx = dragStartX - touch.clientX;
+    const dy = touch.clientY - touchStartY;
+
+    if (Math.abs(dy) > Math.abs(dx)) return;
+
+    if (Math.abs(dx) > 80) {
+      moveSlide(postId, dx > 0 ? 1 : -1, mediaLength);
+      setDragStartX(touch.clientX);
+    }
+  };
+
+  const handlePointerEnd = () => setDragging(false);
 
   useEffect(() => {
     if (!query) return;
 
     setLoading(true);
+    const token = localStorage.getItem("token");
 
-    fetch(`/api/search?q=${encodeURIComponent(query)}`)
+    fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+      headers: token
+        ? {
+            Authorization: `Bearer ${token}`
+          }
+        : undefined
+    })
       .then(res => res.json())
       .then(data => setResult(data))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [query]);
 
+  useEffect(() => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const video = entry.target;
+          if (!video) return;
+
+          if (entry.isIntersecting) {
+            video.play().catch(() => {});
+          } else {
+            video.pause();
+            video.currentTime = 0;
+          }
+        });
+      },
+      { threshold: 0.75 }
+    );
+
+    Object.values(videoRefs.current).forEach((list) => {
+      list?.forEach((video) => {
+        if (video) observerRef.current.observe(video);
+      });
+    });
+
+    return () => observerRef.current?.disconnect();
+  }, [result.posts, activeIndexMap]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setActiveMenuPostId(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const toggleLike = async (postId) => {
+    const token = localStorage.getItem("token");
+    if (!token || likingMap[postId]) return;
+
+    const currentPost = result.posts.find((post) => post.post_id === postId);
+    if (!currentPost) return;
+
+    const wasLiked = currentPost.is_liked;
+    setLikingMap((prev) => ({ ...prev, [postId]: true }));
+
+    setResult((prev) => ({
+      ...prev,
+      posts: prev.posts.map((post) =>
+        post.post_id === postId
+          ? {
+              ...post,
+              is_liked: !wasLiked,
+              like_count: wasLiked
+                ? Math.max((post.like_count || 1) - 1, 0)
+                : (post.like_count || 0) + 1
+            }
+          : post
+      )
+    }));
+
+    try {
+      const res = await fetch("http://localhost:5000/api/likes/toggle", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ postId })
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to toggle like");
+      }
+    } catch (err) {
+      console.error(err);
+      setResult((prev) => ({
+        ...prev,
+        posts: prev.posts.map((post) =>
+          post.post_id === postId
+            ? {
+                ...post,
+                is_liked: wasLiked,
+                like_count: currentPost.like_count
+              }
+            : post
+        )
+      }));
+    } finally {
+      setLikingMap((prev) => {
+        const updated = { ...prev };
+        delete updated[postId];
+        return updated;
+      });
+    }
+  };
+
+  const toggleMenu = (postId) => {
+    setActiveMenuPostId((prev) => (prev === postId ? null : postId));
+  };
+
+  const handleEditPost = (post) => {
+    setActiveMenuPostId(null);
+    navigate(`/edit-post/${post.post_id}`, {
+      state: { post }
+    });
+  };
+
+  const handleReportPost = (postId) => {
+    setActiveMenuPostId(null);
+    navigate(`/report?type=post&id=${postId}`);
+  };
+
+  const promptDeletePost = (postId) => {
+    setActiveMenuPostId(null);
+    setDeleteModal({ visible: true, postId });
+  };
+
+  const handleCancelDelete = () => {
+    if (!deletingPost) {
+      setDeleteModal({ visible: false, postId: null });
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    const token = localStorage.getItem("token");
+    if (!token || !deleteModal.postId) return;
+
+    setDeletingPost(true);
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/profile/${deleteModal.postId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("Delete failed");
+      }
+
+      setResult((prev) => ({
+        ...prev,
+        posts: prev.posts.filter((post) => post.post_id !== deleteModal.postId)
+      }));
+      setActionResult({ type: "success", message: "Post deleted successfully!" });
+    } catch (err) {
+      console.error(err);
+      setActionResult({ type: "error", message: "Failed to delete post!" });
+    } finally {
+      setDeletingPost(false);
+      setDeleteModal({ visible: false, postId: null });
+      setTimeout(() => setActionResult(null), 3000);
+    }
+  };
+
   return (
     <div className="search-page">
+      {deleteModal.visible && (
+        <div className="search-post-modal-overlay">
+          <div className={`search-post-modal-card ${deletingPost ? "loading" : "animate-in"}`}>
+            <h3>Confirm Delete</h3>
+            <p>Are you sure you want to delete this post?</p>
+
+            {deletingPost && <div className="search-post-spinner"></div>}
+
+            {!deletingPost && (
+              <div className="search-post-modal-actions">
+                <button className="search-post-modal-btn cancel" onClick={handleCancelDelete}>
+                  Cancel
+                </button>
+                <button className="search-post-modal-btn confirm" onClick={handleConfirmDelete}>
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {actionResult && (
+        <div className={`search-post-toast ${actionResult.type}`}>
+          {actionResult.message}
+        </div>
+      )}
+
+      {activeCommentPost && (
+        <CommentSheet
+          postId={activeCommentPost.postId}
+          postAuthorId={activeCommentPost.postAuthorId}
+          onClose={() => setActiveCommentPost(null)}
+        />
+      )}
+
       <div className="search-header">
         <h2 className="search-title">Results for "{query}"</h2>
       </div>
@@ -85,9 +378,193 @@ export default function Search() {
                   <p className="empty-text">No posts found</p>
                 ) : (
                   result.posts.map(p => (
-                    <div key={p.post_id} className="search-post-card aero-card">
-                      <strong>{p.username}</strong>
-                      <p>{p.caption}</p>
+                    <div key={p.post_id} className="search-post-feed-card">
+                      <div
+                        className="search-post-more-wrapper"
+                        ref={activeMenuPostId === p.post_id ? dropdownRef : null}
+                      >
+                        <div
+                          className="search-post-more"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleMenu(p.post_id);
+                          }}
+                        >
+                          ⋮
+                        </div>
+
+                        {activeMenuPostId === p.post_id && (
+                          <div className="search-post-dropdown">
+                            {String(p.user_id) === String(currentUserId) ? (
+                              <>
+                                <div
+                                  className="search-post-dropdown-item edit"
+                                  onClick={() => handleEditPost(p)}
+                                >
+                                  Edit
+                                </div>
+                                <div
+                                  className="search-post-dropdown-item delete"
+                                  onClick={() => promptDeletePost(p.post_id)}
+                                >
+                                  Delete
+                                </div>
+                              </>
+                            ) : (
+                              <div
+                                className="search-post-dropdown-item report"
+                                onClick={() => handleReportPost(p.post_id)}
+                              >
+                                Report
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="search-post-header">
+                        <div
+                          className="search-post-avatar clickable"
+                          onClick={() => navigate(`/profile/${p.username}`)}
+                        >
+                          {p.profile_pic ? (
+                            <img src={p.profile_pic} alt={p.username} />
+                          ) : (
+                            "👤"
+                          )}
+                        </div>
+
+                        <div className="search-post-user-text">
+                          <span
+                            className="search-post-username clickable"
+                            onClick={() => navigate(`/profile/${p.username}`)}
+                          >
+                            {p.username}
+                          </span>
+                          <span className="search-post-date">
+                            {formatDate(p.date_posted)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {p.caption && (
+                        <p className="search-post-content">{p.caption}</p>
+                      )}
+
+                      {p.media?.length > 0 && (
+                        <div className="search-post-carousel">
+                          {p.media.length > 1 && (
+                            <>
+                              <button
+                                className="search-post-carousel-arrow left"
+                                onClick={() => moveSlide(p.post_id, -1, p.media.length)}
+                              >
+                                ‹
+                              </button>
+
+                              <button
+                                className="search-post-carousel-arrow right"
+                                onClick={() => moveSlide(p.post_id, 1, p.media.length)}
+                              >
+                                ›
+                              </button>
+                            </>
+                          )}
+
+                          <div
+                            className="search-post-carousel-track"
+                            style={{
+                              transform: `translateX(-${(activeIndexMap[p.post_id] || 0) * 100}%)`
+                            }}
+                            onMouseDown={handlePointerStart}
+                            onMouseMove={(e) => handlePointerMove(e, p.post_id, p.media.length)}
+                            onMouseUp={handlePointerEnd}
+                            onMouseLeave={handlePointerEnd}
+                            onTouchStart={handlePointerStart}
+                            onTouchMove={(e) => handlePointerMove(e, p.post_id, p.media.length)}
+                            onTouchEnd={handlePointerEnd}
+                          >
+                            {p.media.map((media, index) => (
+                              <div className="search-post-carousel-item" key={`${p.post_id}-${index}`}>
+                                {media.media_type === "video" ? (
+                                  <video
+                                    ref={(el) => {
+                                      if (!el) return;
+                                      if (!videoRefs.current[p.post_id]) {
+                                        videoRefs.current[p.post_id] = [];
+                                      }
+                                      videoRefs.current[p.post_id][index] = el;
+                                    }}
+                                    src={media.media_url}
+                                    playsInline
+                                    loop
+                                    muted
+                                    preload="metadata"
+                                    className="search-post-video"
+                                  />
+                                ) : (
+                                  <img
+                                    src={media.media_url}
+                                    alt=""
+                                    className="search-post-image"
+                                  />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          {p.media.length > 1 && (
+                            <div className="search-post-carousel-indicator">
+                              {p.media.map((_, index) => (
+                                <span
+                                  key={`${p.post_id}-dot-${index}`}
+                                  className={
+                                    (activeIndexMap[p.post_id] || 0) === index
+                                      ? "search-post-indicator-dot active"
+                                      : "search-post-indicator-dot"
+                                  }
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="search-post-footer">
+                        <div className="search-post-actions">
+                          <div className="search-post-count-group">
+                            <button
+                              className={`search-post-action-btn ${p.is_liked ? "liked" : ""}`}
+                              onClick={() => toggleLike(p.post_id)}
+                            >
+                              ❤️
+                            </button>
+                            <span>{p.like_count || 0}</span>
+                          </div>
+
+                          <div className="search-post-count-group">
+                            <button
+                              className="search-post-action-btn"
+                              onClick={() =>
+                                setActiveCommentPost({
+                                  postId: p.post_id,
+                                  postAuthorId: p.user_id
+                                })
+                              }
+                            >
+                              💬
+                            </button>
+                            <span>{p.comment_count || 0}</span>
+                          </div>
+
+                          <button
+                            className="search-post-action-btn"
+                            onClick={() => navigate(`/post/${p.post_id}`)}
+                          >
+                            🔗
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   ))
                 )}

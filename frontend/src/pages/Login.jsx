@@ -1,74 +1,102 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import "../css/Login.css";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import ReCAPTCHA from "react-google-recaptcha";
-
-
-
+import "../css/Login.css";
+import { persistAuthSession } from "../utils/authSession";
 
 export default function Login() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [captchaValue, setCaptchaValue] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState({ type: "", message: "" });
+  const captchaRef = useRef(null);
+  const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
   useEffect(() => {
     document.body.classList.add("welcome");
     return () => document.body.classList.remove("welcome");
   }, []);
 
-    const handleSubmit = async (e) => {
-      e.preventDefault();
+  const setCustomMessage = (type, message) => {
+    setFeedback({ type, message });
+  };
 
-      if (!email || !password) {
-        alert("Please enter email and password");
+  const clearMessage = () => {
+    setFeedback({ type: "", message: "" });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    clearMessage();
+
+    if (!email || !password) {
+      setCustomMessage("error", "Please enter your email and password.");
+      return;
+    }
+
+    if (!siteKey || !captchaRef.current) {
+      setCustomMessage("error", "reCAPTCHA is not configured properly.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const recaptchaToken = await captchaRef.current.executeAsync();
+      captchaRef.current.reset();
+
+      if (!recaptchaToken) {
+        setCustomMessage("error", "Please verify that you are not a robot.");
         return;
       }
 
-      if (!captchaValue) {
-        alert("Please verify that you are not a robot");
+      const response = await fetch("http://localhost:5000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, recaptchaToken }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setCustomMessage("error", data.error || "Login failed.");
         return;
       }
 
-      try {
-        const response = await fetch("http://localhost:5000/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, recaptchaToken: captchaValue }),
-        });
+      persistAuthSession(data);
+      const requiresVerification = data.requiresVerification || !data.user?.email_verified;
 
-        const data = await response.json();
+      setCustomMessage(
+        "success",
+        requiresVerification
+          ? "Login successful. Please verify your email to continue."
+          : "Login successful. Redirecting to your feed..."
+      );
 
-        if (!response.ok) {
-          alert(data.error || "Login failed");
-          setCaptchaValue(null); // reset captcha
-          return;
-        }
+      setTimeout(() => {
+        navigate(requiresVerification ? "/verify-email" : "/feed", { replace: true });
+      }, 500);
+    } catch (err) {
+      console.error(err);
+      setCustomMessage("error", "Login request failed.");
+      captchaRef.current?.reset();
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-        console.log("Logged in user:", data.user);
-
-        // Save token
-        localStorage.setItem("token", data.token);
-
-        // ⭐ Save user ID (UUID) for comment menus
-        localStorage.setItem("userId", data.user.id);
-
-        // Save username for profile routing
-        localStorage.setItem("username", data.user.username);
-
-        window.location.href = "/feed";
-
-      } catch (err) {
-        console.error(err);
-        alert("Login request failed");
-        setCaptchaValue(null); // reset captcha
-      }
-    };
-
-    return (
+  return (
     <div className="welcome">
       <div className="login-aero-page">
         <div className="login-aero-card">
           <h2 className="login-aero-title">Login</h2>
+
+          {feedback.message && (
+            <div className={`login-feedback ${feedback.type}`}>
+              {feedback.message}
+            </div>
+          )}
 
           <form className="login-aero-form" onSubmit={handleSubmit}>
             <input
@@ -76,7 +104,10 @@ export default function Login() {
               placeholder="Email"
               className="login-aero-input"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                clearMessage();
+                setEmail(e.target.value);
+              }}
               required
             />
 
@@ -85,18 +116,23 @@ export default function Login() {
               placeholder="Password"
               className="login-aero-input"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                clearMessage();
+                setPassword(e.target.value);
+              }}
               required
             />
 
             <ReCAPTCHA
-                sitekey="6LdizXEsAAAAALqqTRRhvx6XOcd9gRndTGVl1wSS"  // use your V2 site key
-                onChange={(value) => setCaptchaValue(value)}
-                theme="light"
+              ref={captchaRef}
+              sitekey={siteKey}
+              size="invisible"
+              badge="inline"
+              theme="light"
             />
 
-            <button type="submit" className="login-aero-btn">
-              Log In
+            <button type="submit" className="login-aero-btn" disabled={submitting}>
+              {submitting ? "Logging in..." : "Log In"}
             </button>
 
             <div className="login-aero-create">

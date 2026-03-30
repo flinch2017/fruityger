@@ -1,6 +1,6 @@
 .signup-aero-page {
   width: 100%;
-  height: 100vh;
+  min-height: 100vh;
 
   display: flex;
   flex-direction: column;
@@ -15,8 +15,19 @@
   );
 
   font-family: "Segoe UI", sans-serif;
-  padding: 20px;
+  padding: 20px 20px 92px;
   box-sizing: border-box;
+}
+
+body.welcome .grecaptcha-badge {
+  bottom: 10px !important;
+}
+
+.signup-aero-form .grecaptcha-badge {
+  position: static !important;
+  margin: -2px auto 4px;
+  transform: scale(0.98);
+  transform-origin: center;
 }
 
 /* ===== GLASS CARD ===== */
@@ -57,6 +68,38 @@
   gap: 18px;
 }
 
+.signup-feedback {
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  border-radius: 18px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.5;
+  box-shadow:
+    0 10px 22px rgba(0, 163, 255, 0.12),
+    inset 0 1px 0 rgba(255,255,255,0.9);
+}
+
+.signup-feedback.error {
+  color: #9e3557;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 245, 248, 0.95),
+    rgba(255, 220, 231, 0.88)
+  );
+  border: 1px solid rgba(255,255,255,0.92);
+}
+
+.signup-feedback.success {
+  color: #1f7f67;
+  background: linear-gradient(
+    160deg,
+    rgba(241, 255, 250, 0.96),
+    rgba(211, 255, 239, 0.9)
+  );
+  border: 1px solid rgba(255,255,255,0.92);
+}
+
 /* ===== INPUTS ===== */
 .signup-aero-input {
   padding: 14px 18px;
@@ -83,6 +126,22 @@
     inset 0 2px 8px rgba(0, 150, 255, 0.25),
     0 0 15px rgba(0, 212, 255, 0.5);
   transform: scale(1.02);
+}
+
+.signup-aero-date {
+  color: #2d6f86;
+}
+
+.signup-aero-date::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.signup-password-hint {
+  margin: -8px 8px 0;
+  color: #4a8399;
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 /* ===== CANDY BUTTON ===== */
@@ -120,4 +179,32 @@
 
 .signup-aero-btn:active {
   transform: scale(0.96);
+}
+
+.signup-aero-btn:disabled {
+  cursor: wait;
+  opacity: 0.88;
+}
+
+.signup-aero-btn:disabled:hover {
+  transform: none;
+  box-shadow:
+    0 8px 20px rgba(0, 200, 255, 0.4),
+    inset 0 0 15px rgba(255,255,255,0.3);
+}
+
+.signup-login-link {
+  margin-top: 18px;
+  text-align: center;
+  color: #1d6f8e;
+}
+
+.signup-login-link a {
+  color: #0099cc;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.signup-login-link a:hover {
+  text-decoration: underline;
 }

@@ -171,6 +171,30 @@ router.post("/send", authenticateToken, async (req, res) => {
   try {
     await ensureDeletedChatsTable();
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS blocked_users (
+        blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        blocked_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (blocker_id, blocked_id)
+      )
+    `);
+
+    const blockedResult = await pool.query(
+      `
+      SELECT 1
+      FROM blocked_users
+      WHERE (blocker_id = $1 AND blocked_id = $2)
+         OR (blocker_id = $2 AND blocked_id = $1)
+      LIMIT 1
+      `,
+      [senderId, receiverId]
+    );
+
+    if (blockedResult.rows.length > 0) {
+      return res.status(403).json({ error: "Messaging is unavailable with this user" });
+    }
+
     const message = await pool.query(
       `
       INSERT INTO messages (chat_id, sender_id, receiver_id, content)
@@ -302,6 +326,39 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
 
     const chat = chatResult.rows[0];
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS blocked_users (
+        blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        blocked_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (blocker_id, blocked_id)
+      )
+    `);
+
+    const otherUserId =
+      String(chat.user1_id) === String(userId)
+        ? chat.user2_id
+        : chat.user1_id;
+
+    const blockResult = await pool.query(
+      `
+      SELECT
+        EXISTS (
+          SELECT 1
+          FROM blocked_users
+          WHERE blocker_id = $1
+            AND blocked_id = $2
+        ) AS blocked_by_me,
+        EXISTS (
+          SELECT 1
+          FROM blocked_users
+          WHERE blocker_id = $2
+            AND blocked_id = $1
+        ) AS blocked_by_them
+      `,
+      [userId, otherUserId]
+    );
+
     await pool.query(
       `
       UPDATE messages
@@ -336,6 +393,8 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
     res.json({
       chat: {
         id: chat.id,
+        blocked_by_me: blockResult.rows[0]?.blocked_by_me || false,
+        blocked_by_them: blockResult.rows[0]?.blocked_by_them || false,
         user1: {
           id: chat.user1_id,
           username: chat.user1_username,

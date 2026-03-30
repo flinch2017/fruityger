@@ -13,7 +13,8 @@ router.get("/posts", authenticateToken, async (req, res) => {
 
   try {
 
-    let userId = req.user.id;
+    const viewerId = req.user.id;
+    let userId = viewerId;
 
     // ⭐ If frontend sends username, override profile owner
     const username = req.query.username;
@@ -30,6 +31,32 @@ router.get("/posts", authenticateToken, async (req, res) => {
       }
 
       userId = userResult.rows[0].id;
+    }
+
+    if (userId !== viewerId) {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS blocked_users (
+          blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          blocked_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (blocker_id, blocked_id)
+        )
+      `);
+
+      const blockResult = await pool.query(
+        `
+        SELECT 1
+        FROM blocked_users
+        WHERE (blocker_id = $1 AND blocked_id = $2)
+           OR (blocker_id = $2 AND blocked_id = $1)
+        LIMIT 1
+        `,
+        [viewerId, userId]
+      );
+
+      if (blockResult.rows.length > 0) {
+        return res.json({ posts: [], isBlocked: true });
+      }
     }
     const limit = parseInt(req.query.limit) || 5;
     const offset = parseInt(req.query.offset) || 0;
@@ -92,7 +119,7 @@ router.get("/posts", authenticateToken, async (req, res) => {
       offset
     ]);
 
-    res.json({ posts: rows });
+    res.json({ posts: rows, isBlocked: false });
 
   } catch (err) {
     console.error(err);

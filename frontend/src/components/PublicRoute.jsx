@@ -1,12 +1,42 @@
-// components/PublicRoute.jsx
 import { Navigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { fetchAuthSession } from "../utils/authSession";
 
 export default function PublicRoute({ children }) {
-  const token = localStorage.getItem("token");
+  const [status, setStatus] = useState("loading");
 
-  // If logged in, redirect to main feed
-  if (token) {
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkSession = async () => {
+      const session = await fetchAuthSession();
+      if (!isMounted) return;
+
+      if (!session.ok) {
+        setStatus("guest");
+        return;
+      }
+
+      setStatus(session.data?.user?.email_verified ? "verified" : "unverified");
+    };
+
+    checkSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  if (status === "loading") {
+    return null;
+  }
+
+  if (status === "verified") {
     return <Navigate to="/feed" replace />;
+  }
+
+  if (status === "unverified") {
+    return <Navigate to="/verify-email" replace />;
   }
 
   return children;

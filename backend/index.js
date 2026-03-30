@@ -14,6 +14,7 @@ import followRoutes from "./routes/follow.js";
 import reportRoutes from "./routes/report.js";
 import messageRoutes from "./routes/messages.js";
 import notificationRoutes from "./routes/notifications.js";
+import { cleanupExpiredUnverifiedUsers, ensureEmailVerificationSchema } from "./utils/emailVerification.js";
 
 
 
@@ -50,5 +51,15 @@ app.use("/api/notifications", notificationRoutes);
 app.get("/", (req, res) => {
   res.send({ status: "Fruityger backend running" });
 });
+
+ensureEmailVerificationSchema()
+  .then(() => cleanupExpiredUnverifiedUsers())
+  .catch((err) => console.error("Email verification bootstrap failed:", err));
+
+setInterval(() => {
+  cleanupExpiredUnverifiedUsers().catch((err) => {
+    console.error("Email verification cleanup failed:", err);
+  });
+}, 60 * 60 * 1000);
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

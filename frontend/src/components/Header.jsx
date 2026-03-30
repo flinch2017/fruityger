@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import React, { useState, useEffect, useRef } from "react";
 import "../css/Header.css";
+import { clearAuthStorage } from "../utils/authSession";
 
 export default function Header() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -270,7 +271,7 @@ export default function Header() {
 
                   <button
                     onClick={() => {
-                      localStorage.removeItem("token");
+                      clearAuthStorage();
                       setDropdownOpen(false);
                       navigate("/login");
                     }}
