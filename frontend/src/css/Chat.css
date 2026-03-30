@@ -10,6 +10,8 @@
 .chat-window {
   width: 100%;
   max-width: 800px;
+  height: 80vh;
+  margin: 70px auto 0;
   display: flex;
   flex-direction: column;
   border-radius: 30px;
@@ -17,19 +19,34 @@
   background: var(--glass);
   backdrop-filter: blur(25px);
   border: 1px solid var(--border-light);
-  height: 80vh;
-  margin: 0 auto;
   font-family: "Segoe UI", sans-serif;
-  margin-top: 70px;
 }
 
 /* Header */
 .chat-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
   padding-bottom: 15px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.5);
-  margin-bottom: 20px;
+
   color: #026b90;
   font-size: 22px;
+}
+
+.back-btn {
+  font-size: 18px;
+  padding: 6px 12px;
+  border-radius: 50px;
+  border: none;
+  background: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
 }
 
 /* Messages container */
@@ -42,33 +59,50 @@
   padding-right: 5px;
 }
 
-/* Individual messages */
-.message {
-  max-width: 65%;
-  padding: 12px 18px;
-  border-radius: 25px;
-  font-size: 14px;
-  line-height: 1.4;
+/* ================= MESSAGE BUBBLES ================= */
+.message-wrapper {
+  display: flex;
+  flex-direction: column;
+  margin: 6px 10px;
 }
 
-/* Received */
-.message.received {
-  align-self: flex-start;
+.message-wrapper.sent {
+  align-items: flex-end;
+}
+
+.message-wrapper.received {
+  align-items: flex-start;
+}
+
+.message-bubble {
+  max-width: 70%;
+  padding: 12px 18px;
+  border-radius: 20px;
+  font-size: 14px;
+  line-height: 1.4;
   background: rgba(255, 255, 255, 0.7);
-  border-top-left-radius: 8px;
   box-shadow: 0 5px 15px rgba(0, 180, 255, 0.1);
 }
 
-/* Sent */
-.message.sent {
-  align-self: flex-end;
+.message-wrapper.sent .message-bubble {
   background: linear-gradient(to bottom, var(--aero-sky), var(--aero-blue));
   color: white;
-  border-top-right-radius: 8px;
   box-shadow: 0 5px 20px rgba(0, 212, 255, 0.4);
 }
 
-/* Input section */
+.message-meta {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+.message-wrapper.sent .message-meta {
+  justify-content: flex-end;
+}
+
+/* ================= INPUT ================= */
 .chat-input {
   display: flex;
   gap: 15px;
@@ -79,10 +113,11 @@
   flex: 1;
   padding: 12px 15px;
   border-radius: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--border-light);
   background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(10px);
   outline: none;
+  transition: 0.2s ease;
 }
 
 .chat-input input:focus {
@@ -94,9 +129,9 @@
   padding: 12px 22px;
   border-radius: 30px;
   border: none;
-  cursor: pointer;
   font-weight: 600;
   color: white;
+  cursor: pointer;
   background: linear-gradient(to bottom, var(--aero-sky), var(--aero-blue));
   box-shadow: 0 5px 15px rgba(0, 212, 255, 0.5), inset 0 2px 5px rgba(255, 255, 255, 0.8);
   transition: 0.2s ease;
@@ -106,29 +141,27 @@
   transform: translateY(-2px);
 }
 
-.chat-header {
+/* ================= SPINNER ================= */
+.spinner-alpha-container {
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 15px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
-  margin-bottom: 20px;
-  color: #026b90;
+  height: 150px;
 }
 
-.back-btn {
-  font-size: 18px;
-  padding: 6px 12px;
-  border: none;
-  border-radius: 50px;
-  background: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
-  transition: 0.2s ease;
+.spinner-alpha {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(0, 212, 255, 0.3);
+  border-top-color: var(--aero-cyan);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
-.back-btn:hover {
-  background: rgba(255, 255, 255, 0.9);
-  transform: translateY(-1px);
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ================= RESPONSIVE ================= */
@@ -142,8 +175,9 @@
     font-size: 20px;
   }
 
-  .message {
+  .message-bubble {
     font-size: 13px;
+    padding: 10px 14px;
   }
 
   .chat-input input {
@@ -165,8 +199,9 @@
     font-size: 18px;
   }
 
-  .message {
+  .message-bubble {
     font-size: 12px;
+    padding: 8px 12px;
   }
 
   .chat-input input {
@@ -178,23 +213,24 @@
   }
 }
 
-.spinner-alpha-container {
-  display: flex;
-  justify-content: center; /* horizontal centering */
-  align-items: center;     /* vertical centering */
-  height: 150px;           /* adjust as needed to fill card space */
+/* ================= MESSAGE SEND ANIMATION ================= */
+@keyframes bubbleStretch {
+  0% {
+    transform: scaleX(0.6) scaleY(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scaleX(1.1) scaleY(1.1);
+    opacity: 1;
+  }
+  70% {
+    transform: scaleX(0.95) scaleY(0.95);
+  }
+  100% {
+    transform: scaleX(1) scaleY(1);
+  }
 }
 
-/* Spinner itself */
-.spinner-alpha {
-  width: 40px;
-  height: 40px;
-  border: 4px solid rgba(0, 212, 255, 0.3);
-  border-top-color: var(--aero-cyan);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.message-bubble.new-message {
+  animation: bubbleStretch 0.35s ease-out;
 }

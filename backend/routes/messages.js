@@ -14,6 +14,12 @@ router.get("/chats", authenticateToken, async (req, res) => {
       SELECT 
         c.*,
 
+        m.id AS last_message_id,
+        m.content AS last_message,
+        m.created_at AS last_message_at,
+        m.sender_id AS last_message_sender_id,
+        m.read_status AS last_message_read,
+
         u1.id AS user1_id,
         u1.username AS user1_username,
         u1.profile_pic AS user1_profile_pic,
@@ -23,18 +29,31 @@ router.get("/chats", authenticateToken, async (req, res) => {
         u2.profile_pic AS user2_profile_pic
 
       FROM chats c
+
+      JOIN LATERAL (
+        SELECT *
+        FROM messages
+        WHERE chat_id = c.id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) m ON true
+
       JOIN users u1 ON u1.id = c.user1_id
       JOIN users u2 ON u2.id = c.user2_id
 
       WHERE c.user1_id = $1 OR c.user2_id = $1
-      ORDER BY c.last_message_at DESC
+
+      ORDER BY m.created_at DESC;
     `, [userId]);
 
     // Transform into clean structure
     const formatted = rows.map(c => ({
       id: c.id,
+
       last_message: c.last_message,
       last_message_at: c.last_message_at,
+      last_message_sender_id: c.last_message_sender_id,
+      last_message_read: c.last_message_read,
 
       user1: {
         id: c.user1_id,
@@ -108,9 +127,10 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
   const { chatId } = req.params;
 
   try {
-    // Get chat info + messages
+    // 1. Get chat info
     const chatResult = await pool.query(
-      `SELECT c.id, c.user1_id, c.user2_id, u1.username AS user1_username, u1.profile_pic AS user1_profile_pic,
+      `SELECT c.id, c.user1_id, c.user2_id,
+              u1.username AS user1_username, u1.profile_pic AS user1_profile_pic,
               u2.username AS user2_username, u2.profile_pic AS user2_profile_pic
        FROM chats c
        JOIN users u1 ON u1.id = c.user1_id
@@ -119,13 +139,26 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
       [chatId]
     );
 
-    if (chatResult.rows.length === 0)
+    if (chatResult.rows.length === 0) {
       return res.status(404).json({ error: "Chat not found" });
+    }
 
     const chat = chatResult.rows[0];
 
+    // 2. Mark messages as read
+    await pool.query(
+      `UPDATE messages
+       SET read_status = TRUE
+       WHERE chat_id = $1
+       AND receiver_id = $2
+       AND read_status = FALSE`,
+      [chatId, req.user.id]
+    );
+
+    // 3. NOW fetch messages
     const messagesResult = await pool.query(
-      `SELECT * FROM messages
+      `SELECT *
+       FROM messages
        WHERE chat_id = $1
        ORDER BY created_at ASC`,
       [chatId]
@@ -134,11 +167,20 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
     res.json({
       chat: {
         id: chat.id,
-        user1: { id: chat.user1_id, username: chat.user1_username, profile_pic: chat.user1_profile_pic },
-        user2: { id: chat.user2_id, username: chat.user2_username, profile_pic: chat.user2_profile_pic },
+        user1: {
+          id: chat.user1_id,
+          username: chat.user1_username,
+          profile_pic: chat.user1_profile_pic,
+        },
+        user2: {
+          id: chat.user2_id,
+          username: chat.user2_username,
+          profile_pic: chat.user2_profile_pic,
+        },
       },
       messages: messagesResult.rows,
     });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch chat" });

@@ -13,11 +13,27 @@ export default function Chat() {
   const [otherUser, setOtherUser] = useState({ username: "..." });
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
+  
 
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const formatMessageTime = (dateString) => {
+    const date = new Date(dateString);
+
+    return date.toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   useEffect(() => {
@@ -49,6 +65,8 @@ export default function Chat() {
       // 🔥 REALTIME SUBSCRIPTION
       channel = supabase
         .channel(`chat-${chatId}`)
+
+        // 🟢 NEW MESSAGES
         .on(
           "postgres_changes",
           {
@@ -62,10 +80,28 @@ export default function Chat() {
 
             setMessages((prev) => [...prev, newMessage]);
 
-            // optional: auto scroll
             setTimeout(scrollToBottom, 50);
           }
         )
+
+        // 🔵 MESSAGE UPDATES (READ STATUS)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "messages",
+            filter: `chat_id=eq.${chatId}`,
+          },
+          (payload) => {
+            const updated = payload.new;
+
+            setMessages((prev) =>
+              prev.map((m) => (m.id === updated.id ? updated : m))
+            );
+          }
+        )
+
         .subscribe();
     };
 
@@ -119,14 +155,36 @@ export default function Chat() {
         ) : messages.length === 0 ? (
           <p className="empty-text">No messages yet</p>
         ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`message ${msg.sender_id === userId ? "sent" : "received"}`}
-            >
-              {msg.content}
-            </div>
-          ))
+          messages.map((msg, index) => {
+            const isMine = String(msg.sender_id) === String(userId);
+            const isLastMessage = index === messages.length - 1;
+
+            // Add 'new-message' only to the last message sent by me
+            const bubbleClass = `message-bubble ${isMine && isLastMessage ? "new-message" : ""}`;
+
+            return (
+              <div
+                key={msg.id}
+                className={`message-wrapper ${isMine ? "sent" : "received"}`}
+              >
+                <div className={bubbleClass}>
+                  {msg.content}
+                </div>
+
+                <div className="message-meta">
+                  <span className="message-time">
+                    {formatMessageTime(msg.created_at)}
+                  </span>
+
+                  {isMine && isLastMessage && (
+                    <span className="seen-status">
+                      {msg.read_status ? "Seen" : "Sent"}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })
         )}
         <div ref={messagesEndRef} />
       </div>

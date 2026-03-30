@@ -11,6 +11,7 @@ export default function Messages() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
+  
 
   // Ref for the sidebar/search area
   const sidebarRef = useRef(null);
@@ -101,6 +102,31 @@ export default function Messages() {
     }
   };
 
+
+  const formatChatDate = (dateString) => {
+    if (!dateString) return "";
+
+    const date = new Date(dateString);
+    const now = new Date();
+
+    const isToday =
+      date.toDateString() === now.toDateString();
+
+    const isYesterday =
+      new Date(now.setDate(now.getDate() - 1)).toDateString() ===
+      date.toDateString();
+
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+
+    if (isYesterday) {
+      return "Yesterday";
+    }
+
+    return date.toLocaleDateString();
+  };
+
   return (
     <div className="messages-page">
       <div
@@ -136,7 +162,7 @@ export default function Messages() {
                 </div>
                 <div className="chat-info">
                   <h4>{user.username}</h4>
-                  <p>Start a chat</p>
+                  <p>Tap to chat</p>
                 </div>
               </div>
             ))}
@@ -154,10 +180,13 @@ export default function Messages() {
           ) : (
             chats.map((chat) => {
               const otherUser = chat.user1?.id === userId ? chat.user2 : chat.user1;
+              const isMine = String(chat.last_message_sender_id) === String(userId);
+              const isUnread = !chat.last_message_read && !isMine;
+              const isSeen = chat.last_message_read && isMine;
               return (
                 <div
                   key={chat.id}
-                  className="chat-preview"
+                  className={`chat-preview ${isUnread ? "unread-chat" : ""}`}
                   onClick={() => handleChatClick(chat.id)}
                 >
                   <div className="chat-avatar">
@@ -170,8 +199,25 @@ export default function Messages() {
                     )}
                   </div>
                   <div className="chat-info">
-                    <h4>{otherUser.username}</h4>
-                    <p>{chat.last_message || "Say hi!"}</p>
+                    <div className="chat-top">
+                      <h4>{otherUser.username}</h4>
+
+                      <div className="chat-meta">
+                        <span className="chat-date">
+                          {formatChatDate(chat.last_message_at)}
+                        </span>
+
+                        {isSeen && <span className="seen-label">Seen</span>}
+                      </div>
+                    </div>
+
+                    <p className={isUnread ? "unread" : ""}>
+                      {chat.last_message
+                        ? isMine
+                          ? `You: ${chat.last_message}`
+                          : chat.last_message
+                        : "Say hi!"}
+                    </p>
                   </div>
                 </div>
               );

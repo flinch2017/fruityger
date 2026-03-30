@@ -283,3 +283,67 @@
   user-select: none;
   transition: filter 0.2s ease;
 }
+
+.chat-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* top row: name + date */
+.chat-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-date {
+  font-size: 12px;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.chat-preview p {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+
+  min-width: 0; /* 💥 THIS FIXES OVERFLOW */
+}
+
+.chat-top h4 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 70%;
+}
+
+.unread {
+  font-weight: 600;
+  color: #026b90;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+}
+
+.unread-chat {
+  box-shadow:
+    0 0 15px rgba(0, 212, 255, 0.6),
+    inset 0 0 10px rgba(255,255,255,0.6);
+}
+
+.chat-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.seen-label {
+  font-size: 11px;
+  color: #00bcd4;
+  opacity: 0.8;
+}
