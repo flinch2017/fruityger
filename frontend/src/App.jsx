@@ -16,9 +16,12 @@ import PublicRoute from "./components/PublicRoute";
 import NotFound from "./pages/NotFound"; // <-- import it
 import EditProfile from "./pages/EditProfile"; // <-- import it
 import CreatePost from "./pages/CreatePost"; // <-- import it
+import EditPost from "./pages/EditPost";
 import CommentSheet from "./components/CommentSheet";
 import Search from "./pages/Search";
 import ReportPage from "./pages/ReportPage";
+import FollowListPage from "./pages/FollowListPage";
+import PostDetail from "./pages/PostDetail";
 
 
 import "./css/App.css";
@@ -130,6 +133,16 @@ function App() {
           }
         />
         <Route
+          path="/post/:postId"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <PostDetail />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
           path="/chat/:chatId"
           element={
             <PrivateRoute>
@@ -163,6 +176,16 @@ function App() {
             </MainLayout>
           }
         />
+        <Route
+          path="/edit-post/:postId"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <EditPost />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
         <Route path="/search" element={<MainLayout><Search /></MainLayout>} />
         <Route
           path="/profile/:username"
@@ -170,6 +193,16 @@ function App() {
             <PrivateRoute>
               <MainLayout>
                 <Profile />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/profile/:username/:type"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <FollowListPage />
               </MainLayout>
             </PrivateRoute>
           }

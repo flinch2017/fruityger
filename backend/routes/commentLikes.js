@@ -1,6 +1,7 @@
 import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
+import { createNotification } from "../utils/notifications.js";
 
 const router = express.Router();
 
@@ -46,6 +47,23 @@ router.post("/toggle", authenticateToken, async (req, res) => {
        VALUES ($1, $2)`,
       [commentId, userId]
     );
+
+    const commentOwnerResult = await pool.query(
+      `
+      SELECT user_id, post_id
+      FROM comments
+      WHERE comment_id = $1
+      `,
+      [commentId]
+    );
+
+    await createNotification({
+      recipientId: commentOwnerResult.rows[0]?.user_id,
+      actorId: userId,
+      type: "comment_like",
+      postId: commentOwnerResult.rows[0]?.post_id || null,
+      commentId,
+    });
 
     res.json({
       liked: true,

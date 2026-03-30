@@ -206,7 +206,10 @@ export default function EditProfile() {
           
 
           <button type="submit" disabled={loading}>
-            {loading ? <span className="spinner"></span> : "Save Changes"}
+            <span className="button-label">
+              {loading && <span className="spinner" aria-hidden="true"></span>}
+              <span>Save Changes</span>
+            </span>
           </button>
         </form>
       </div>

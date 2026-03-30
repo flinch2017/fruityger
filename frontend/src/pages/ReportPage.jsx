@@ -12,10 +12,10 @@ export default function ReportPage() {
   const [reason, setReason] = useState("");
   const [details, setDetails] = useState("");
   const token = localStorage.getItem("token");
-  const reporterId = localStorage.getItem("userId");
 
   const submitReport = async () => {
     if (!reason) return alert("Please select a reason");
+    if (!contentType || !contentId) return alert("Missing report target");
 
     try {
       const res = await fetch("http://localhost:5000/api/reports/submit", {
@@ -25,7 +25,6 @@ export default function ReportPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          reporterId,
           contentType,
           contentId,
           reason,

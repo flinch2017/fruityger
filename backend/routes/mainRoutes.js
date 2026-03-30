@@ -70,6 +70,133 @@ router.get("/me", authenticateToken, async (req, res) => {
   }
 });
 
+router.get("/post/:postId", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { postId } = req.params;
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        p.*,
+        u.username,
+        u.profile_pic,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'media_url', pm.media_url,
+              'media_type', pm.media_type,
+              'media_order', pm.media_order
+            )
+            ORDER BY pm.media_order ASC
+          )
+          FILTER (WHERE pm.media_url IS NOT NULL),
+          '[]'
+        ) AS media,
+        COUNT(DISTINCT l.like_id)::int AS like_count,
+        EXISTS (
+          SELECT 1
+          FROM likes
+          WHERE post_id = p.post_id
+            AND liker = $1
+        ) AS is_liked,
+        (
+          SELECT COUNT(*)
+          FROM comments c
+          WHERE c.post_id = p.post_id
+        )::int AS comment_count
+      FROM posts p
+      JOIN users u
+        ON u.id = p.user_id
+      LEFT JOIN post_media pm
+        ON pm.post_id = p.post_id
+      LEFT JOIN likes l
+        ON l.post_id = p.post_id
+      WHERE p.post_id = $2
+      GROUP BY p.post_id, u.id, u.username, u.profile_pic
+      `,
+      [userId, postId]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    res.json({ post: rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.get("/feed", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const limit = parseInt(req.query.limit, 10) || 5;
+    const offset = parseInt(req.query.offset, 10) || 0;
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        p.*,
+        u.username,
+        u.profile_pic,
+
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'media_url', pm.media_url,
+              'media_type', pm.media_type,
+              'media_order', pm.media_order
+            )
+            ORDER BY pm.media_order ASC
+          )
+          FILTER (WHERE pm.media_url IS NOT NULL),
+          '[]'
+        ) AS media,
+
+        COUNT(DISTINCT l.like_id)::int AS like_count,
+
+        EXISTS (
+          SELECT 1
+          FROM likes
+          WHERE post_id = p.post_id
+            AND liker = $1
+        ) AS is_liked,
+
+        (
+          SELECT COUNT(*)
+          FROM comments c
+          WHERE c.post_id = p.post_id
+        )::int AS comment_count
+
+      FROM posts p
+      JOIN users u
+        ON u.id = p.user_id
+      LEFT JOIN post_media pm
+        ON pm.post_id = p.post_id
+      LEFT JOIN likes l
+        ON l.post_id = p.post_id
+      WHERE p.user_id = $1
+         OR p.user_id IN (
+           SELECT following_id
+           FROM follows
+           WHERE follower_id = $1
+         )
+      GROUP BY p.post_id, u.id, u.username, u.profile_pic
+      ORDER BY p.date_posted DESC
+      LIMIT $2 OFFSET $3
+      `,
+      [userId, limit, offset]
+    );
+
+    res.json({ posts: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 
 
 router.put("/edit-profile", authenticateToken, async (req, res) => {

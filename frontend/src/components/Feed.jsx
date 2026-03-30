@@ -1,36 +1,707 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import CommentSheet from "./CommentSheet";
 import "../css/Feed.css";
+import "../css/CommentSheet.css";
 
 export default function Feed() {
+  const navigate = useNavigate();
+  const loaderRef = useRef(null);
+  const videoRefs = useRef({});
+  const observerRef = useRef(null);
+  const isFetchingRef = useRef(false);
+  const pullStartYRef = useRef(0);
+  const isPullingRef = useRef(false);
+  const dropdownRef = useRef(null);
+
+  const [posts, setPosts] = useState([]);
+  const [activeIndexMap, setActiveIndexMap] = useState({});
+  const [dragging, setDragging] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [touchStartY, setTouchStartY] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [likingMap, setLikingMap] = useState({});
+  const [activeCommentPost, setActiveCommentPost] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [activeMenuPostId, setActiveMenuPostId] = useState(null);
+  const [deleteModal, setDeleteModal] = useState({
+    visible: false,
+    postId: null,
+  });
+  const [actionResult, setActionResult] = useState(null);
+  const [deletingPost, setDeletingPost] = useState(false);
+  const [disappearingPosts, setDisappearingPosts] = useState([]);
+
+  const LIMIT = 5;
+  const currentUserId = localStorage.getItem("userId");
+
+  const mergeUniquePosts = (existingPosts, incomingPosts) => {
+    const seen = new Set();
+    const merged = [];
+
+    [...existingPosts, ...incomingPosts].forEach((post) => {
+      if (!post?.post_id || seen.has(post.post_id)) return;
+      seen.add(post.post_id);
+      merged.push(post);
+    });
+
+    return merged;
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return "";
+
+    const now = new Date();
+    const date = new Date(dateString);
+    if (isNaN(date)) return "";
+
+    const diffMs = now - date;
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    const diffWeeks = Math.floor(diffDays / 7);
+
+    if (diffSeconds < 60) return "Just now";
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffWeeks < 4) return `${diffWeeks}w ago`;
+
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  const fetchPosts = async ({ initial = false, refresh = false } = {}) => {
+    if (isFetchingRef.current) return;
+
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    isFetchingRef.current = true;
+    setLoadingPosts(true);
+    if (refresh) setRefreshing(true);
+
+    const currentOffset = initial || refresh ? 0 : offset;
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/main/feed?limit=${LIMIT}&offset=${currentOffset}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch feed");
+      }
+
+      const nextPosts = data.posts || [];
+
+      if (nextPosts.length === 0) {
+        if (initial || refresh) {
+          setPosts([]);
+        }
+        setHasMore(false);
+        return;
+      }
+
+      if (initial || refresh) {
+        setPosts(mergeUniquePosts([], nextPosts));
+        setOffset(nextPosts.length);
+      } else {
+        setPosts((prev) => mergeUniquePosts(prev, nextPosts));
+        setOffset((prev) => prev + nextPosts.length);
+      }
+
+      setHasMore(true);
+      if (nextPosts.length < LIMIT) {
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      isFetchingRef.current = false;
+      setLoadingPosts(false);
+      if (refresh) setRefreshing(false);
+    }
+  };
+
+  const refreshFeed = async () => {
+    setOffset(0);
+    setHasMore(true);
+    setActiveIndexMap({});
+    await fetchPosts({ refresh: true });
+  };
+
+  useEffect(() => {
+    setPosts([]);
+    setOffset(0);
+    setHasMore(true);
+    fetchPosts({ initial: true });
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target)
+      ) {
+        setActiveMenuPostId(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleExternalRefresh = () => {
+      refreshFeed();
+    };
+
+    window.addEventListener("fruityger:feed-refresh", handleExternalRefresh);
+    return () => {
+      window.removeEventListener("fruityger:feed-refresh", handleExternalRefresh);
+    };
+  }, [offset]);
+
+  useEffect(() => {
+    if (!loaderRef.current || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry.isIntersecting && !loadingPosts) {
+          fetchPosts();
+        }
+      },
+      {
+        root: null,
+        rootMargin: "500px",
+        threshold: 0,
+      }
+    );
+
+    observer.observe(loaderRef.current);
+
+    return () => observer.disconnect();
+  }, [hasMore, loadingPosts, offset]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!hasMore || loadingPosts) return;
+
+      const scrollPosition = window.innerHeight + window.scrollY;
+      const bottomThreshold = document.documentElement.offsetHeight - 400;
+
+      if (scrollPosition >= bottomThreshold) {
+        fetchPosts();
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [hasMore, loadingPosts, offset]);
+
+  useEffect(() => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const video = entry.target;
+          if (!video) return;
+
+          if (entry.isIntersecting) {
+            video.play().catch(() => {});
+          } else {
+            video.pause();
+            video.currentTime = 0;
+          }
+        });
+      },
+      { threshold: 0.75 }
+    );
+
+    Object.values(videoRefs.current).forEach((list) => {
+      list?.forEach((video) => {
+        if (video) observerRef.current.observe(video);
+      });
+    });
+
+    return () => observerRef.current?.disconnect();
+  }, [posts, activeIndexMap]);
+
+  const moveSlide = (postId, direction, mediaLength) => {
+    setActiveIndexMap((prev) => {
+      const current = prev[postId] || 0;
+      let nextIndex = current + direction;
+
+      if (nextIndex < 0) nextIndex = mediaLength - 1;
+      if (nextIndex >= mediaLength) nextIndex = 0;
+
+      return { ...prev, [postId]: nextIndex };
+    });
+  };
+
+  const handlePointerStart = (e) => {
+    const touch = e.touches ? e.touches[0] : e;
+    setDragging(true);
+    setDragStartX(touch.clientX);
+    setTouchStartY(touch.clientY);
+  };
+
+  const handlePointerMove = (e, postId, mediaLength) => {
+    if (!dragging) return;
+
+    const touch = e.touches ? e.touches[0] : e;
+    const dx = dragStartX - touch.clientX;
+    const dy = touch.clientY - touchStartY;
+
+    if (Math.abs(dy) > Math.abs(dx)) return;
+
+    if (Math.abs(dx) > 80) {
+      moveSlide(postId, dx > 0 ? 1 : -1, mediaLength);
+      setDragStartX(touch.clientX);
+    }
+  };
+
+  const handlePointerEnd = () => setDragging(false);
+
+  const handleFeedTouchStart = (e) => {
+    if (window.scrollY > 0 || refreshing || loadingPosts) return;
+
+    pullStartYRef.current = e.touches[0].clientY;
+    isPullingRef.current = true;
+  };
+
+  const handleFeedTouchMove = (e) => {
+    if (!isPullingRef.current || window.scrollY > 0) return;
+
+    const currentY = e.touches[0].clientY;
+    const distance = currentY - pullStartYRef.current;
+
+    if (distance <= 0) {
+      setPullDistance(0);
+      return;
+    }
+
+    const nextDistance = Math.min(distance * 0.45, 90);
+    setPullDistance(nextDistance);
+  };
+
+  const handleFeedTouchEnd = async () => {
+    if (!isPullingRef.current) return;
+
+    isPullingRef.current = false;
+
+    if (pullDistance >= 60) {
+      setPullDistance(52);
+      await refreshFeed();
+    }
+
+    setPullDistance(0);
+  };
+
+  const toggleLike = async (postId) => {
+    const token = localStorage.getItem("token");
+    if (!token || likingMap[postId]) return;
+
+    const currentPost = posts.find((post) => post.post_id === postId);
+    if (!currentPost) return;
+
+    const wasLiked = currentPost.is_liked;
+    setLikingMap((prev) => ({ ...prev, [postId]: true }));
+
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.post_id === postId
+          ? {
+              ...post,
+              is_liked: !wasLiked,
+              like_count: wasLiked
+                ? Math.max((post.like_count || 1) - 1, 0)
+                : (post.like_count || 0) + 1,
+            }
+          : post
+      )
+    );
+
+    try {
+      const res = await fetch("http://localhost:5000/api/likes/toggle", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ postId }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed");
+      }
+    } catch (err) {
+      console.error(err);
+      setPosts((prev) =>
+        prev.map((post) =>
+          post.post_id === postId
+            ? {
+                ...post,
+                is_liked: wasLiked,
+                like_count: currentPost.like_count,
+              }
+            : post
+        )
+      );
+    } finally {
+      setLikingMap((prev) => {
+        const updated = { ...prev };
+        delete updated[postId];
+        return updated;
+      });
+    }
+  };
+
+  const toggleMenu = (postId) => {
+    setActiveMenuPostId((prev) => (prev === postId ? null : postId));
+  };
+
+  const promptDeletePost = (postId) => {
+    setActiveMenuPostId(null);
+    setDeleteModal({ visible: true, postId });
+  };
+
+  const handleConfirmDelete = async () => {
+    const token = localStorage.getItem("token");
+    if (!token || !deleteModal.postId) return;
+
+    setDeletingPost(true);
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/profile/${deleteModal.postId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (!res.ok) throw new Error("Delete failed");
+
+      setDisappearingPosts((prev) => [...prev, deleteModal.postId]);
+
+      setTimeout(() => {
+        setPosts((prev) =>
+          prev.filter((post) => post.post_id !== deleteModal.postId)
+        );
+        setDisappearingPosts((prev) =>
+          prev.filter((postId) => postId !== deleteModal.postId)
+        );
+      }, 300);
+
+      setActionResult({ type: "success", message: "Post deleted successfully!" });
+    } catch (err) {
+      console.error(err);
+      setActionResult({ type: "error", message: "Failed to delete post!" });
+    } finally {
+      setDeletingPost(false);
+      setDeleteModal({ visible: false, postId: null });
+      setTimeout(() => setActionResult(null), 3000);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    if (!deletingPost) {
+      setDeleteModal({ visible: false, postId: null });
+    }
+  };
+
+  const handleEditPost = (post) => {
+    setActiveMenuPostId(null);
+    navigate(`/edit-post/${post.post_id}`, {
+      state: { post },
+    });
+  };
+
+  const handleReportPost = (postId) => {
+    setActiveMenuPostId(null);
+    navigate(`/report?type=post&id=${postId}`);
+  };
+
   return (
-    <main className="feed">
+    <main className="feed-page">
+      {deleteModal.visible && (
+        <div className="feed-modal-overlay">
+          <div className={`feed-modal-card ${deletingPost ? "loading" : "animate-in"}`}>
+            <h3>Confirm Delete</h3>
+            <p>Are you sure you want to delete this post?</p>
 
-      <div className="post-card">
-        <div className="post-header">
-          <div className="avatar">👤</div>
-          <div>
-            <strong>Fruityger Admin</strong>
-            <p className="post-time">Just now</p>
+            {deletingPost && <div className="feed-spinner"></div>}
+
+            {!deletingPost && (
+              <div className="feed-modal-actions">
+                <button className="feed-modal-btn cancel" onClick={handleCancelDelete}>
+                  Cancel
+                </button>
+                <button className="feed-modal-btn confirm" onClick={handleConfirmDelete}>
+                  Delete
+                </button>
+              </div>
+            )}
           </div>
         </div>
-        <p className="post-content">
-          Welcome to Fruityger. The internet is colorful again ✨
-        </p>
-      </div>
+      )}
 
-      <div className="post-card">
-        <div className="post-header">
-          <div className="avatar">🌸</div>
-          <div>
-            <strong>NostalgiaGirl</strong>
-            <p className="post-time">5 mins ago</p>
-          </div>
+      {actionResult && (
+        <div className={`feed-toast ${actionResult.type}`}>
+          {actionResult.message}
         </div>
-        <p className="post-content">
-          Remember when websites had glitter GIFs everywhere? 🥹
-        </p>
-      </div>
+      )}
 
+      {activeCommentPost && (
+        <CommentSheet
+          postId={activeCommentPost.postId}
+          postAuthorId={activeCommentPost.postAuthorId}
+          onClose={() => setActiveCommentPost(null)}
+        />
+      )}
+
+      <div
+        className="feed"
+        onTouchStart={handleFeedTouchStart}
+        onTouchMove={handleFeedTouchMove}
+        onTouchEnd={handleFeedTouchEnd}
+      >
+        <div
+          className={`feed-pull-indicator ${
+            pullDistance > 0 || refreshing ? "visible" : ""
+          }`}
+          style={{
+            height: `${refreshing ? 52 : pullDistance}px`,
+          }}
+        >
+          <span>
+            {refreshing
+              ? "Refreshing..."
+              : pullDistance >= 60
+                ? "Release to refresh"
+                : "Pull to refresh"}
+          </span>
+        </div>
+
+        {posts.length === 0 && !loadingPosts && (
+          <p className="feed-empty">No posts in your feed yet</p>
+        )}
+
+        {posts.map((post) => (
+          <div
+            key={post.post_id}
+            className={`feed-post-card ${
+              disappearingPosts.includes(post.post_id) ? "feed-fade-out" : "feed-fade-in"
+            }`}
+          >
+            <div
+              className="feed-post-more-wrapper"
+              ref={activeMenuPostId === post.post_id ? dropdownRef : null}
+            >
+              <div
+                className="feed-post-more"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleMenu(post.post_id);
+                }}
+              >
+                ⋮
+              </div>
+
+              {activeMenuPostId === post.post_id && (
+                <div className="feed-post-dropdown">
+                  {String(post.user_id) === String(currentUserId) ? (
+                    <>
+                      <div
+                        className="feed-dropdown-item edit"
+                        onClick={() => handleEditPost(post)}
+                      >
+                        Edit
+                      </div>
+
+                      <div
+                        className="feed-dropdown-item delete"
+                        onClick={() => promptDeletePost(post.post_id)}
+                      >
+                        Delete
+                      </div>
+                    </>
+                  ) : (
+                    <div
+                      className="feed-dropdown-item report"
+                      onClick={() => handleReportPost(post.post_id)}
+                    >
+                      Report
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="feed-post-header">
+              <div className="feed-post-user-info">
+                <div
+                  className="feed-post-user-avatar clickable"
+                  onClick={() => navigate(`/profile/${post.username}`)}
+                >
+                  {post.profile_pic ? <img src={post.profile_pic} alt="pfp" /> : "👤"}
+                </div>
+
+                <div className="feed-post-user-text">
+                  <span
+                    className="feed-post-username clickable"
+                    onClick={() => navigate(`/profile/${post.username}`)}
+                  >
+                    {post.username}
+                  </span>
+                  <span className="feed-post-date">{formatDate(post.date_posted)}</span>
+                </div>
+              </div>
+            </div>
+
+            {post.caption && <p className="feed-post-content">{post.caption}</p>}
+
+            {post.media?.length > 0 && (
+              <div className="feed-carousel">
+                {post.media.length > 1 && (
+                  <>
+                    <button
+                      className="feed-carousel-arrow left"
+                      onClick={() => moveSlide(post.post_id, -1, post.media.length)}
+                    >
+                      ‹
+                    </button>
+
+                    <button
+                      className="feed-carousel-arrow right"
+                      onClick={() => moveSlide(post.post_id, 1, post.media.length)}
+                    >
+                      ›
+                    </button>
+                  </>
+                )}
+
+                <div
+                  className="feed-carousel-track"
+                  style={{
+                    transform: `translateX(-${(activeIndexMap[post.post_id] || 0) * 100}%)`,
+                  }}
+                  onMouseDown={handlePointerStart}
+                  onMouseMove={(e) => handlePointerMove(e, post.post_id, post.media.length)}
+                  onMouseUp={handlePointerEnd}
+                  onMouseLeave={handlePointerEnd}
+                  onTouchStart={handlePointerStart}
+                  onTouchMove={(e) => handlePointerMove(e, post.post_id, post.media.length)}
+                  onTouchEnd={handlePointerEnd}
+                >
+                  {post.media.map((media, index) => (
+                    <div className="feed-carousel-item" key={index}>
+                      {media.media_type === "video" ? (
+                        <video
+                          ref={(el) => {
+                            if (!el) return;
+                            if (!videoRefs.current[post.post_id]) {
+                              videoRefs.current[post.post_id] = [];
+                            }
+                            videoRefs.current[post.post_id][index] = el;
+                          }}
+                          src={media.media_url}
+                          playsInline
+                          loop
+                          preload="metadata"
+                          className="feed-auto-video"
+                        />
+                      ) : (
+                        <img src={media.media_url} alt="" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {post.media.length > 1 && (
+                  <div className="feed-carousel-indicator">
+                    {post.media.map((_, index) => (
+                      <span
+                        key={index}
+                        className={
+                          (activeIndexMap[post.post_id] || 0) === index
+                            ? "feed-indicator-dot active"
+                            : "feed-indicator-dot"
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="feed-post-footer">
+              <div className="feed-post-actions-left">
+                <div className="feed-like-wrapper">
+                  <button
+                    className={`feed-post-action-btn ${post.is_liked ? "liked" : ""}`}
+                    onClick={() => toggleLike(post.post_id)}
+                  >
+                    ❤️
+                  </button>
+
+                  <span className="feed-like-count">{post.like_count || 0}</span>
+                </div>
+
+                <div className="feed-like-wrapper">
+                  <button
+                    className="feed-post-action-btn"
+                    onClick={() =>
+                      setActiveCommentPost({
+                        postId: post.post_id,
+                        postAuthorId: post.user_id,
+                      })
+                    }
+                  >
+                    💬
+                  </button>
+
+                  <span className="feed-like-count">{post.comment_count || 0}</span>
+                </div>
+
+                <button
+                  className="feed-post-action-btn"
+                  onClick={() => navigate(`/profile/${post.username}`)}
+                >
+                  🔗
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {hasMore && (
+          <div ref={loaderRef} className="feed-post-loader">
+            {loadingPosts && <p>Loading more posts...</p>}
+          </div>
+        )}
+      </div>
     </main>
   );
 }

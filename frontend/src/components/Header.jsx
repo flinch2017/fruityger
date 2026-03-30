@@ -4,16 +4,29 @@ import "../css/Header.css";
 
 export default function Header() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const toggleDropdown = () => setDropdownOpen(!dropdownOpen);
-  const navigate = useNavigate();
-  const location = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const navigate = useNavigate();
+  const location = useLocation();
   const profileRef = useRef(null);
   const searchRef = useRef(null);
 
   const isCreatePage = location.pathname === "/create";
+
+  const toggleDropdown = () => setDropdownOpen((prev) => !prev);
+
+  const handleFeedNav = () => {
+    if (location.pathname === "/feed") {
+      window.dispatchEvent(new CustomEvent("fruityger:feed-refresh"));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    navigate("/feed");
+  };
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -22,10 +35,13 @@ export default function Header() {
 
       try {
         const res = await fetch("http://localhost:5000/api/main/me", {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
-        if (res.ok) setCurrentUser(data.user);
+
+        if (res.ok) {
+          setCurrentUser(data.user);
+        }
       } catch (err) {
         console.error(err);
       }
@@ -35,12 +51,89 @@ export default function Header() {
   }, []);
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    let isMounted = true;
+
+    const fetchNotificationCount = async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/notifications/unread-count", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+
+        if (res.ok && isMounted) {
+          setNotificationUnreadCount(data.unreadCount || 0);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    const fetchMessageCount = async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/messages/unread-count", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+
+        if (res.ok && isMounted) {
+          setMessageUnreadCount(data.unreadCount || 0);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    const handleNotificationCountUpdate = (event) => {
+      if (!isMounted) return;
+      setNotificationUnreadCount(event.detail?.unreadCount || 0);
+    };
+
+    const handleMessagesRefresh = async (event) => {
+      if (!isMounted) return;
+
+      if (typeof event.detail?.unreadCount === "number") {
+        setMessageUnreadCount(event.detail.unreadCount);
+        return;
+      }
+
+      await fetchMessageCount();
+    };
+
+    const handleFocus = () => {
+      fetchNotificationCount();
+      fetchMessageCount();
+    };
+
+    fetchNotificationCount();
+    fetchMessageCount();
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("fruityger:notifications-count", handleNotificationCountUpdate);
+    window.addEventListener("fruityger:messages-refresh", handleMessagesRefresh);
+
+    const intervalId = window.setInterval(() => {
+      fetchNotificationCount();
+      fetchMessageCount();
+    }, 60000);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("fruityger:notifications-count", handleNotificationCountUpdate);
+      window.removeEventListener("fruityger:messages-refresh", handleMessagesRefresh);
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
     const handleClickOutside = (e) => {
-      // Close profile dropdown if click is outside
       if (profileRef.current && !profileRef.current.contains(e.target)) {
         setDropdownOpen(false);
       }
-      // Close mobile search dropdown if click is outside
+
       if (searchRef.current && !searchRef.current.contains(e.target)) {
         setMobileSearchOpen(false);
       }
@@ -61,14 +154,14 @@ export default function Header() {
 
     const encoded = encodeURIComponent(keyword);
 
-    // Prevent redundant navigation
-    if (location.pathname === "/search" &&
-        new URLSearchParams(location.search).get("q") === keyword) {
+    if (
+      location.pathname === "/search" &&
+      new URLSearchParams(location.search).get("q") === keyword
+    ) {
       return;
     }
 
     navigate(`/search?q=${encoded}`);
-
     setSearchQuery("");
     setMobileSearchOpen(false);
   };
@@ -76,11 +169,9 @@ export default function Header() {
   return (
     <>
       <header className="top-header">
-        {/* ===== HEADER CONTENT ONLY ===== */}
-
-        <div 
-          className="logo fruityger-font" 
-          onClick={() => navigate("/feed")}
+        <div
+          className="logo fruityger-font"
+          onClick={handleFeedNav}
           style={{ cursor: "pointer" }}
         >
           Fruityger
@@ -98,7 +189,6 @@ export default function Header() {
 
         <div className="nav-row">
           <nav className="nav-items">
-
             <button
               className="nav-button desktop-create-btn"
               onClick={() => navigate("/create")}
@@ -107,26 +197,38 @@ export default function Header() {
               ➕
             </button>
 
-            <button className="nav-button" onClick={() => navigate("/feed")}>
+            <button className="nav-button" onClick={handleFeedNav}>
               🏠
             </button>
 
             <button
               className="nav-button mobile-search-btn"
-              onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+              onClick={() => setMobileSearchOpen((prev) => !prev)}
             >
               🔍
             </button>
 
-            <button className="nav-button" onClick={() => navigate("/notifications")}>
+            <button
+              className="nav-button nav-button-bell"
+              onClick={() => navigate("/notifications")}
+            >
               🔔
+              {notificationUnreadCount > 0 && (
+                <span className="nav-badge">
+                  {notificationUnreadCount > 9 ? "9+" : notificationUnreadCount}
+                </span>
+              )}
             </button>
 
-            <button className="nav-button" onClick={() => navigate("/messages")}>
+            <button className="nav-button nav-button-message" onClick={() => navigate("/messages")}>
               ✉️
+              {messageUnreadCount > 0 && (
+                <span className="nav-badge">
+                  {messageUnreadCount > 9 ? "9+" : messageUnreadCount}
+                </span>
+              )}
             </button>
 
-            {/* PROFILE */}
             <div className="profile-container" ref={profileRef}>
               <div className="profile-placeholder" onClick={toggleDropdown}>
                 {currentUser?.profile_pic ? (
@@ -157,25 +259,30 @@ export default function Header() {
                     Profile
                   </button>
 
-                  <button onClick={() => { navigate("/settings"); setDropdownOpen(false); }}>
+                  <button
+                    onClick={() => {
+                      navigate("/settings");
+                      setDropdownOpen(false);
+                    }}
+                  >
                     Settings
                   </button>
 
-                  <button onClick={() => {
-                    localStorage.removeItem("token");
-                    setDropdownOpen(false);
-                    navigate("/login");
-                  }}>
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem("token");
+                      setDropdownOpen(false);
+                      navigate("/login");
+                    }}
+                  >
                     Logout
                   </button>
                 </div>
               )}
             </div>
-
           </nav>
         </div>
 
-        {/* MOBILE SEARCH */}
         {mobileSearchOpen && (
           <div className="mobile-search-dropdown" ref={searchRef}>
             <form
@@ -198,7 +305,6 @@ export default function Header() {
         )}
       </header>
 
-      {/* ⭐ Floating Mobile FAB MUST BE OUTSIDE HEADER */}
       {!isCreatePage && (
         <button
           className="mobile-fab-create"

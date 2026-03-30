@@ -1,6 +1,7 @@
 import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
+import { createNotification } from "../utils/notifications.js";
 
 const router = express.Router();
 
@@ -42,6 +43,18 @@ router.post("/toggle", authenticateToken, async (req, res) => {
          VALUES ($1, $2)`,
         [postId, userId]
       );
+
+      const ownerResult = await pool.query(
+        `SELECT user_id FROM posts WHERE post_id = $1`,
+        [postId]
+      );
+
+      await createNotification({
+        recipientId: ownerResult.rows[0]?.user_id,
+        actorId: userId,
+        type: "post_like",
+        postId,
+      });
     }
 
     // Get updated count

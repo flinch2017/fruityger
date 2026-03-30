@@ -4,6 +4,7 @@ import supabase from "../lib/supabaseClient";
 import "../css/Chat.css";
 
 export default function Chat() {
+  const menuRef = useRef(null);
   const { chatId } = useParams();
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
@@ -13,12 +14,33 @@ export default function Chat() {
   const [otherUser, setOtherUser] = useState({ username: "..." });
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
-  
+  const [openMenuId, setOpenMenuId] = useState(null);
 
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const dispatchMessagesRefresh = () => {
+    window.dispatchEvent(new CustomEvent("fruityger:messages-refresh"));
+  };
+
+  const markChatRead = async () => {
+    if (!token) return;
+
+    try {
+      await fetch(`http://localhost:5000/api/messages/${chatId}/read`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      dispatchMessagesRefresh();
+    }
   };
 
   useEffect(() => {
@@ -48,13 +70,12 @@ export default function Chat() {
         });
 
         const data = await res.json();
-
         const chat = data.chat;
-        const other =
-          chat.user1.id === userId ? chat.user2 : chat.user1;
+        const other = chat.user1.id === userId ? chat.user2 : chat.user1;
 
         setOtherUser(other);
-        setMessages(data.messages);
+        setMessages(data.messages || []);
+        dispatchMessagesRefresh();
       } catch (err) {
         console.error(err);
       } finally {
@@ -62,11 +83,8 @@ export default function Chat() {
         scrollToBottom();
       }
 
-      // 🔥 REALTIME SUBSCRIPTION
       channel = supabase
         .channel(`chat-${chatId}`)
-
-        // 🟢 NEW MESSAGES
         .on(
           "postgres_changes",
           {
@@ -75,16 +93,26 @@ export default function Chat() {
             table: "messages",
             filter: `chat_id=eq.${chatId}`,
           },
-          (payload) => {
+          async (payload) => {
             const newMessage = payload.new;
 
-            setMessages((prev) => [...prev, newMessage]);
+            setMessages((prev) => {
+              if (prev.some((message) => message.id === newMessage.id)) {
+                return prev;
+              }
+
+              return [...prev, newMessage];
+            });
+
+            if (String(newMessage.receiver_id) === String(userId)) {
+              await markChatRead();
+            } else {
+              dispatchMessagesRefresh();
+            }
 
             setTimeout(scrollToBottom, 50);
           }
         )
-
-        // 🔵 MESSAGE UPDATES (READ STATUS)
         .on(
           "postgres_changes",
           {
@@ -97,11 +125,10 @@ export default function Chat() {
             const updated = payload.new;
 
             setMessages((prev) =>
-              prev.map((m) => (m.id === updated.id ? updated : m))
+              prev.map((message) => (message.id === updated.id ? updated : message))
             );
           }
         )
-
         .subscribe();
     };
 
@@ -110,7 +137,7 @@ export default function Chat() {
     return () => {
       if (channel) supabase.removeChannel(channel);
     };
-  }, [chatId, token]);
+  }, [chatId, token, userId]);
 
   const sendMessage = async () => {
     if (!input.trim()) return;
@@ -130,13 +157,90 @@ export default function Chat() {
       });
 
       const data = await res.json();
-      setMessages((prev) => [...prev, data]);
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to send message");
+      }
+
+      setMessages((prev) => {
+        if (prev.some((message) => message.id === data.id)) {
+          return prev;
+        }
+
+        return [...prev, data];
+      });
+
       setInput("");
       scrollToBottom();
+      dispatchMessagesRefresh();
     } catch (err) {
       console.error(err);
     }
   };
+
+  const handleDelete = async (msg) => {
+    try {
+      let res;
+
+      if (String(msg.sender_id) === String(userId)) {
+        res = await fetch(`http://localhost:5000/api/messages/${msg.id}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      } else {
+        res = await fetch("http://localhost:5000/api/messages/delete-for-me", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            messageId: msg.id,
+          }),
+        });
+      }
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to delete message");
+      }
+
+      setMessages((prev) => prev.filter((message) => message.id !== msg.id));
+      setOpenMenuId(null);
+      dispatchMessagesRefresh();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete message.");
+    }
+  };
+
+  const handleReport = (msg) => {
+    setOpenMenuId(null);
+    navigate(`/report?type=message&id=${msg.id}`);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpenMenuId(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
+    const closeMenu = () => setOpenMenuId(null);
+    document.addEventListener("scroll", closeMenu);
+
+    return () => document.removeEventListener("scroll", closeMenu);
+  }, []);
 
   return (
     <div className="chat-window">
@@ -158,17 +262,59 @@ export default function Chat() {
           messages.map((msg, index) => {
             const isMine = String(msg.sender_id) === String(userId);
             const isLastMessage = index === messages.length - 1;
-
-            // Add 'new-message' only to the last message sent by me
-            const bubbleClass = `message-bubble ${isMine && isLastMessage ? "new-message" : ""}`;
+            const bubbleClass = `message-bubble ${
+              isMine && isLastMessage ? "new-message" : ""
+            }`;
 
             return (
               <div
                 key={msg.id}
                 className={`message-wrapper ${isMine ? "sent" : "received"}`}
               >
-                <div className={bubbleClass}>
-                  {msg.content}
+                <div className="message-row">
+                  {isMine && (
+                    <div className="message-options-wrapper" ref={menuRef}>
+                      <div
+                        className="message-options"
+                        onClick={() => setOpenMenuId(openMenuId === msg.id ? null : msg.id)}
+                      >
+                        ⋯
+                      </div>
+
+                      {openMenuId === msg.id && (
+                        <div className="message-dropdown">
+                          <div className="dropdown-item" onClick={() => handleDelete(msg)}>
+                            Delete
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className={bubbleClass}>{msg.content}</div>
+
+                  {!isMine && (
+                    <div className="message-options-wrapper" ref={menuRef}>
+                      <div
+                        className="message-options"
+                        onClick={() => setOpenMenuId(openMenuId === msg.id ? null : msg.id)}
+                      >
+                        ⋯
+                      </div>
+
+                      {openMenuId === msg.id && (
+                        <div className="message-dropdown">
+                          <div className="dropdown-item" onClick={() => handleDelete(msg)}>
+                            Delete
+                          </div>
+
+                          <div className="dropdown-item danger" onClick={() => handleReport(msg)}>
+                            Report
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="message-meta">

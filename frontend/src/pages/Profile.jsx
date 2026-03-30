@@ -150,28 +150,9 @@ export default function Profile() {
     if (!deletingPost) setDeleteModal({ visible: false, postId: null });
   };
 
-  const handleReportPost = async (postId) => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    try {
-      const res = await fetch("http://localhost:5000/api/posts/report", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ postId })
-      });
-
-      if (!res.ok) throw new Error("Report failed");
-
-      alert("Post reported");
-
-    } catch (err) {
-      console.error(err);
-      alert("Failed to report post");
-    }
+  const handleReportPost = (postId) => {
+    setActiveMenuPostId(null);
+    navigate(`/report?type=post&id=${postId}`);
   };
 
   useEffect(() => {
@@ -630,12 +611,22 @@ export default function Profile() {
 
           <div className="profile-stats">
             <div className="stat">
-              <span className="stat-number">{user.followers_count || 0}</span>
+              <span
+                className="stat-number stat-clickable"
+                onClick={() => navigate(`/profile/${user.username}/followers`)}
+              >
+                {user.followers_count || 0}
+              </span>
               <span className="stat-label">Followers</span>
             </div>
 
             <div className="stat">
-              <span className="stat-number">{user.following_count || 0}</span>
+              <span
+                className="stat-number stat-clickable"
+                onClick={() => navigate(`/profile/${user.username}/following`)}
+              >
+                {user.following_count || 0}
+              </span>
               <span className="stat-label">Following</span>
             </div>
           </div>

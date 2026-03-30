@@ -100,6 +100,70 @@ router.get("/posts", authenticateToken, async (req, res) => {
   }
 });
 
+router.get("/post/:postId", authenticateToken, async (req, res) => {
+  const { postId } = req.params;
+
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT
+        p.post_id,
+        p.user_id,
+        p.caption,
+        p.date_posted
+      FROM posts p
+      WHERE p.post_id = $1
+      `,
+      [postId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    return res.json({ post: rows[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.put("/:postId", authenticateToken, async (req, res) => {
+  const { postId } = req.params;
+  const userId = req.user.id;
+  const { caption } = req.body;
+
+  try {
+    const postCheck = await pool.query(
+      "SELECT user_id FROM posts WHERE post_id = $1",
+      [postId]
+    );
+
+    if (postCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    if (postCheck.rows[0].user_id !== userId) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    const { rows } = await pool.query(
+      `
+      UPDATE posts
+      SET caption = $1
+      WHERE post_id = $2
+      RETURNING post_id, user_id, caption, date_posted
+      `,
+      [caption ?? "", postId]
+    );
+
+    return res.json({ post: rows[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
 router.delete("/:postId", authenticateToken, async (req, res) => {
   console.log("Authenticated user:", req.user);
   const { postId } = req.params;

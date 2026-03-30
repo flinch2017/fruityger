@@ -5,9 +5,14 @@ import { authenticateToken } from "../middleware/auth.js";
 const router = express.Router();
 
 router.post("/submit", authenticateToken, async (req, res) => {
-  const { reporterId, contentType, contentId, reason, details } = req.body;
+  const { contentType, contentId, reason, details } = req.body;
+  const reporterId = req.user.id;
 
   try {
+    if (!contentType || !contentId || !reason) {
+      return res.status(400).json({ error: "contentType, contentId, and reason are required" });
+    }
+
     const query = `
       INSERT INTO reports (reporter_id, content_type, content_id, reason, details)
       VALUES ($1, $2, $3, $4, $5)
@@ -19,7 +24,7 @@ router.post("/submit", authenticateToken, async (req, res) => {
       contentType,
       contentId,
       reason,
-      details
+      details || null
     ]);
 
     res.status(201).json({ report: rows[0] });

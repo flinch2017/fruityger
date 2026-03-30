@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/Messages.css";
 
@@ -11,31 +11,63 @@ export default function Messages() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
-  
-
-  // Ref for the sidebar/search area
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedChatIds, setSelectedChatIds] = useState([]);
+  const [deletingChats, setDeletingChats] = useState(false);
   const sidebarRef = useRef(null);
 
-  useEffect(() => {
-    const fetchChats = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch("http://localhost:5000/api/messages/chats", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        setChats(data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const selectedChatSet = useMemo(() => new Set(selectedChatIds), [selectedChatIds]);
 
+  const updateUnreadEvent = (chatList) => {
+    const unreadCount = (chatList || []).reduce(
+      (total, chat) => total + Number(chat.unread_count || 0),
+      0
+    );
+
+    window.dispatchEvent(
+      new CustomEvent("fruityger:messages-refresh", {
+        detail: { unreadCount },
+      })
+    );
+  };
+
+  const fetchChats = async () => {
+    if (!token) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch("http://localhost:5000/api/messages/chats", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setChats(data);
+      updateUnreadEvent(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchChats();
   }, [token]);
 
-  // Search users to start new chats
+  useEffect(() => {
+    const handleRefresh = (event) => {
+      if (typeof event.detail?.unreadCount === "number") return;
+      fetchChats();
+    };
+
+    window.addEventListener("focus", fetchChats);
+    window.addEventListener("fruityger:messages-refresh", handleRefresh);
+
+    return () => {
+      window.removeEventListener("focus", fetchChats);
+      window.removeEventListener("fruityger:messages-refresh", handleRefresh);
+    };
+  }, [token]);
+
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -45,14 +77,11 @@ export default function Messages() {
     const fetchUsers = async () => {
       try {
         const res = await fetch(
-          `http://localhost:5000/api/messages/search-users?q=${encodeURIComponent(
-            searchQuery
-          )}`,
+          `http://localhost:5000/api/messages/search-users?q=${encodeURIComponent(searchQuery)}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         const data = await res.json();
-        // Filter out yourself
-        setSearchResults(data.filter((u) => u.id !== userId));
+        setSearchResults(data.filter((user) => user.id !== userId));
       } catch (err) {
         console.error(err);
       }
@@ -61,7 +90,6 @@ export default function Messages() {
     fetchUsers();
   }, [searchQuery, token, userId]);
 
-  // Handle click outside to close search results
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (sidebarRef.current && !sidebarRef.current.contains(event.target)) {
@@ -75,6 +103,11 @@ export default function Messages() {
   }, []);
 
   const handleChatClick = (chatId) => {
+    if (selectionMode) {
+      toggleSelectedChat(chatId);
+      return;
+    }
+
     navigate(`/chat/${chatId}`);
   };
 
@@ -102,19 +135,65 @@ export default function Messages() {
     }
   };
 
+  const toggleSelectedChat = (chatId) => {
+    setSelectedChatIds((prev) =>
+      prev.includes(chatId)
+        ? prev.filter((id) => id !== chatId)
+        : [...prev, chatId]
+    );
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedChatIds([]);
+  };
+
+  const deleteSelectedChats = async () => {
+    if (!token || selectedChatIds.length === 0) return;
+
+    setDeletingChats(true);
+
+    try {
+      const res = await fetch("http://localhost:5000/api/messages/delete-chats", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ chatIds: selectedChatIds }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete chats");
+      }
+
+      const allowedSet = new Set(data.chatIds || []);
+
+      setChats((prev) => {
+        const nextChats = prev.filter((chat) => !allowedSet.has(chat.id));
+        updateUnreadEvent(nextChats);
+        return nextChats;
+      });
+
+      exitSelectionMode();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeletingChats(false);
+    }
+  };
 
   const formatChatDate = (dateString) => {
     if (!dateString) return "";
 
     const date = new Date(dateString);
     const now = new Date();
-
-    const isToday =
-      date.toDateString() === now.toDateString();
-
-    const isYesterday =
-      new Date(now.setDate(now.getDate() - 1)).toDateString() ===
-      date.toDateString();
+    const isToday = date.toDateString() === now.toDateString();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = yesterday.toDateString() === date.toDateString();
 
     if (isToday) {
       return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -133,9 +212,39 @@ export default function Messages() {
         ref={sidebarRef}
         className={`messages-sidebar ${searchResults.length > 0 ? "searching" : ""}`}
       >
-        <h2>Chats</h2>
+        <div className="messages-toolbar">
+          <h2>Chats</h2>
 
-        {/* Search bar */}
+          <div className="messages-toolbar-actions">
+            {selectionMode ? (
+              <>
+                <button
+                  className="messages-action-btn danger"
+                  onClick={deleteSelectedChats}
+                  disabled={deletingChats || selectedChatIds.length === 0}
+                >
+                  Delete Selected
+                </button>
+                <button
+                  className="messages-action-btn"
+                  onClick={exitSelectionMode}
+                  disabled={deletingChats}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                className="messages-action-btn"
+                onClick={() => setSelectionMode(true)}
+                disabled={chats.length === 0}
+              >
+                Select
+              </button>
+            )}
+          </div>
+        </div>
+
         <input
           type="text"
           className="chat-search"
@@ -144,7 +253,6 @@ export default function Messages() {
           onChange={(e) => setSearchQuery(e.target.value)}
         />
 
-        {/* Search results for new chats */}
         {searchResults.length > 0 && (
           <div className="search-results">
             {searchResults.map((user) => (
@@ -162,33 +270,55 @@ export default function Messages() {
                 </div>
                 <div className="chat-info">
                   <h4>{user.username}</h4>
-                  <p>Tap to chat</p>
+                  <p>Start a fresh conversation</p>
+                </div>
+                <div className="search-result-cta">
+                  Message
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* Existing chats */}
         <div className="chat-list">
           {loading ? (
             <div className="spinner-alpha-container">
               <div className="spinner-alpha"></div>
             </div>
           ) : chats.length === 0 ? (
-            <p className="empty-text">No chats yet</p>
+            <div className="messages-empty-state">
+              <div className="messages-empty-buddy" aria-hidden="true">
+                <div className="buddy-orb">
+                  <span className="buddy-face">◕‿◕</span>
+                </div>
+                <div className="buddy-shadow"></div>
+              </div>
+              <h3>Your inbox is empty</h3>
+              <p>
+                Search for a friend above and start a bright little conversation.
+              </p>
+            </div>
           ) : (
             chats.map((chat) => {
               const otherUser = chat.user1?.id === userId ? chat.user2 : chat.user1;
               const isMine = String(chat.last_message_sender_id) === String(userId);
-              const isUnread = !chat.last_message_read && !isMine;
+              const isUnread = Number(chat.unread_count || 0) > 0;
               const isSeen = chat.last_message_read && isMine;
+
               return (
                 <div
                   key={chat.id}
-                  className={`chat-preview ${isUnread ? "unread-chat" : ""}`}
+                  className={`chat-preview ${isUnread ? "unread-chat" : ""} ${
+                    selectedChatSet.has(chat.id) ? "selected-chat" : ""
+                  }`}
                   onClick={() => handleChatClick(chat.id)}
                 >
+                  {selectionMode && (
+                    <span className="selection-check">
+                      {selectedChatSet.has(chat.id) ? "✓" : ""}
+                    </span>
+                  )}
+
                   <div className="chat-avatar">
                     {otherUser?.profile_pic ? (
                       <img src={otherUser.profile_pic} alt={otherUser.username} />
@@ -198,6 +328,7 @@ export default function Messages() {
                       </span>
                     )}
                   </div>
+
                   <div className="chat-info">
                     <div className="chat-top">
                       <h4>{otherUser.username}</h4>
@@ -206,6 +337,12 @@ export default function Messages() {
                         <span className="chat-date">
                           {formatChatDate(chat.last_message_at)}
                         </span>
+
+                        {isUnread && (
+                          <span className="chat-unread-badge">
+                            {chat.unread_count > 9 ? "9+" : chat.unread_count}
+                          </span>
+                        )}
 
                         {isSeen && <span className="seen-label">Seen</span>}
                       </div>
