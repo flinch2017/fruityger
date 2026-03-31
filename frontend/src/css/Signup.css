@@ -239,6 +239,10 @@ body.welcome .grecaptcha-badge {
   background: linear-gradient(90deg, #ff9ab3, #ff6f91);
 }
 
+.signup-password-strength.incomplete .signup-password-strength-bars span.active {
+  background: linear-gradient(90deg, #ffd39a, #ffb65f);
+}
+
 .signup-password-strength.strong .signup-password-strength-bars span.active {
   background: linear-gradient(90deg, #7edfff, #34bfff);
 }

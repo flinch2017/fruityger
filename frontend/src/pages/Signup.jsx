@@ -69,8 +69,13 @@ const getPasswordStrength = (password) => {
 
   const checklist = getPasswordChecklist(password);
   const metCount = checklist.filter((item) => item.met).length;
+  const validationMessage = getPasswordValidationMessage(password);
 
-  if (metCount <= 3) {
+  if (validationMessage) {
+    return { label: "Incomplete", tone: "incomplete", score: Math.min(metCount, 2) };
+  }
+
+  if (metCount <= 4) {
     return { label: "Weak", tone: "weak", score: metCount };
   }
 
