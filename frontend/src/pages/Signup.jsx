@@ -53,6 +53,16 @@ const getPasswordValidationMessage = (password) => {
   return "";
 };
 
+const normalizeUsername = (value = "") =>
+  String(value)
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/-+/g, "")
+    .replace(/[^a-z0-9._]/g, "")
+    .replace(/_+/g, "_")
+    .replace(/\.+/g, ".")
+    .replace(/^[_\.]+|[_\.]+$/g, "");
+
 const getPasswordChecklist = (password) => [
   { label: "8+ characters", met: password.length >= 8 },
   { label: "Uppercase letter", met: /[A-Z]/.test(password) },
@@ -123,7 +133,11 @@ export default function Signup() {
 
   const handleChange = (e) => {
     clearMessage();
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm({
+      ...form,
+      [name]: name === "username" ? normalizeUsername(value) : value,
+    });
   };
 
   const activateBirthDatePicker = () => {
@@ -242,8 +256,15 @@ export default function Signup() {
               className="signup-aero-input"
               value={form.username}
               onChange={handleChange}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck="false"
               required
             />
+
+            <p className="signup-password-hint">
+              Lowercase only. Spaces become underscores. Hyphens are not allowed.
+            </p>
 
             <input
               type="email"

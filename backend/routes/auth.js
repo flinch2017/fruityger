@@ -106,6 +106,37 @@ const getPasswordValidationMessage = (password) => {
   return "";
 };
 
+const normalizeUsername = (value = "") =>
+  String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/-+/g, "")
+    .replace(/[^a-z0-9._]/g, "")
+    .replace(/_+/g, "_")
+    .replace(/\.+/g, ".")
+    .replace(/^[_\.]+|[_\.]+$/g, "");
+
+const getUsernameValidationMessage = (username) => {
+  if (!username) {
+    return "Username is required";
+  }
+
+  if (username.length < 3) {
+    return "Username must be at least 3 characters long";
+  }
+
+  if (username.length > 30) {
+    return "Username must be 30 characters or fewer";
+  }
+
+  if (!/^[a-z0-9._]+$/.test(username)) {
+    return "Username can only use lowercase letters, numbers, periods, and underscores";
+  }
+
+  return "";
+};
+
 const signToken = (userId) =>
   jwt.sign({ id: userId }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRY || "7d",
@@ -148,6 +179,12 @@ router.post("/signup", async (req, res) => {
   await ensureUserOnboardingSchema();
   await ensureAccountChangeSchema();
   await cleanupExpiredUnverifiedUsers();
+
+  const normalizedUsername = normalizeUsername(username);
+  const usernameValidationMessage = getUsernameValidationMessage(normalizedUsername);
+  if (usernameValidationMessage) {
+    return res.status(400).json({ error: usernameValidationMessage });
+  }
 
   const age = getAgeFromBirthDate(birthDate);
   if (!birthDate || age === null) {
@@ -195,7 +232,7 @@ router.post("/signup", async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, FALSE, $6, $7, '[]'::jsonb, FALSE)
       RETURNING id, username, email, profile_pic, birth_date, email_verified, interests, interests_completed, created_at
       `,
-      [username, email, password_hash, profile_pic || null, birthDate, verificationCode, verificationExpiry]
+      [normalizedUsername, email, password_hash, profile_pic || null, birthDate, verificationCode, verificationExpiry]
     );
 
     const user = result.rows[0];
@@ -203,7 +240,7 @@ router.post("/signup", async (req, res) => {
     try {
       await sendVerificationEmail({
         to: email,
-        username,
+        username: normalizedUsername,
         code: verificationCode,
       });
     } catch (mailError) {
@@ -234,6 +271,8 @@ router.post("/signup", async (req, res) => {
 
 router.post("/login", async (req, res) => {
   const { email, password, recaptchaToken } = req.body;
+  const identifier = String(email || "").trim();
+  const normalizedIdentifier = identifier.toLowerCase();
 
   await ensureEmailVerificationSchema();
   await ensureUserOnboardingSchema();
@@ -250,7 +289,16 @@ router.post("/login", async (req, res) => {
   }
 
   try {
-    const result = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    const result = await pool.query(
+      `
+      SELECT *
+      FROM users
+      WHERE LOWER(email) = $1
+         OR LOWER(username) = $1
+      LIMIT 1
+      `,
+      [normalizedIdentifier]
+    );
     const user = result.rows[0];
 
     if (!user) {

@@ -32,7 +32,7 @@ export default function Login() {
     clearMessage();
 
     if (!email || !password) {
-      setCustomMessage("error", "Please enter your email and password.");
+      setCustomMessage("error", "Please enter your email or username and password.");
       return;
     }
 
@@ -111,14 +111,17 @@ export default function Login() {
 
           <form className="login-aero-form" onSubmit={handleSubmit}>
             <input
-              type="email"
-              placeholder="Email"
+              type="text"
+              placeholder="Email or Username"
               className="login-aero-input"
               value={email}
               onChange={(e) => {
                 clearMessage();
                 setEmail(e.target.value);
               }}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck="false"
               required
             />
 
