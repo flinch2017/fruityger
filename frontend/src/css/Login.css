@@ -131,6 +131,46 @@ body.welcome .grecaptcha-badge {
   transform: scale(1.02);
 }
 
+.login-password-field {
+  position: relative;
+}
+
+.login-password-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 82px;
+}
+
+.login-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  border: 1px solid rgba(255,255,255,0.9);
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #0c7da7;
+  background: linear-gradient(
+    160deg,
+    rgba(255,255,255,0.94),
+    rgba(210,245,255,0.72)
+  );
+  box-shadow:
+    0 6px 14px rgba(0, 180, 255, 0.14),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.login-password-toggle:hover {
+  transform: translateY(calc(-50% - 1px));
+  box-shadow:
+    0 8px 16px rgba(0, 180, 255, 0.18),
+    inset 0 1px 0 rgba(255,255,255,0.98);
+}
+
 /* ===== CANDY BUTTON ===== */
 .login-aero-btn {
   margin-top: 10px;

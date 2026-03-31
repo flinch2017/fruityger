@@ -8,6 +8,7 @@ export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
   const captchaRef = useRef(null);
@@ -121,17 +122,27 @@ export default function Login() {
               required
             />
 
-            <input
-              type="password"
-              placeholder="Password"
-              className="login-aero-input"
-              value={password}
-              onChange={(e) => {
-                clearMessage();
-                setPassword(e.target.value);
-              }}
-              required
-            />
+            <div className="login-password-field">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                className="login-aero-input login-password-input"
+                value={password}
+                onChange={(e) => {
+                  clearMessage();
+                  setPassword(e.target.value);
+                }}
+                required
+              />
+
+              <button
+                type="button"
+                className="login-password-toggle"
+                onClick={() => setShowPassword((prev) => !prev)}
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
 
             <ReCAPTCHA
               ref={captchaRef}
