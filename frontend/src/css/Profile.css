@@ -1025,3 +1025,66 @@
 .profile-card-dropdown-item.danger {
   color: #d94a71;
 }
+
+.profile-guest-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10020;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 28, 40, 0.24);
+  backdrop-filter: blur(10px);
+}
+
+.profile-guest-card {
+  width: min(100%, 380px);
+  padding: 28px 24px 22px;
+  text-align: center;
+  border-radius: 28px;
+  background: linear-gradient(
+    160deg,
+    rgba(255,255,255,0.92),
+    rgba(208,244,255,0.72)
+  );
+  box-shadow:
+    0 24px 48px rgba(0, 170, 230, 0.22),
+    inset 0 1px 0 rgba(255,255,255,0.98);
+}
+
+.profile-guest-card h3 {
+  margin: 0;
+  color: #0a6f92;
+}
+
+.profile-guest-card p {
+  margin: 12px 0 18px;
+  color: #3b7890;
+  line-height: 1.6;
+}
+
+.profile-guest-cta,
+.profile-guest-dismiss {
+  width: 100%;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.profile-guest-cta {
+  padding: 14px 18px;
+  color: #ffffff;
+  background: linear-gradient(145deg, #00dfff, #00bfff, #4facfe);
+  box-shadow:
+    0 12px 22px rgba(0, 200, 255, 0.32),
+    inset 0 0 14px rgba(255,255,255,0.22);
+}
+
+.profile-guest-dismiss {
+  margin-top: 10px;
+  padding: 12px 18px;
+  color: #0c7a9d;
+  background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(220,247,255,0.68));
+}

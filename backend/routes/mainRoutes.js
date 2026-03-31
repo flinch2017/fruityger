@@ -166,6 +166,47 @@ router.get("/me", authenticateToken, async (req, res) => {
   }
 });
 
+router.get("/public/user/:username", async (req, res) => {
+  try {
+    await ensureUserProfileSchema();
+    const { username } = req.params;
+
+    const { rows } = await pool.query(
+      `
+      SELECT id, username, profile_pic, bio, created_at
+      FROM users
+      WHERE username = $1
+      LIMIT 1
+      `,
+      [username]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = rows[0];
+    const countRes = await pool.query(
+      `
+      SELECT
+        (SELECT COUNT(*) FROM follows WHERE following_id = $1) AS followers_count,
+        (SELECT COUNT(*) FROM follows WHERE follower_id = $1) AS following_count
+      `,
+      [user.id]
+    );
+
+    user.followers_count = parseInt(countRes.rows[0].followers_count, 10);
+    user.following_count = parseInt(countRes.rows[0].following_count, 10);
+    user.blocked_by_me = false;
+    user.blocked_by_them = false;
+
+    res.json({ user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 router.put("/onboarding/interests", authenticateToken, async (req, res) => {
   const interests = normalizeInterests(req.body?.interests);
 

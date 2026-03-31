@@ -35,6 +35,7 @@ import TermsPage from "./pages/TermsPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import CookiePage from "./pages/CookiePage";
 import AboutPage from "./pages/AboutPage";
+import ShareProfile from "./pages/ShareProfile";
 
 
 import "./css/App.css";
@@ -62,6 +63,26 @@ function MiscPageLayout({ children }) {
   return (
     <>
       <div className="misc-page-container">{children}</div>
+    </>
+  );
+}
+
+function ProfileLayout({ children }) {
+  const hasToken = Boolean(localStorage.getItem("token"));
+
+  if (hasToken) {
+    return (
+      <>
+        <Header />
+        <div className="app-container">{children}</div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <WelcomeHeader />
+      <div className="welcome">{children}</div>
     </>
   );
 }
@@ -316,11 +337,17 @@ function App() {
         <Route
           path="/profile/:username"
           element={
-            <PrivateRoute>
-              <MainLayout>
-                <Profile />
-              </MainLayout>
-            </PrivateRoute>
+            <ProfileLayout>
+              <Profile />
+            </ProfileLayout>
+          }
+        />
+        <Route
+          path="/profile/:username/share"
+          element={
+            <ProfileLayout>
+              <ShareProfile />
+            </ProfileLayout>
           }
         />
         <Route

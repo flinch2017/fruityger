@@ -1,0 +1,102 @@
+.share-profile-page {
+  min-height: calc(100vh - 110px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 20px 60px;
+}
+
+.share-profile-card {
+  width: min(100%, 460px);
+  padding: 34px 28px 30px;
+  text-align: center;
+  border-radius: 34px;
+  backdrop-filter: blur(24px);
+  background: linear-gradient(
+    160deg,
+    rgba(255,255,255,0.84),
+    rgba(200,240,255,0.56)
+  );
+  border: 1px solid rgba(255,255,255,0.92);
+  box-shadow:
+    0 24px 54px rgba(0, 180, 255, 0.22),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+}
+
+.share-profile-back,
+.share-profile-copy {
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.share-profile-back {
+  align-self: flex-start;
+  margin-bottom: 14px;
+  padding: 10px 16px;
+  color: #0b7a9d;
+  background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(216,246,255,0.64));
+  box-shadow:
+    0 10px 18px rgba(0, 180, 255, 0.08),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+}
+
+.share-profile-kicker {
+  margin: 0 0 8px;
+  color: #5ca4bc;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+}
+
+.share-profile-card h1 {
+  margin: 0;
+  color: #0a6f92;
+}
+
+.share-profile-subtitle {
+  margin: 12px auto 0;
+  width: min(100%, 320px);
+  color: #3d768d;
+  line-height: 1.6;
+}
+
+.share-profile-qr-shell {
+  width: min(100%, 340px);
+  margin: 24px auto 18px;
+  padding: 18px;
+  border-radius: 30px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(233,251,255,0.88));
+  box-shadow:
+    0 18px 30px rgba(0, 180, 255, 0.12),
+    inset 0 1px 0 rgba(255,255,255,0.98);
+}
+
+.share-profile-qr {
+  width: 100%;
+  display: block;
+  border-radius: 24px;
+}
+
+.share-profile-linkbox {
+  padding: 14px 18px;
+  border-radius: 22px;
+  color: #126d8f;
+  background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(214,246,255,0.62));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.96),
+    0 10px 18px rgba(0, 180, 255, 0.08);
+  word-break: break-all;
+}
+
+.share-profile-copy {
+  margin-top: 18px;
+  width: 100%;
+  padding: 14px 20px;
+  color: #ffffff;
+  background: linear-gradient(145deg, #00dfff, #00bfff, #4facfe);
+  box-shadow:
+    0 10px 22px rgba(0, 200, 255, 0.35),
+    inset 0 0 16px rgba(255,255,255,0.24);
+}

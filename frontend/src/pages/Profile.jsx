@@ -9,6 +9,7 @@ import { getSafeMediaUrl } from "../utils/mediaUrl";
 export default function Profile() {
 
   const { username } = useParams();
+  const token = localStorage.getItem("token");
 
   const [user, setUser] = useState(null);
   const [posts, setPosts] = useState([]);
@@ -46,6 +47,7 @@ export default function Profile() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
   const [isBlockedProfile, setIsBlockedProfile] = useState(false);
+  const [guestPromptOpen, setGuestPromptOpen] = useState(false);
 
   const LIMIT = 5;
   const navigate = useNavigate();
@@ -89,8 +91,13 @@ export default function Profile() {
     // Option 2 (later): open modal instead
   };
 
+  const openGuestPrompt = () => {
+    setGuestPromptOpen(true);
+    setProfileMenuOpen(false);
+    setActiveMenuPostId(null);
+  };
+
   const fetchCurrentUser = async () => {
-    const token = localStorage.getItem("token");
     if (!token) return;
 
     try {
@@ -156,6 +163,11 @@ export default function Profile() {
   };
 
   const handleReportPost = (postId) => {
+    if (!token) {
+      openGuestPrompt();
+      return;
+    }
+
     setActiveMenuPostId(null);
     navigate(`/report?type=post&id=${postId}`);
   };
@@ -211,6 +223,11 @@ export default function Profile() {
   };
 
   const handleReportUser = () => {
+    if (!token) {
+      openGuestPrompt();
+      return;
+    }
+
     setProfileMenuOpen(false);
     navigate(`/report?type=user&id=${user.id}`);
   };
@@ -240,20 +257,21 @@ export default function Profile() {
   }, []);
 
   const fetchUser = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
     try {
+      const url = token
+        ? username
+          ? `http://localhost:5000/api/main/user/${username}`
+          : "http://localhost:5000/api/main/me"
+        : `http://localhost:5000/api/main/public/user/${username}`;
 
-      let url = username
-      ? `http://localhost:5000/api/main/user/${username}`
-      : "http://localhost:5000/api/main/me";
-
-      
-
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await fetch(
+        url,
+        token
+          ? {
+              headers: { Authorization: `Bearer ${token}` }
+            }
+          : undefined
+      );
 
       const data = await res.json();
 
@@ -275,24 +293,22 @@ export default function Profile() {
 
     setLoadingPosts(true);
 
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
     const currentOffset = initial ? 0 : offset;
 
     try {
-
-      const profileQuery = username
-        ? `&username=${username}`
-        : "";
-
+      const profileQuery = username ? `username=${username}` : "";
+      const baseUrl = token
+        ? "http://localhost:5000/api/profile/posts"
+        : "http://localhost:5000/api/profile/public-posts";
       const res = await fetch(
-        `http://localhost:5000/api/profile/posts?limit=${LIMIT}&offset=${currentOffset}${profileQuery}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
+        `${baseUrl}?limit=${LIMIT}&offset=${currentOffset}${profileQuery ? `&${profileQuery}` : ""}`,
+        token
+          ? {
+              headers: {
+                Authorization: `Bearer ${token}`
+              }
+            }
+          : undefined
       );
 
       const data = await res.json();
@@ -546,10 +562,7 @@ export default function Profile() {
 
   // Check if current user follows this profile
   const fetchFollowingStatus = async () => {
-    if (isOwnProfile) return; // no need
-
-    const token = localStorage.getItem("token");
-    if (!token) return;
+    if (isOwnProfile || !token) return; // no need
 
     try {
       const res = await fetch(
@@ -572,8 +585,10 @@ export default function Profile() {
 
   // Follow / Unfollow action
   const toggleFollow = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
+    if (!token) {
+      openGuestPrompt();
+      return;
+    }
 
     setFollowLoading(true);
 
@@ -649,7 +664,30 @@ export default function Profile() {
         </div>
       )}
 
-      {activeCommentPost && (
+      {guestPromptOpen && (
+        <div className="profile-guest-overlay">
+          <div className="profile-guest-card">
+            <h3>Create an account to interact</h3>
+            <p>You should create an account to interact.</p>
+            <button
+              type="button"
+              className="profile-guest-cta"
+              onClick={() => navigate("/signup")}
+            >
+              Create an account
+            </button>
+            <button
+              type="button"
+              className="profile-guest-dismiss"
+              onClick={() => setGuestPromptOpen(false)}
+            >
+              Maybe later
+            </button>
+          </div>
+        </div>
+      )}
+
+      {activeCommentPost && token && (
         <CommentSheet
           postId={activeCommentPost}
           user={user}
@@ -663,7 +701,7 @@ export default function Profile() {
 
 
       <div className="profile-card">
-        {!isOwnProfile && (
+        {!isOwnProfile && token && (
           <div className="profile-card-menu-wrap" ref={profileMenuRef}>
             <button
               className="profile-card-menu-btn"
@@ -713,9 +751,9 @@ export default function Profile() {
               <button
                 className="profile-btn follow-btn"
                 onClick={toggleFollow}
-                disabled={followLoading} // disable while loading
+                disabled={token ? followLoading : false} // disable while loading
               >
-                {followLoading ? (
+                {token && followLoading ? (
                   <div className="button-spinner"></div>
                 ) : (
                   following ? "Unfollow" : "Follow"
@@ -731,7 +769,10 @@ export default function Profile() {
             ) : null}
 
             {!(isBlockedProfile && !user?.blocked_by_me) && (
-              <button className="profile-btn share-btn">
+              <button
+                className="profile-btn share-btn"
+                onClick={() => navigate(`/profile/${user.username}/share`)}
+              >
                 Share Profile
               </button>
             )}
@@ -741,7 +782,11 @@ export default function Profile() {
             <div className="stat">
               <span
                 className="stat-number stat-clickable"
-                onClick={() => navigate(`/profile/${user.username}/followers`)}
+                onClick={() =>
+                  token
+                    ? navigate(`/profile/${user.username}/followers`)
+                    : openGuestPrompt()
+                }
               >
                 {user.followers_count || 0}
               </span>
@@ -751,7 +796,11 @@ export default function Profile() {
             <div className="stat">
               <span
                 className="stat-number stat-clickable"
-                onClick={() => navigate(`/profile/${user.username}/following`)}
+                onClick={() =>
+                  token
+                    ? navigate(`/profile/${user.username}/following`)
+                    : openGuestPrompt()
+                }
               >
                 {user.following_count || 0}
               </span>
@@ -780,6 +829,7 @@ export default function Profile() {
             className={`post-card ${disappearingPosts.includes(post.post_id) ? "fade-out" : "fade-in"}`}
           >
             {/* ===== MORE OPTIONS (TOP RIGHT) ===== */}
+            {token && (
             <div
               className="post-more-wrapper"
               ref={activeMenuPostId === post.post_id ? dropdownRef : null}
@@ -831,6 +881,7 @@ export default function Profile() {
             )}
 
           </div>
+            )}
 
             <div className="post-header">
               <div className="post-user-info">
@@ -944,7 +995,7 @@ export default function Profile() {
 
                   <button
                     className={`post-action-btn ${post.is_liked ? "liked" : ""}`}
-                    onClick={() => toggleLike(post.post_id)}
+                    onClick={() => (token ? toggleLike(post.post_id) : openGuestPrompt())}
                   >
                     ❤️
                   </button>
@@ -959,7 +1010,7 @@ export default function Profile() {
 
                   <button
                     className="post-action-btn"
-                    onClick={() => setActiveCommentPost(post.post_id)}
+                    onClick={() => (token ? setActiveCommentPost(post.post_id) : openGuestPrompt())}
                   >
                     💬
                   </button>
@@ -970,7 +1021,10 @@ export default function Profile() {
 
                 </div>
 
-                <button className="post-action-btn">
+                <button
+                  className="post-action-btn"
+                  onClick={() => (token ? navigate(`/post/${post.post_id}`) : openGuestPrompt())}
+                >
                   🔗
                 </button>
               </div>

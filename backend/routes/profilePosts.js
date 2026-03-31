@@ -128,6 +128,70 @@ router.get("/posts", authenticateToken, async (req, res) => {
   }
 });
 
+router.get("/public-posts", async (req, res) => {
+  try {
+    const username = req.query.username;
+
+    if (!username) {
+      return res.status(400).json({ error: "username is required" });
+    }
+
+    const userResult = await pool.query(
+      "SELECT id FROM users WHERE username = $1 LIMIT 1",
+      [username]
+    );
+
+    if (!userResult.rows[0]) {
+      return res.json({ posts: [], isBlocked: false });
+    }
+
+    const userId = userResult.rows[0].id;
+    const limit = parseInt(req.query.limit, 10) || 5;
+    const offset = parseInt(req.query.offset, 10) || 0;
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        p.*,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'media_url', pm.media_url,
+              'media_type', pm.media_type,
+              'media_order', pm.media_order
+            )
+            ORDER BY pm.media_order ASC
+          )
+          FILTER (WHERE pm.media_url IS NOT NULL),
+          '[]'
+        ) AS media,
+        COUNT(DISTINCT l.like_id)::int AS like_count,
+        FALSE AS is_liked,
+        (
+          SELECT COUNT(*)
+          FROM comments c
+          WHERE c.post_id = p.post_id
+        )::int AS comment_count
+      FROM posts p
+      LEFT JOIN post_media pm
+        ON pm.post_id = p.post_id
+      LEFT JOIN likes l
+        ON l.post_id = p.post_id
+      WHERE p.user_id = $1
+      GROUP BY p.post_id
+      ORDER BY p.date_posted DESC
+      LIMIT $2 OFFSET $3
+      `,
+      [userId, limit, offset]
+    );
+
+    res.json({ posts: rows, isBlocked: false });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 router.get("/post/:postId", authenticateToken, async (req, res) => {
   const { postId } = req.params;
 
