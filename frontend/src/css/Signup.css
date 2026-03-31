@@ -102,6 +102,8 @@ body.welcome .grecaptcha-badge {
 
 /* ===== INPUTS ===== */
 .signup-aero-input {
+  width: 100%;
+  box-sizing: border-box;
   padding: 14px 18px;
   border-radius: 50px;
   border: none;
@@ -130,11 +132,22 @@ body.welcome .grecaptcha-badge {
 
 .signup-aero-date {
   color: #2d6f86;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .signup-aero-date::-webkit-calendar-picker-indicator {
   cursor: pointer;
   opacity: 0.8;
+}
+
+.signup-aero-date[type="text"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.signup-aero-date::placeholder {
+  color: #6c95a6;
 }
 
 .signup-password-hint {

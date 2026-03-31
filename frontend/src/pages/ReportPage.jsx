@@ -2,6 +2,14 @@ import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../css/ReportPage.css";
 
+const REPORT_REASONS = [
+  { value: "spam", label: "Spam" },
+  { value: "harassment", label: "Harassment" },
+  { value: "offensive", label: "Offensive content" },
+  { value: "misinformation", label: "Misinformation" },
+  { value: "other", label: "Other" },
+];
+
 export default function ReportPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -9,12 +17,20 @@ export default function ReportPage() {
   const contentId = query.get("id");
   const contentType = query.get("type"); // 'comment'
 
-  const [reason, setReason] = useState("");
+  const [selectedReasons, setSelectedReasons] = useState([]);
   const [details, setDetails] = useState("");
   const token = localStorage.getItem("token");
 
+  const toggleReason = (value) => {
+    setSelectedReasons((prev) =>
+      prev.includes(value)
+        ? prev.filter((item) => item !== value)
+        : [...prev, value]
+    );
+  };
+
   const submitReport = async () => {
-    if (!reason) return alert("Please select a reason");
+    if (selectedReasons.length === 0) return alert("Please select at least one reason");
     if (!contentType || !contentId) return alert("Missing report target");
 
     try {
@@ -27,7 +43,7 @@ export default function ReportPage() {
         body: JSON.stringify({
           contentType,
           contentId,
-          reason,
+          reason: selectedReasons.join(", "),
           details,
         }),
       });
@@ -49,18 +65,30 @@ export default function ReportPage() {
     <div className="report-page">
       <div className="report-card">
         <h2 className="report-title">Report {contentType}</h2>
+        <p className="report-subtitle">Select all reasons that apply</p>
 
-        <select
-          className="report-select"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        >
-          <option value="">Select reason</option>
-          <option value="spam">Spam</option>
-          <option value="harassment">Harassment</option>
-          <option value="offensive">Offensive content</option>
-          <option value="other">Other</option>
-        </select>
+        <div className="report-options">
+          {REPORT_REASONS.map((option) => {
+            const checked = selectedReasons.includes(option.value);
+
+            return (
+              <label
+                key={option.value}
+                className={`report-option ${checked ? "checked" : ""}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleReason(option.value)}
+                />
+                <span className="report-option-check" aria-hidden="true">
+                  {checked ? "✓" : ""}
+                </span>
+                <span className="report-option-label">{option.label}</span>
+              </label>
+            );
+          })}
+        </div>
 
         <textarea
           className="report-textarea"

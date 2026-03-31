@@ -2,6 +2,7 @@
   display: flex;
   justify-content: center;
   padding: 84px 16px 32px;
+  background: transparent;
 }
 
 .follow-list-card {
@@ -50,6 +51,14 @@
   margin: 4px 0 0;
   color: #5c6f7a;
   font-size: 13px;
+}
+
+.follow-list-owner {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3c5866;
 }
 
 .follow-list-items {

@@ -51,9 +51,85 @@
 }
 
 /* ===============================
-   SELECT / TEXTAREA
+   OPTIONS / TEXTAREA
 ================================ */
-.report-select,
+.report-subtitle {
+  margin: 0 0 16px;
+  text-align: center;
+  color: #3f7d92;
+  font-size: 0.98rem;
+}
+
+.report-options {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.report-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+  border-radius: 24px;
+  cursor: pointer;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.92), rgba(228,248,255,0.78));
+  border: 1px solid rgba(255,255,255,0.92);
+  box-shadow:
+    inset 0 1px 2px rgba(255,255,255,0.9),
+    0 8px 18px rgba(0,180,255,0.16);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.22s ease;
+}
+
+.report-option:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 2px rgba(255,255,255,0.95),
+    0 10px 22px rgba(0,180,255,0.24);
+}
+
+.report-option.checked {
+  background: linear-gradient(to bottom, rgba(160,237,255,0.96), rgba(78,205,241,0.78));
+  box-shadow:
+    inset 0 1px 2px rgba(255,255,255,0.96),
+    0 12px 24px rgba(0,170,255,0.26);
+}
+
+.report-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.report-option-check {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(to bottom, #ffffff, #ddf7ff);
+  border: 1px solid rgba(0,160,220,0.18);
+  color: #0077aa;
+  font-size: 0.9rem;
+  font-weight: 700;
+  box-shadow:
+    inset 0 1px 2px rgba(255,255,255,0.95),
+    0 4px 10px rgba(0,160,220,0.16);
+}
+
+.report-option.checked .report-option-check {
+  background: linear-gradient(to bottom, #ffffff, #c6f5ff);
+  color: #0077aa;
+}
+
+.report-option-label {
+  color: #0d6785;
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
 .report-textarea {
   width: 100%;
   border-radius: 25px;
@@ -71,9 +147,7 @@
   margin-bottom: 20px;
 }
 
-.report-select:hover,
 .report-textarea:hover,
-.report-select:focus,
 .report-textarea:focus {
   transform: translateY(-1px);
   box-shadow:

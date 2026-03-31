@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/Settings.css";
 import { persistAuthSession } from "../utils/authSession";
+import { applyTheme } from "../utils/theme";
 
 const maskEmail = (email = "") => {
   const [localPart = "", domainPart = ""] = String(email).split("@");
@@ -26,14 +27,9 @@ export default function Settings() {
   const [email, setEmail] = useState(localStorage.getItem("verificationEmail") || "");
   const [pendingEmail, setPendingEmail] = useState(localStorage.getItem("pendingEmail") || "");
   const [theme, setTheme] = useState(() => localStorage.getItem("appearanceTheme") || "light");
-  const [newsletterEnabled, setNewsletterEnabled] = useState(() => {
-    const stored = localStorage.getItem("settingsNewsletter");
-    return stored ? stored === "true" : true;
-  });
-  const [pushEnabled, setPushEnabled] = useState(() => {
-    const stored = localStorage.getItem("settingsPush");
-    return stored ? stored === "true" : true;
-  });
+  const [newsletterEnabled, setNewsletterEnabled] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [notificationSaving, setNotificationSaving] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -65,16 +61,33 @@ export default function Settings() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("appearanceTheme", theme);
+    applyTheme(theme);
   }, [theme]);
 
   useEffect(() => {
-    localStorage.setItem("settingsNewsletter", String(newsletterEnabled));
-  }, [newsletterEnabled]);
+    const fetchNotificationSettings = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) return;
 
-  useEffect(() => {
-    localStorage.setItem("settingsPush", String(pushEnabled));
-  }, [pushEnabled]);
+      try {
+        const res = await fetch("http://localhost:5000/api/main/settings/notifications", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return;
+
+        setNewsletterEnabled(Boolean(data.newsletterEnabled));
+        setPushEnabled(Boolean(data.pushEnabled));
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    fetchNotificationSettings();
+  }, []);
 
   useEffect(() => {
     sessionStorage.removeItem("accountChangeApprovalToken");
@@ -109,6 +122,51 @@ export default function Settings() {
       persistAuthSession({ user: data.user });
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  const updateNotificationPreferences = async (nextNewsletterEnabled, nextPushEnabled) => {
+    const token = localStorage.getItem("token");
+    if (!token || notificationSaving) {
+      return;
+    }
+
+    const previousState = {
+      newsletterEnabled,
+      pushEnabled,
+    };
+
+    setNewsletterEnabled(nextNewsletterEnabled);
+    setPushEnabled(nextPushEnabled);
+    setNotificationSaving(true);
+
+    try {
+      const res = await fetch("http://localhost:5000/api/main/settings/notifications", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          newsletterEnabled: nextNewsletterEnabled,
+          pushEnabled: nextPushEnabled,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update notification settings");
+      }
+
+      setNewsletterEnabled(Boolean(data.newsletterEnabled));
+      setPushEnabled(Boolean(data.pushEnabled));
+    } catch (error) {
+      console.error(error);
+      setNewsletterEnabled(previousState.newsletterEnabled);
+      setPushEnabled(previousState.pushEnabled);
+    } finally {
+      setNotificationSaving(false);
     }
   };
 
@@ -211,7 +269,10 @@ export default function Settings() {
             <input
               type="checkbox"
               checked={newsletterEnabled}
-              onChange={(event) => setNewsletterEnabled(event.target.checked)}
+              disabled={notificationSaving}
+              onChange={(event) =>
+                updateNotificationPreferences(event.target.checked, pushEnabled)
+              }
             />
             <span className="settings-toggle-ui" aria-hidden="true"></span>
           </label>
@@ -221,7 +282,10 @@ export default function Settings() {
             <input
               type="checkbox"
               checked={pushEnabled}
-              onChange={(event) => setPushEnabled(event.target.checked)}
+              disabled={notificationSaving}
+              onChange={(event) =>
+                updateNotificationPreferences(newsletterEnabled, event.target.checked)
+              }
             />
             <span className="settings-toggle-ui" aria-hidden="true"></span>
           </label>

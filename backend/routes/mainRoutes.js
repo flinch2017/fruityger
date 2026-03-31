@@ -8,6 +8,8 @@ import { ensureUserOnboardingSchema, normalizeInterests } from "../utils/userOnb
 const router = express.Router();
 
 let blockedUsersTableReadyPromise = null;
+let userProfileSchemaReadyPromise = null;
+let notificationPreferencesSchemaReadyPromise = null;
 
 async function ensureBlockedUsersTable() {
   if (!blockedUsersTableReadyPromise) {
@@ -29,16 +31,59 @@ async function ensureBlockedUsersTable() {
   await blockedUsersTableReadyPromise;
 }
 
+async function ensureUserProfileSchema() {
+  if (!userProfileSchemaReadyPromise) {
+    userProfileSchemaReadyPromise = (async () => {
+      await pool.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS bio TEXT
+      `);
+    })().catch((error) => {
+      userProfileSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await userProfileSchemaReadyPromise;
+}
+
+async function ensureNotificationPreferencesSchema() {
+  if (!notificationPreferencesSchemaReadyPromise) {
+    notificationPreferencesSchemaReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS newsletter_subscriptions (
+          user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          email TEXT NOT NULL UNIQUE,
+          subscribed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS push_notification_subscriptions (
+          user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          subscribed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+    })().catch((error) => {
+      notificationPreferencesSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await notificationPreferencesSchemaReadyPromise;
+}
+
 
 
 router.get("/user/:username", authenticateToken, async (req, res) => {
   try {
     await ensureBlockedUsersTable();
     await ensureUserOnboardingSchema();
+    await ensureUserProfileSchema();
     const { username } = req.params;
 
     const { rows } = await pool.query(
-      `SELECT id, username, email, profile_pic, interests, interests_completed, created_at
+      `SELECT id, username, email, profile_pic, bio, interests, interests_completed, created_at
        FROM users
        WHERE username = $1`,
       [username]
@@ -90,8 +135,9 @@ router.get("/me", authenticateToken, async (req, res) => {
   try {
     await ensureBlockedUsersTable();
     await ensureUserOnboardingSchema();
+    await ensureUserProfileSchema();
     const { rows } = await pool.query(
-      `SELECT id, username, email, profile_pic, interests, interests_completed, created_at
+      `SELECT id, username, email, profile_pic, profile_pic_key, bio, interests, interests_completed, created_at
        FROM users
        WHERE id = $1`,
       [req.user.id]
@@ -148,6 +194,114 @@ router.put("/onboarding/interests", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.get("/settings/notifications", authenticateToken, async (req, res) => {
+  try {
+    await ensureNotificationPreferencesSchema();
+
+    const [newsletterResult, pushResult] = await Promise.all([
+      pool.query(
+        `
+        SELECT email
+        FROM newsletter_subscriptions
+        WHERE user_id = $1
+        LIMIT 1
+        `,
+        [req.user.id]
+      ),
+      pool.query(
+        `
+        SELECT user_id
+        FROM push_notification_subscriptions
+        WHERE user_id = $1
+        LIMIT 1
+        `,
+        [req.user.id]
+      ),
+    ]);
+
+    res.json({
+      newsletterEnabled: newsletterResult.rows.length > 0,
+      pushEnabled: pushResult.rows.length > 0,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load notification settings" });
+  }
+});
+
+router.put("/settings/notifications", authenticateToken, async (req, res) => {
+  const newsletterEnabled = Boolean(req.body?.newsletterEnabled);
+  const pushEnabled = Boolean(req.body?.pushEnabled);
+
+  try {
+    await ensureNotificationPreferencesSchema();
+
+    const userResult = await pool.query(
+      `
+      SELECT email
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [req.user.id]
+    );
+
+    const user = userResult.rows[0];
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (newsletterEnabled) {
+      await pool.query(
+        `
+        INSERT INTO newsletter_subscriptions (user_id, email)
+        VALUES ($1, $2)
+        ON CONFLICT (user_id)
+        DO UPDATE SET email = EXCLUDED.email, subscribed_at = NOW()
+        `,
+        [req.user.id, user.email]
+      );
+    } else {
+      await pool.query(
+        `
+        DELETE FROM newsletter_subscriptions
+        WHERE user_id = $1
+        `,
+        [req.user.id]
+      );
+    }
+
+    if (pushEnabled) {
+      await pool.query(
+        `
+        INSERT INTO push_notification_subscriptions (user_id)
+        VALUES ($1)
+        ON CONFLICT (user_id)
+        DO UPDATE SET subscribed_at = NOW()
+        `,
+        [req.user.id]
+      );
+    } else {
+      await pool.query(
+        `
+        DELETE FROM push_notification_subscriptions
+        WHERE user_id = $1
+        `,
+        [req.user.id]
+      );
+    }
+
+    res.json({
+      newsletterEnabled,
+      pushEnabled,
+      message: "Notification settings updated",
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update notification settings" });
   }
 });
 
@@ -351,12 +505,13 @@ router.post("/unblock-user", authenticateToken, async (req, res) => {
 
 
 router.put("/edit-profile", authenticateToken, async (req, res) => {
-  const { username, profile_pic, profile_pic_key } = req.body;
+  const { username, profile_pic, profile_pic_key, bio } = req.body;
 
   try {
 
     // ⭐ Get old profile picture key
     await ensureUserOnboardingSchema();
+    await ensureUserProfileSchema();
 
     const userResult = await pool.query(
       "SELECT profile_pic_key FROM users WHERE id=$1",
@@ -373,15 +528,17 @@ router.put("/edit-profile", authenticateToken, async (req, res) => {
       UPDATE users 
       SET username=$1,
           profile_pic=$2,
-          profile_pic_key=$3
-      WHERE id=$4
-      RETURNING id, username, email, profile_pic, interests, interests_completed, created_at
+          profile_pic_key=$3,
+          bio=$4
+      WHERE id=$5
+      RETURNING id, username, email, profile_pic, profile_pic_key, bio, interests, interests_completed, created_at
     `;
 
     const params = [
       username,
       profile_pic,
       profile_pic_key,
+      typeof bio === "string" ? bio.trim().slice(0, 160) : null,
       req.user.id
     ];
 

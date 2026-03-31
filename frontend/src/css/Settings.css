@@ -211,6 +211,11 @@
   cursor: pointer;
 }
 
+.settings-toggle-row:has(input:disabled) {
+  opacity: 0.72;
+  cursor: wait;
+}
+
 .settings-toggle-row input {
   position: absolute;
   opacity: 0;

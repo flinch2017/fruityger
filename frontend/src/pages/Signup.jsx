@@ -64,7 +64,9 @@ export default function Signup() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
+  const [birthDateInputType, setBirthDateInputType] = useState("text");
   const captchaRef = useRef(null);
+  const birthDateRef = useRef(null);
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
   useEffect(() => {
@@ -83,6 +85,20 @@ export default function Signup() {
   const handleChange = (e) => {
     clearMessage();
     setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const activateBirthDatePicker = () => {
+    if (birthDateInputType === "date") return;
+
+    setBirthDateInputType("date");
+
+    requestAnimationFrame(() => {
+      if (typeof birthDateRef.current?.showPicker === "function") {
+        birthDateRef.current.showPicker();
+      } else {
+        birthDateRef.current?.focus();
+      }
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -201,11 +217,22 @@ export default function Signup() {
             />
 
             <input
-              type="date"
+              ref={birthDateRef}
+              type={birthDateInputType}
               name="birthDate"
+              placeholder="Birthday"
               className="signup-aero-input signup-aero-date"
               value={form.birthDate}
               onChange={handleChange}
+              onClick={activateBirthDatePicker}
+              onTouchStart={activateBirthDatePicker}
+              readOnly={birthDateInputType === "text"}
+              inputMode="none"
+              onBlur={() => {
+                if (!form.birthDate) {
+                  setBirthDateInputType("text");
+                }
+              }}
               max={maxBirthDate}
               required
             />

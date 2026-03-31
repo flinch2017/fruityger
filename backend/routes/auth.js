@@ -17,6 +17,14 @@ import { ensureUserOnboardingSchema } from "../utils/userOnboarding.js";
 const router = express.Router();
 const SALT_ROUNDS = 10;
 const ACCOUNT_CHANGE_TOKEN_MINUTES = 15;
+const getFrontendBaseUrl = () =>
+  String(
+    process.env.FRONTEND_URL ||
+      process.env.ALLOWED_ORIGINS?.split(",")[0] ||
+      "http://localhost:5173"
+  )
+    .trim()
+    .replace(/\/+$/, "");
 
 const ensureAccountChangeSchema = async () => {
   await pool.query(`
@@ -518,8 +526,7 @@ router.post("/request-email-change", authenticateTokenAllowUnverified, async (re
       { expiresIn: "24h" }
     );
     const emailChangeExpiry = getVerificationExpiry();
-    const frontendBaseUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    const confirmUrl = `${frontendBaseUrl.replace(/\/$/, "")}/confirm-email-change?token=${encodeURIComponent(emailChangeToken)}`;
+    const confirmUrl = `${getFrontendBaseUrl()}/confirm-email-change?token=${encodeURIComponent(emailChangeToken)}`;
 
     await pool.query(
       `
@@ -618,6 +625,15 @@ router.post("/confirm-email-change", async (req, res) => {
       `,
       [user.id]
     );
+
+    await pool.query(
+      `
+      UPDATE newsletter_subscriptions
+      SET email = $2
+      WHERE user_id = $1
+      `,
+      [user.id, updateResult.rows[0].email]
+    ).catch(() => null);
 
     res.json({
       user: sanitizeUser(updateResult.rows[0]),

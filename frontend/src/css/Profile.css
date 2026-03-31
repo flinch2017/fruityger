@@ -146,6 +146,26 @@
   border-radius: 50%;
 }
 
+.profile-info h2 {
+  margin: 0;
+  color: #0a6e92;
+}
+
+.profile-bio {
+  width: min(100%, 420px);
+  margin: 12px auto 0;
+  color: #2a6176;
+  font-size: 0.98rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.profile-bio-empty {
+  color: #5f8ea0;
+  font-style: italic;
+}
+
 
 /* ===== STATS SECTION ===== */
 .profile-stats {

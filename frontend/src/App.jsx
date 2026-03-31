@@ -31,6 +31,10 @@ import HashtagPage from "./pages/HashtagPage";
 import ReportPage from "./pages/ReportPage";
 import FollowListPage from "./pages/FollowListPage";
 import PostDetail from "./pages/PostDetail";
+import TermsPage from "./pages/TermsPage";
+import PrivacyPage from "./pages/PrivacyPage";
+import CookiePage from "./pages/CookiePage";
+import AboutPage from "./pages/AboutPage";
 
 
 import "./css/App.css";
@@ -116,6 +120,38 @@ function App() {
                 <ChooseInterests />
               </StandaloneLayout>
             </OnboardingRoute>
+          }
+        />
+        <Route
+          path="/terms"
+          element={
+            <StandaloneLayout>
+              <TermsPage />
+            </StandaloneLayout>
+          }
+        />
+        <Route
+          path="/privacy"
+          element={
+            <StandaloneLayout>
+              <PrivacyPage />
+            </StandaloneLayout>
+          }
+        />
+        <Route
+          path="/cookies"
+          element={
+            <StandaloneLayout>
+              <CookiePage />
+            </StandaloneLayout>
+          }
+        />
+        <Route
+          path="/about"
+          element={
+            <StandaloneLayout>
+              <AboutPage />
+            </StandaloneLayout>
           }
         />
 

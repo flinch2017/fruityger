@@ -13,6 +13,7 @@ export default function EditProfile() {
   const [form, setForm] = useState({
     username: "",
     profile_pic: "",
+    bio: "",
   });
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function EditProfile() {
           setForm({
             username: data.user.username,
             profile_pic: data.user.profile_pic || "",
+            bio: data.user.bio || "",
           });
           setPreview(data.user.profile_pic || null);
         }
@@ -106,6 +108,7 @@ export default function EditProfile() {
           username: form.username,
           profile_pic: profilePicUrl,
           profile_pic_key: profilePicKey,
+          bio: form.bio,
         }),
       });
 
@@ -114,13 +117,14 @@ export default function EditProfile() {
       if (res.ok) {
         showAlert("Profile updated successfully!", "success");
         setUser(data.user);
-        setForm({ ...form, profile_pic: profilePicUrl });
+        setForm({ ...form, profile_pic: profilePicUrl, bio: data.user.bio || "" });
 
         // ✅ UPDATE LOCAL STORAGE
         localStorage.setItem("username", data.user.username);
 
         // (optional but good if you store it)
         localStorage.setItem("profile_pic", data.user.profile_pic || "");
+        window.dispatchEvent(new CustomEvent("fruityger:profile-updated"));
 
         // redirect after a short delay
         setTimeout(() => navigate(`/profile/${data.user.username}`), 1000);
@@ -199,6 +203,20 @@ export default function EditProfile() {
               onChange={handleChange}
               required
             />
+          </label>
+
+          <label>
+            Bio
+            <textarea
+              name="bio"
+              value={form.bio}
+              onChange={handleChange}
+              maxLength={160}
+              placeholder="Say something soft, nostalgic, or a little about yourself..."
+            />
+            <span className="edit-profile-hint">
+              {form.bio.length}/160
+            </span>
           </label>
 
           

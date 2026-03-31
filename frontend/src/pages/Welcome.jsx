@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import "../css/Welcome.css";
 
@@ -6,16 +7,75 @@ export default function Welcome() {
   const navigate = useNavigate();
 
   return (
-    <div className="welcome"> {/* <- use this div instead of body */}
+    <div className="welcome">
       <div className="welcome-page">
-        {/* Main Card / CTA */}
-        <div className="welcome-card">
-          <h2>Fruityger</h2>
-          <p>Jump in and explore your vibrant social space</p>
+        <div className="welcome-sky-glow welcome-sky-glow-left" aria-hidden="true" />
+        <div className="welcome-sky-glow welcome-sky-glow-right" aria-hidden="true" />
+        <div className="welcome-cloud welcome-cloud-one" aria-hidden="true" />
+        <div className="welcome-cloud welcome-cloud-two" aria-hidden="true" />
 
-          <div className="welcome-buttons">
-            <button onClick={() => navigate("/signup")}>Get Started</button>
+        <div className="welcome-card">
+          <div className="welcome-hero-copy">
+            <p className="welcome-kicker">Daydream social</p>
+            <h1>Fruityger</h1>
+            <p className="welcome-description">
+              Drift into a glossy little internet where posts sparkle, profiles feel playful,
+              and every corner hums with Modern + Frutiger Aero nostalgia combined.
+            </p>
+
+            <div className="welcome-buttons">
+              <button className="welcome-primary-btn" onClick={() => navigate("/signup")}>
+                Start your glow
+              </button>
+              <button className="welcome-secondary-btn" onClick={() => navigate("/login")}>
+                I already have an account
+              </button>
+            </div>
+
+            <div className="welcome-feature-row">
+              <div className="welcome-feature-pill">Glassy profiles</div>
+              <div className="welcome-feature-pill">Soft motion</div>
+              <div className="welcome-feature-pill">Cute communities</div>
+            </div>
           </div>
+
+          <div className="welcome-scene" aria-hidden="true">
+            <div className="welcome-orb orb-large"></div>
+            <div className="welcome-orb orb-small"></div>
+            <div className="welcome-character character-bunny">
+              <span className="character-ear ear-left"></span>
+              <span className="character-ear ear-right"></span>
+              <span className="character-eye eye-left"></span>
+              <span className="character-eye eye-right"></span>
+              <span className="character-mouth"></span>
+              <span className="character-cheek cheek-left"></span>
+              <span className="character-cheek cheek-right"></span>
+            </div>
+            <div className="welcome-character character-blob">
+              <span className="character-eye eye-left"></span>
+              <span className="character-eye eye-right"></span>
+              <span className="character-mouth smile"></span>
+              <span className="character-cheek cheek-left"></span>
+              <span className="character-cheek cheek-right"></span>
+            </div>
+            <div className="welcome-mini-bubbles">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+        </div>
+
+        <div className="welcome-footer">
+          <div className="welcome-legal-links">
+            <Link to="/terms">Terms and Conditions</Link>
+            <Link to="/privacy">Privacy Policy</Link>
+            <Link to="/cookies">Cookie Policy</Link>
+            <Link to="/about">About</Link>
+          </div>
+          <p className="welcome-copyright">
+            c 2026 DOSSIER SOFTWARE DEVELOPMENT SERVICES
+          </p>
         </div>
       </div>
     </div>

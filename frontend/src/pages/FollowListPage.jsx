@@ -114,7 +114,7 @@ export default function FollowListPage() {
 
           <div className="follow-list-header-text">
             <h2>{pageTitle}</h2>
-            <p>@{ownerUsername}</p>
+            <p className="follow-list-owner">@{ownerUsername}</p>
           </div>
         </div>
 

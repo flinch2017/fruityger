@@ -1,147 +1,701 @@
 :root {
-  --aero-cyan: #00d4ff;
-  --aero-blue: #4facfe;
-  --aero-sky: #b6f0ff;
-  --glass: rgba(255, 255, 255, 0.35);
-  --border-light: rgba(255, 255, 255, 0.8);
-  --text-dark: #0277a8;
-  --text-light: #ffffff;
+  --welcome-cyan: #6fe8ff;
+  --welcome-blue: #29bfff;
+  --welcome-deep: #0b7aa4;
+  --welcome-ink: #25637a;
+  --welcome-cloud: rgba(255, 255, 255, 0.76);
 }
 
-/* ===== FULL PAGE ===== */
 .welcome-page {
+  position: relative;
   width: 100%;
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
-
-  background: linear-gradient(160deg, #e0f7ff, #c9f6ff, #dffbff);
-
-  font-family: "Segoe UI", sans-serif;
-  padding: 20px;
+  justify-content: center;
+  overflow: hidden;
+  padding: 36px 24px;
+  background:
+    radial-gradient(circle at 15% 18%, rgba(255, 255, 255, 0.92), transparent 18%),
+    radial-gradient(circle at 82% 14%, rgba(160, 245, 255, 0.68), transparent 20%),
+    radial-gradient(circle at 50% 85%, rgba(112, 225, 255, 0.24), transparent 28%),
+    linear-gradient(160deg, #dff9ff 0%, #c6f3ff 35%, #d8fbff 62%, #eefcff 100%);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   box-sizing: border-box;
 }
 
-
-
-/* ===== MAIN CARD / CTA ===== */
-.welcome-card {
-  text-align: center;
-  padding: 50px 40px;
-  border-radius: 40px;
-  width: 100%;
-  max-width: 600px;
-
-  background: var(--glass);
-  backdrop-filter: blur(25px);
-  border: 1px solid var(--border-light);
-  box-shadow: 0 20px 50px rgba(0, 200, 255, 0.2),
-              inset 0 0 40px rgba(255, 255, 255, 0.6);
+.welcome-sky-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(10px);
+  opacity: 0.72;
+  pointer-events: none;
+  animation: welcomeFloat 8s ease-in-out infinite;
 }
 
-.welcome-card h2 {
-  font-size: 32px;
-  margin-bottom: 12px;
-  color: var(--text-dark);
+.welcome-sky-glow-left {
+  top: 8%;
+  left: -4%;
+  width: 240px;
+  height: 240px;
+  background: radial-gradient(circle, rgba(255,255,255,0.96), rgba(140,232,255,0.38) 60%, transparent 72%);
 }
 
-.welcome-card p {
-  font-size: 16px;
-  margin-bottom: 30px;
-  color: var(--text-dark);
-  opacity: 0.85;
+.welcome-sky-glow-right {
+  right: -6%;
+  bottom: 6%;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(170,245,255,0.82), rgba(255,255,255,0.18) 62%, transparent 74%);
+  animation-delay: -3s;
 }
 
-/* ===== BUTTON WITH LIQUID FILL ===== */
-.welcome-buttons button {
-  position: relative;
-  overflow: hidden;
-  padding: 14px 28px;
-  border-radius: 50px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-dark);
-  background: rgba(255, 255, 255, 0.15); /* glass effect */
-  backdrop-filter: blur(15px);
-  box-shadow: 0 5px 15px rgba(0, 212, 255, 0.3),
-              inset 0 2px 5px rgba(255,255,255,0.6);
-  transition: transform 0.2s ease;
+.welcome-cloud {
+  position: absolute;
+  background: var(--welcome-cloud);
+  border-radius: 999px;
+  filter: blur(1px);
+  box-shadow:
+    0 16px 32px rgba(105, 204, 235, 0.16),
+    inset 0 2px 8px rgba(255,255,255,0.85);
+  animation: welcomeCloudDrift 16s linear infinite;
 }
 
-/* Text always on top */
-.welcome-buttons button span {
-  position: relative;
-  z-index: 3;  /* above liquid */
-  text-shadow: 0 0 6px rgba(0,0,0,0.6);
-}
-
-/* Liquid wave layer */
-.welcome-buttons button::before,
-.welcome-buttons button::after {
+.welcome-cloud::before,
+.welcome-cloud::after {
   content: "";
   position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 200%;
-  height: 50%;  /* only fill bottom half for readability */
-  border-radius: 50%;
-  background: rgba(0, 212, 255, 0.25);
+  background: inherit;
+  border-radius: inherit;
+}
+
+.welcome-cloud-one {
+  top: 12%;
+  left: 12%;
+  width: 122px;
+  height: 40px;
+}
+
+.welcome-cloud-one::before {
+  width: 44px;
+  height: 44px;
+  left: 16px;
+  top: -20px;
+}
+
+.welcome-cloud-one::after {
+  width: 54px;
+  height: 54px;
+  right: 14px;
+  top: -24px;
+}
+
+.welcome-cloud-two {
+  right: 14%;
+  top: 20%;
+  width: 142px;
+  height: 44px;
+  animation-duration: 19s;
+  animation-delay: -8s;
+}
+
+.welcome-cloud-two::before {
+  width: 50px;
+  height: 50px;
+  left: 18px;
+  top: -22px;
+}
+
+.welcome-cloud-two::after {
+  width: 60px;
+  height: 60px;
+  right: 16px;
+  top: -28px;
+}
+
+.welcome-card {
+  position: relative;
   z-index: 1;
-  animation: liquidMove 3s ease-in-out infinite;
+  width: min(1120px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  align-items: center;
+  gap: 28px;
+  padding: 42px 42px 38px;
+  border-radius: 42px;
+  background:
+    radial-gradient(circle at top left, rgba(255,255,255,0.98), transparent 26%),
+    radial-gradient(circle at 82% 12%, rgba(133, 242, 255, 0.42), transparent 18%),
+    linear-gradient(155deg, rgba(255,255,255,0.76), rgba(196,239,255,0.5));
+  border: 1px solid rgba(255,255,255,0.94);
+  box-shadow:
+    0 28px 68px rgba(0, 166, 255, 0.2),
+    inset 0 1px 0 rgba(255,255,255,0.98),
+    inset 0 -18px 26px rgba(118, 216, 255, 0.14);
+  backdrop-filter: blur(26px);
+  overflow: hidden;
 }
 
-/* Second wave for realism */
-.welcome-buttons button::after {
-  background: rgba(0, 212, 255, 0.15);
-  animation: liquidMoveAlt 4s ease-in-out infinite;
+.welcome-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.28), transparent 28%);
+  pointer-events: none;
 }
 
-/* Wave movement */
-@keyframes liquidMove {
-  0%   { transform: translateX(-50%) translateY(25%); }
-  50%  { transform: translateX(-25%) translateY(5%); }
-  100% { transform: translateX(-50%) translateY(25%); }
+.welcome-hero-copy {
+  position: relative;
+  z-index: 1;
 }
 
-@keyframes liquidMoveAlt {
-  0%   { transform: translateX(-50%) translateY(15%); }
-  50%  { transform: translateX(-30%) translateY(-5%); }
-  100% { transform: translateX(-50%) translateY(15%); }
+.welcome-kicker {
+  margin: 0 0 10px;
+  color: #2498bc;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.welcome-hero-copy h1 {
+  margin: 0;
+  color: var(--welcome-deep);
+  font-size: clamp(3.4rem, 8vw, 5.6rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  text-shadow:
+    0 0 14px rgba(255,255,255,0.68),
+    0 0 24px rgba(0, 204, 255, 0.16);
+  animation: welcomeTextRise 0.9s cubic-bezier(.27,.96,.44,1) both;
+}
+
+.welcome-description {
+  max-width: 520px;
+  margin: 16px 0 0;
+  color: var(--welcome-ink);
+  font-size: 1.05rem;
+  line-height: 1.75;
+  animation: welcomeTextRise 1s cubic-bezier(.27,.96,.44,1) both;
+  animation-delay: 0.08s;
+}
+
+.welcome-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 28px;
+  animation: welcomeTextRise 1s cubic-bezier(.27,.96,.44,1) both;
+  animation-delay: 0.16s;
+}
+
+.welcome-buttons button {
+  border: none;
+  cursor: pointer;
+  transition: transform 0.24s ease, box-shadow 0.24s ease, filter 0.24s ease;
+}
+
+.welcome-primary-btn,
+.welcome-secondary-btn {
+  position: relative;
+  min-height: 54px;
+  padding: 0 24px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.98rem;
+  letter-spacing: 0.01em;
+}
+
+.welcome-primary-btn {
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255,255,255,0.9), rgba(255,255,255,0.22) 34%, transparent 56%),
+    linear-gradient(145deg, #93f0ff, #33c7f1 54%, #168de0);
+  box-shadow:
+    0 18px 28px rgba(0, 176, 255, 0.22),
+    inset 0 1px 0 rgba(255,255,255,0.96),
+    inset 0 -10px 18px rgba(0, 119, 181, 0.22);
+}
+
+.welcome-secondary-btn {
+  color: var(--welcome-deep);
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255,255,255,0.96), rgba(255,255,255,0.24) 34%, transparent 56%),
+    linear-gradient(145deg, rgba(255,255,255,0.82), rgba(213,246,255,0.58));
+  border: 1px solid rgba(255,255,255,0.88);
+  box-shadow:
+    0 14px 24px rgba(0, 176, 255, 0.12),
+    inset 0 1px 0 rgba(255,255,255,0.96);
 }
 
 .welcome-buttons button:hover {
-  transform: translateY(-2px) scale(1.05);
+  transform: translateY(-2px) scale(1.03);
+  filter: saturate(1.06);
 }
 
+.welcome-feature-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+  animation: welcomeTextRise 1.05s cubic-bezier(.27,.96,.44,1) both;
+  animation-delay: 0.24s;
+}
 
+.welcome-feature-pill {
+  padding: 10px 14px;
+  border-radius: 999px;
+  color: #187ea1;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: rgba(255,255,255,0.62);
+  border: 1px solid rgba(255,255,255,0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.96),
+    0 10px 18px rgba(0, 177, 255, 0.1);
+}
 
-/* ===== RESPONSIVE ===== */
-@media (max-width: 480px) {
-  .welcome-header h1 { font-size: 36px; }
-  .welcome-header p { font-size: 14px; }
+.welcome-scene {
+  position: relative;
+  min-height: 430px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
 
-  .welcome-card { padding: 30px 20px; }
-  .welcome-card h2 { font-size: 24px; }
-  .welcome-card p { font-size: 14px; }
+.welcome-orb {
+  position: absolute;
+  border-radius: 50%;
+  backdrop-filter: blur(8px);
+  box-shadow:
+    inset 0 2px 8px rgba(255,255,255,0.92),
+    0 18px 28px rgba(0, 176, 255, 0.16);
+  animation: welcomeFloat 7s ease-in-out infinite;
+}
+
+.orb-large {
+  width: 220px;
+  height: 220px;
+  top: 52px;
+  left: 60px;
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255,255,255,0.94), rgba(255,255,255,0.3) 34%, transparent 56%),
+    linear-gradient(180deg, rgba(193,245,255,0.8), rgba(81,214,245,0.34));
+}
+
+.orb-small {
+  width: 118px;
+  height: 118px;
+  top: 18px;
+  right: 38px;
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255,255,255,0.96), rgba(255,255,255,0.22) 32%, transparent 54%),
+    linear-gradient(180deg, rgba(255,255,255,0.86), rgba(136, 237, 255, 0.34));
+  animation-delay: -2.5s;
+}
+
+.welcome-character {
+  position: absolute;
+  display: block;
+  transform-origin: center bottom;
+}
+
+.character-bunny {
+  bottom: 42px;
+  left: 52px;
+  width: 190px;
+  height: 190px;
+  border-radius: 46% 46% 42% 42%;
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255,255,255,0.96), rgba(255,255,255,0.28) 28%, transparent 46%),
+    linear-gradient(180deg, #fbffff, #d8f7ff 54%, #8de4ff 100%);
+  box-shadow:
+    0 24px 34px rgba(0, 166, 255, 0.16),
+    inset 0 2px 8px rgba(255,255,255,0.96);
+  animation: characterBounce 4.2s ease-in-out infinite;
+}
+
+.character-blob {
+  right: 26px;
+  bottom: 20px;
+  width: 170px;
+  height: 148px;
+  border-radius: 48% 52% 44% 56% / 54% 54% 46% 46%;
+  background:
+    radial-gradient(circle at 34% 24%, rgba(255,255,255,0.94), rgba(255,255,255,0.24) 28%, transparent 46%),
+    linear-gradient(180deg, #f8ffff, #d9fbff 52%, #a1ebff 100%);
+  box-shadow:
+    0 24px 34px rgba(0, 166, 255, 0.14),
+    inset 0 2px 8px rgba(255,255,255,0.96);
+  animation: characterBounce 4.8s ease-in-out infinite;
+  animation-delay: -1.2s;
+}
+
+.character-ear {
+  position: absolute;
+  top: -70px;
+  width: 48px;
+  height: 88px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, #fcffff, #cdf6ff 54%, #95e7ff);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.98);
+}
+
+.ear-left {
+  left: 34px;
+  transform: rotate(-10deg);
+}
+
+.ear-right {
+  right: 34px;
+  transform: rotate(10deg);
+}
+
+.character-ear::after {
+  content: "";
+  position: absolute;
+  inset: 12px 10px 16px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 205, 233, 0.8), rgba(255, 169, 212, 0.54));
+}
+
+.character-eye {
+  position: absolute;
+  top: 84px;
+  width: 12px;
+  height: 18px;
+  border-radius: 999px;
+  background: #23728d;
+}
+
+.eye-left {
+  left: 62px;
+}
+
+.eye-right {
+  right: 62px;
+}
+
+.character-mouth {
+  position: absolute;
+  left: 50%;
+  bottom: 56px;
+  width: 28px;
+  height: 16px;
+  border-bottom: 4px solid #2f7e99;
+  border-radius: 0 0 999px 999px;
+  transform: translateX(-50%);
+}
+
+.character-mouth.smile {
+  width: 34px;
+  bottom: 42px;
+}
+
+.character-cheek {
+  position: absolute;
+  bottom: 62px;
+  width: 26px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(255, 158, 206, 0.6);
+  filter: blur(1px);
+}
+
+.cheek-left {
+  left: 38px;
+}
+
+.cheek-right {
+  right: 38px;
+}
+
+.welcome-mini-bubbles {
+  position: absolute;
+  right: 12px;
+  top: 42px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.welcome-mini-bubbles span {
+  display: block;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255,255,255,0.96), rgba(255,255,255,0.24) 36%, transparent 56%),
+    linear-gradient(180deg, rgba(255,255,255,0.8), rgba(128,235,255,0.32));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.96),
+    0 14px 20px rgba(0, 176, 255, 0.12);
+  animation: welcomeFloat 5.2s ease-in-out infinite;
+}
+
+.welcome-mini-bubbles span:nth-child(1) {
+  width: 24px;
+  height: 24px;
+}
+
+.welcome-mini-bubbles span:nth-child(2) {
+  width: 14px;
+  height: 14px;
+  margin-left: 12px;
+  animation-delay: -1.1s;
+}
+
+.welcome-mini-bubbles span:nth-child(3) {
+  width: 18px;
+  height: 18px;
+  margin-left: 5px;
+  animation-delay: -2.1s;
+}
+
+.welcome-footer {
+  position: relative;
+  z-index: 1;
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.welcome-legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 14px;
+}
+
+.welcome-legal-links a {
+  color: #177d9f;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.48);
+  border: 1px solid rgba(255,255,255,0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.95),
+    0 10px 18px rgba(0, 176, 255, 0.08);
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+}
+
+.welcome-legal-links a:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.98),
+    0 14px 22px rgba(0, 176, 255, 0.12);
+}
+
+.welcome-copyright {
+  margin: 0;
+  color: #2d6e84;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+@keyframes welcomeFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes welcomeCloudDrift {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(16px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes welcomeTextRise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes characterBounce {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(-1.5deg);
+  }
+}
+
+@media (max-width: 980px) {
+  .welcome-card {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 34px 26px 32px;
+  }
+
+  .welcome-hero-copy {
+    text-align: center;
+  }
+
+  .welcome-description {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .welcome-buttons,
+  .welcome-feature-row {
+    justify-content: center;
+  }
+
+  .welcome-scene {
+    min-height: 320px;
+  }
+
+  .character-bunny {
+    left: 14%;
+  }
+
+  .character-blob {
+    right: 10%;
+  }
+}
+
+@media (max-width: 640px) {
+  .welcome-page {
+    padding: 24px 16px;
+  }
+
+  .welcome-card {
+    padding: 28px 18px 22px;
+    border-radius: 30px;
+  }
+
+  .welcome-hero-copy h1 {
+    font-size: 3.5rem;
+  }
+
+  .welcome-description {
+    font-size: 0.97rem;
+  }
 
   .welcome-buttons {
     flex-direction: column;
-    gap: 12px;
   }
 
-  .welcome-buttons button {
-    font-size: 14px;
-    padding: 12px 20px;
+  .welcome-primary-btn,
+  .welcome-secondary-btn {
     width: 100%;
+  }
+
+  .welcome-feature-row {
+    justify-content: center;
+  }
+
+  .welcome-footer {
+    margin-top: 18px;
+  }
+
+  .welcome-legal-links {
+    gap: 8px;
+  }
+
+  .welcome-legal-links a {
+    font-size: 0.82rem;
+    padding: 7px 10px;
+  }
+
+  .welcome-copyright {
+    font-size: 0.74rem;
+    letter-spacing: 0.05em;
+  }
+
+  .welcome-scene {
+    min-height: 260px;
+  }
+
+  .orb-large {
+    width: 160px;
+    height: 160px;
+    left: 10px;
+  }
+
+  .orb-small {
+    width: 94px;
+    height: 94px;
+    right: 12px;
+  }
+
+  .character-bunny {
+    width: 138px;
+    height: 138px;
+    left: 6%;
+    bottom: 42px;
+  }
+
+  .character-bunny .character-ear {
+    top: -50px;
+    width: 34px;
+    height: 68px;
+  }
+
+  .character-bunny .character-eye {
+    top: 62px;
+    width: 10px;
+    height: 14px;
+  }
+
+  .character-bunny .eye-left {
+    left: 46px;
+  }
+
+  .character-bunny .eye-right {
+    right: 46px;
+  }
+
+  .character-bunny .character-mouth {
+    bottom: 38px;
+  }
+
+  .character-blob {
+    width: 126px;
+    height: 112px;
+    right: 2%;
+  }
+
+  .character-blob .character-eye {
+    top: 52px;
+    width: 9px;
+    height: 13px;
+  }
+
+  .character-blob .eye-left {
+    left: 40px;
+  }
+
+  .character-blob .eye-right {
+    right: 40px;
+  }
+
+  .character-blob .character-mouth {
+    bottom: 30px;
   }
 }
 
 body.welcome {
   padding-top: 0;
 }
-
-

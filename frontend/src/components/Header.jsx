@@ -16,6 +16,20 @@ export default function Header() {
   const searchRef = useRef(null);
 
   const isCreatePage = location.pathname === "/create";
+  const storedProfilePic = localStorage.getItem("profile_pic") || "";
+  const profileUsername = currentUser?.username || localStorage.getItem("username") || "You";
+  const profileHandle = `@${profileUsername}`;
+
+  const syncCurrentUserFromStorage = () => {
+    const storedUsername = localStorage.getItem("username");
+    const storedPic = localStorage.getItem("profile_pic");
+
+    setCurrentUser((prev) => ({
+      ...(prev || {}),
+      ...(storedUsername ? { username: storedUsername } : {}),
+      profile_pic: storedPic || prev?.profile_pic || "",
+    }));
+  };
 
   const toggleDropdown = () => setDropdownOpen((prev) => !prev);
 
@@ -34,6 +48,8 @@ export default function Header() {
       const token = localStorage.getItem("token");
       if (!token) return;
 
+      syncCurrentUserFromStorage();
+
       try {
         const res = await fetch("http://localhost:5000/api/main/me", {
           headers: { Authorization: `Bearer ${token}` },
@@ -49,6 +65,18 @@ export default function Header() {
     };
 
     fetchCurrentUser();
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const handleProfileUpdated = () => {
+      syncCurrentUserFromStorage();
+    };
+
+    window.addEventListener("fruityger:profile-updated", handleProfileUpdated);
+
+    return () => {
+      window.removeEventListener("fruityger:profile-updated", handleProfileUpdated);
+    };
   }, []);
 
   useEffect(() => {
@@ -191,14 +219,14 @@ export default function Header() {
         <div className="nav-row">
           <nav className="nav-items">
             <button
-              className="nav-button desktop-create-btn"
+              className={`nav-button desktop-create-btn ${location.pathname === "/create" ? "active" : ""}`}
               onClick={() => navigate("/create")}
               title="Create Post"
             >
               ➕
             </button>
 
-            <button className="nav-button" onClick={handleFeedNav}>
+            <button className={`nav-button ${location.pathname === "/feed" ? "active" : ""}`} onClick={handleFeedNav}>
               🏠
             </button>
 
@@ -210,7 +238,7 @@ export default function Header() {
             </button>
 
             <button
-              className="nav-button nav-button-bell"
+              className={`nav-button nav-button-bell ${location.pathname === "/notifications" ? "active" : ""}`}
               onClick={() => navigate("/notifications")}
             >
               🔔
@@ -221,7 +249,10 @@ export default function Header() {
               )}
             </button>
 
-            <button className="nav-button nav-button-message" onClick={() => navigate("/messages")}>
+            <button
+              className={`nav-button nav-button-message ${location.pathname === "/messages" ? "active" : ""}`}
+              onClick={() => navigate("/messages")}
+            >
               ✉️
               {messageUnreadCount > 0 && (
                 <span className="nav-badge">
@@ -232,9 +263,9 @@ export default function Header() {
 
             <div className="profile-container" ref={profileRef}>
               <div className="profile-placeholder" onClick={toggleDropdown}>
-                {currentUser?.profile_pic ? (
+                {currentUser?.profile_pic || storedProfilePic ? (
                   <img
-                    src={currentUser.profile_pic}
+                    src={currentUser?.profile_pic || storedProfilePic}
                     alt="Avatar"
                     style={{
                       width: "100%",
@@ -250,33 +281,55 @@ export default function Header() {
 
               {dropdownOpen && (
                 <div className="profile-dropdown">
+                  <div className="profile-dropdown-hero">
+                    <div className="profile-dropdown-avatar">
+                      {currentUser?.profile_pic || storedProfilePic ? (
+                        <img src={currentUser?.profile_pic || storedProfilePic} alt="Avatar" />
+                      ) : (
+                        "👤"
+                      )}
+                    </div>
+                    <div className="profile-dropdown-copy">
+                      <strong>{profileUsername}</strong>
+                      <span>{profileHandle}</span>
+                    </div>
+                  </div>
+
+                  <div className="profile-dropdown-divider"></div>
+
                   <button
+                    className="profile-dropdown-action"
                     onClick={() => {
                       const username = localStorage.getItem("username");
                       navigate(username ? `/profile/${username}` : "/feed");
                       setDropdownOpen(false);
                     }}
                   >
-                    Profile
+                    <span className="profile-dropdown-icon">👤</span>
+                    <span>Profile</span>
                   </button>
 
                   <button
+                    className="profile-dropdown-action"
                     onClick={() => {
                       navigate("/settings");
                       setDropdownOpen(false);
                     }}
                   >
-                    Settings
+                    <span className="profile-dropdown-icon">⚙️</span>
+                    <span>Settings</span>
                   </button>
 
                   <button
+                    className="profile-dropdown-action danger"
                     onClick={() => {
                       clearAuthStorage();
                       setDropdownOpen(false);
                       navigate("/login");
                     }}
                   >
-                    Logout
+                    <span className="profile-dropdown-icon">⏻</span>
+                    <span>Logout</span>
                   </button>
                 </div>
               )}

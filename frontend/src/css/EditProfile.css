@@ -65,10 +65,11 @@
 }
 
 /* ===== INPUTS ===== */
-.edit-profile-form input {
+.edit-profile-form input,
+.edit-profile-form textarea {
   width: 100%;
   padding: 14px 18px;
-  border-radius: 50px;
+  border-radius: 24px;
   border: none;
   outline: none;
   font-size: 0.95rem;
@@ -86,11 +87,28 @@
   transition: all 0.25s ease;
 }
 
-.edit-profile-form input:focus {
+.edit-profile-form input {
+  border-radius: 50px;
+}
+
+.edit-profile-form textarea {
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.edit-profile-form input:focus,
+.edit-profile-form textarea:focus {
   box-shadow:
     inset 0 2px 8px rgba(0, 150, 255, 0.25),
     0 0 15px rgba(0, 212, 255, 0.5);
   transform: scale(1.02);
+}
+
+.edit-profile-hint {
+  align-self: flex-end;
+  font-size: 0.78rem;
+  color: #4b8198;
 }
 
 /* ===== BUTTON ===== */

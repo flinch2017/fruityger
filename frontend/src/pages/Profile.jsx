@@ -677,7 +677,13 @@ export default function Profile() {
           </div>
 
           <h2>{user.username}</h2>
-          <p>Status: Feeling nostalgic ✨</p>
+          {user.bio ? (
+            <p className="profile-bio">{user.bio}</p>
+          ) : isOwnProfile ? (
+            <p className="profile-bio profile-bio-empty">
+              Add a bio to tell people a little about you.
+            </p>
+          ) : null}
 
           <div className="profile-actions">
             {isOwnProfile ? (
