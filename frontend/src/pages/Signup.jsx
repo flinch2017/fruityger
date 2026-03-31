@@ -61,7 +61,8 @@ const normalizeUsername = (value = "") =>
     .replace(/[^a-z0-9._]/g, "")
     .replace(/_+/g, "_")
     .replace(/\.+/g, ".")
-    .replace(/^[_\.]+|[_\.]+$/g, "");
+    .replace(/^[^a-z]+/, "")
+    .replace(/\.$/g, "");
 
 const getPasswordChecklist = (password) => [
   { label: "8+ characters", met: password.length >= 8 },
@@ -263,7 +264,7 @@ export default function Signup() {
             />
 
             <p className="signup-password-hint">
-              Lowercase only. Spaces become underscores. Hyphens are not allowed.
+              Lowercase only. Must start with a letter. Spaces become underscores. Cannot end with a period.
             </p>
 
             <input

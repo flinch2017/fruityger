@@ -115,7 +115,8 @@ const normalizeUsername = (value = "") =>
     .replace(/[^a-z0-9._]/g, "")
     .replace(/_+/g, "_")
     .replace(/\.+/g, ".")
-    .replace(/^[_\.]+|[_\.]+$/g, "");
+    .replace(/^[^a-z]+/, "")
+    .replace(/\.$/g, "");
 
 const getUsernameValidationMessage = (username) => {
   if (!username) {
@@ -128,6 +129,14 @@ const getUsernameValidationMessage = (username) => {
 
   if (username.length > 30) {
     return "Username must be 30 characters or fewer";
+  }
+
+  if (!/^[a-z]/.test(username)) {
+    return "Username must start with a letter";
+  }
+
+  if (username.endsWith(".")) {
+    return "Username cannot end with a period";
   }
 
   if (!/^[a-z0-9._]+$/.test(username)) {
