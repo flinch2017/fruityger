@@ -48,6 +48,7 @@ export default function Profile() {
   const profileMenuRef = useRef(null);
   const [isBlockedProfile, setIsBlockedProfile] = useState(false);
   const [guestPromptOpen, setGuestPromptOpen] = useState(false);
+  const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
 
   const LIMIT = 5;
   const navigate = useNavigate();
@@ -687,6 +688,34 @@ export default function Profile() {
         </div>
       )}
 
+      {avatarViewerOpen && user?.profile_pic && (
+        <div
+          className="profile-avatar-overlay"
+          onClick={() => setAvatarViewerOpen(false)}
+        >
+          <div
+            className="profile-avatar-viewer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="profile-avatar-close"
+              onClick={() => setAvatarViewerOpen(false)}
+            >
+              ×
+            </button>
+
+            <img
+              src={getSafeMediaUrl(user.profile_pic)}
+              alt={`${user.username} profile`}
+              className="profile-avatar-expanded"
+            />
+
+            <p className="profile-avatar-caption">@{user.username}</p>
+          </div>
+        </div>
+      )}
+
       {activeCommentPost && token && (
         <CommentSheet
           postId={activeCommentPost}
@@ -724,11 +753,19 @@ export default function Profile() {
         )}
 
         <div className="profile-info">
-          <div className="profile-avatar">
+          <button
+            type="button"
+            className={`profile-avatar ${user.profile_pic ? "clickable" : ""}`}
+            onClick={() => {
+              if (user.profile_pic) {
+                setAvatarViewerOpen(true);
+              }
+            }}
+          >
             {user.profile_pic ?
               <img src={getSafeMediaUrl(user.profile_pic)} alt="Avatar" />
               : "👤"}
-          </div>
+          </button>
 
           <h2>{user.username}</h2>
           {user.bio ? (
