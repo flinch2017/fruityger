@@ -53,6 +53,34 @@ const getPasswordValidationMessage = (password) => {
   return "";
 };
 
+const getPasswordChecklist = (password) => [
+  { label: "8+ characters", met: password.length >= 8 },
+  { label: "Uppercase letter", met: /[A-Z]/.test(password) },
+  { label: "Lowercase letter", met: /[a-z]/.test(password) },
+  { label: "Number", met: /\d/.test(password) },
+  { label: "Special character", met: /[^A-Za-z0-9]/.test(password) },
+  { label: "No spaces", met: password.length > 0 && !/\s/.test(password) },
+];
+
+const getPasswordStrength = (password) => {
+  if (!password) {
+    return { label: "Waiting", tone: "idle", score: 0 };
+  }
+
+  const checklist = getPasswordChecklist(password);
+  const metCount = checklist.filter((item) => item.met).length;
+
+  if (metCount <= 3) {
+    return { label: "Weak", tone: "weak", score: metCount };
+  }
+
+  if (metCount <= 5) {
+    return { label: "Strong", tone: "strong", score: metCount };
+  }
+
+  return { label: "Strongest", tone: "strongest", score: metCount };
+};
+
 export default function Signup() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
@@ -65,9 +93,15 @@ export default function Signup() {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
   const [birthDateInputType, setBirthDateInputType] = useState("text");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const captchaRef = useRef(null);
   const birthDateRef = useRef(null);
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+  const passwordChecklist = getPasswordChecklist(form.password);
+  const passwordStrength = getPasswordStrength(form.password);
+  const confirmMatches =
+    form.confirmPassword.length > 0 && form.password === form.confirmPassword;
 
   useEffect(() => {
     document.body.classList.add("welcome");
@@ -237,29 +271,91 @@ export default function Signup() {
               required
             />
 
-            <input
-              type="password"
-              name="password"
-              placeholder="Password"
-              className="signup-aero-input"
-              value={form.password}
-              onChange={handleChange}
-              required
-            />
+            <div className="signup-password-field">
+              <input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                placeholder="Password"
+                className="signup-aero-input signup-password-input"
+                value={form.password}
+                onChange={handleChange}
+                required
+              />
+              <button
+                type="button"
+                className="signup-password-toggle"
+                onClick={() => setShowPassword((prev) => !prev)}
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
 
-            <p className="signup-password-hint">
-              Use 8+ characters with uppercase, lowercase, a number, and a special character.
+            <div className={`signup-password-strength ${passwordStrength.tone}`}>
+              <div className="signup-password-strength-top">
+                <span>Password strength</span>
+                <strong>{passwordStrength.label}</strong>
+              </div>
+
+              <div className="signup-password-strength-bars">
+                {[1, 2, 3].map((bar) => (
+                  <span
+                    key={bar}
+                    className={
+                      passwordStrength.score >= bar * 2 ||
+                      (bar === 1 && passwordStrength.score > 0)
+                        ? "active"
+                        : ""
+                    }
+                  />
+                ))}
+              </div>
+
+              <div className="signup-password-checklist">
+                {passwordChecklist.map((item) => (
+                  <span
+                    key={item.label}
+                    className={item.met ? "met" : ""}
+                  >
+                    {item.met ? "✓" : "•"} {item.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="signup-password-field">
+              <input
+                type={showConfirmPassword ? "text" : "password"}
+                name="confirmPassword"
+                placeholder="Confirm Password"
+                className="signup-aero-input signup-password-input"
+                value={form.confirmPassword}
+                onChange={handleChange}
+                required
+              />
+              <button
+                type="button"
+                className="signup-password-toggle"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+              >
+                {showConfirmPassword ? "Hide" : "Show"}
+              </button>
+            </div>
+
+            <p
+              className={`signup-password-hint signup-confirm-status ${
+                form.confirmPassword
+                  ? confirmMatches
+                    ? "match"
+                    : "mismatch"
+                  : ""
+              }`}
+            >
+              {form.confirmPassword
+                ? confirmMatches
+                  ? "Passwords match."
+                  : "Passwords do not match yet."
+                : "Use 8+ characters with uppercase, lowercase, a number, and a special character."}
             </p>
-
-            <input
-              type="password"
-              name="confirmPassword"
-              placeholder="Confirm Password"
-              className="signup-aero-input"
-              value={form.confirmPassword}
-              onChange={handleChange}
-              required
-            />
 
             <ReCAPTCHA
               ref={captchaRef}

@@ -14,6 +14,7 @@ export default function Feed() {
   const pullStartYRef = useRef(0);
   const isPullingRef = useRef(false);
   const dropdownRef = useRef(null);
+  const gestureAxisRef = useRef(null);
 
   const [posts, setPosts] = useState([]);
   const [activeIndexMap, setActiveIndexMap] = useState({});
@@ -262,6 +263,7 @@ export default function Feed() {
 
   const handlePointerStart = (e) => {
     const touch = e.touches ? e.touches[0] : e;
+    gestureAxisRef.current = null;
     setDragging(true);
     setDragStartX(touch.clientX);
     setTouchStartY(touch.clientY);
@@ -273,16 +275,29 @@ export default function Feed() {
     const touch = e.touches ? e.touches[0] : e;
     const dx = dragStartX - touch.clientX;
     const dy = touch.clientY - touchStartY;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
 
-    if (Math.abs(dy) > Math.abs(dx)) return;
+    if (!gestureAxisRef.current) {
+      if (absDx < 10 && absDy < 10) return;
+      gestureAxisRef.current = absDx > absDy ? "x" : "y";
+    }
 
-    if (Math.abs(dx) > 80) {
+    if (gestureAxisRef.current === "y") {
+      setDragging(false);
+      return;
+    }
+
+    if (absDx > 80) {
       moveSlide(postId, dx > 0 ? 1 : -1, mediaLength);
       setDragStartX(touch.clientX);
     }
   };
 
-  const handlePointerEnd = () => setDragging(false);
+  const handlePointerEnd = () => {
+    gestureAxisRef.current = null;
+    setDragging(false);
+  };
 
   const handleFeedTouchStart = (e) => {
     if (window.scrollY > 0 || refreshing || loadingPosts) return;

@@ -465,7 +465,7 @@
 .carousel-track {
   display: flex;
   transition: transform 0.35s ease;
-  touch-action: pan-x;
+  touch-action: pan-y;
   user-select: none;
 }
 
@@ -552,7 +552,6 @@
   will-change: transform;
   transform: translateZ(0);
 
-  touch-action: pan-x;
   touch-action: pan-y;
   user-select: none;
 }

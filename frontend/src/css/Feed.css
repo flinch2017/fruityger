@@ -382,7 +382,7 @@
   transition: transform 0.38s cubic-bezier(.34,.99,.6,1);
   will-change: transform;
   transform: translateZ(0);
-  touch-action: pan-x;
+  touch-action: pan-y;
   user-select: none;
 }
 

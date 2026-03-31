@@ -27,6 +27,7 @@ export default function Profile() {
   const loaderRef = useRef(null);
   const videoRefs = useRef({});
   const observerRef = useRef(null);
+  const gestureAxisRef = useRef(null);
   const [activeCommentPost, setActiveCommentPost] = useState(null);
 
   const [activeMenuPostId, setActiveMenuPostId] = useState(null);
@@ -434,6 +435,7 @@ export default function Profile() {
 
   const handlePointerStart = (e) => {
     const touch = e.touches ? e.touches[0] : e;
+    gestureAxisRef.current = null;
     setDragging(true);
     setDragStartX(touch.clientX);
     setTouchStartY(touch.clientY);
@@ -445,16 +447,29 @@ export default function Profile() {
     const touch = e.touches ? e.touches[0] : e;
     const dx = dragStartX - touch.clientX;
     const dy = touch.clientY - touchStartY;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
 
-    if (Math.abs(dy) > Math.abs(dx)) return;
+    if (!gestureAxisRef.current) {
+      if (absDx < 10 && absDy < 10) return;
+      gestureAxisRef.current = absDx > absDy ? "x" : "y";
+    }
 
-    if (Math.abs(dx) > 80) {
+    if (gestureAxisRef.current === "y") {
+      setDragging(false);
+      return;
+    }
+
+    if (absDx > 80) {
       moveSlide(postId, dx > 0 ? 1 : -1, mediaLength);
       setDragStartX(touch.clientX);
     }
   };
 
-  const handlePointerEnd = () => setDragging(false);
+  const handlePointerEnd = () => {
+    gestureAxisRef.current = null;
+    setDragging(false);
+  };
 
   const toggleLike = async (postId) => {
     const token = localStorage.getItem("token");

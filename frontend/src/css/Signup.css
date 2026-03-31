@@ -150,11 +150,138 @@ body.welcome .grecaptcha-badge {
   color: #6c95a6;
 }
 
+.signup-password-field {
+  position: relative;
+}
+
+.signup-password-input {
+  padding-right: 82px;
+}
+
+.signup-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  border: 1px solid rgba(255,255,255,0.9);
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #0c7da7;
+  background: linear-gradient(
+    160deg,
+    rgba(255,255,255,0.94),
+    rgba(210,245,255,0.72)
+  );
+  box-shadow:
+    0 6px 14px rgba(0, 180, 255, 0.14),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.signup-password-toggle:hover {
+  transform: translateY(calc(-50% - 1px));
+  box-shadow:
+    0 8px 16px rgba(0, 180, 255, 0.18),
+    inset 0 1px 0 rgba(255,255,255,0.98);
+}
+
+.signup-password-strength {
+  margin-top: -8px;
+  padding: 14px 16px;
+  border-radius: 24px;
+  border: 1px solid rgba(255,255,255,0.9);
+  background: linear-gradient(
+    160deg,
+    rgba(255,255,255,0.84),
+    rgba(214,244,255,0.62)
+  );
+  box-shadow:
+    0 12px 22px rgba(0, 175, 255, 0.1),
+    inset 0 1px 0 rgba(255,255,255,0.94);
+}
+
+.signup-password-strength-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: #3d7f98;
+  font-size: 0.82rem;
+}
+
+.signup-password-strength-top strong {
+  font-size: 0.88rem;
+}
+
+.signup-password-strength-bars {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.signup-password-strength-bars span {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(120, 177, 197, 0.2);
+  transition: background 0.22s ease, box-shadow 0.22s ease;
+}
+
+.signup-password-strength-bars span.active {
+  box-shadow: 0 0 12px rgba(255,255,255,0.25);
+}
+
+.signup-password-strength.weak .signup-password-strength-bars span.active {
+  background: linear-gradient(90deg, #ff9ab3, #ff6f91);
+}
+
+.signup-password-strength.strong .signup-password-strength-bars span.active {
+  background: linear-gradient(90deg, #7edfff, #34bfff);
+}
+
+.signup-password-strength.strongest .signup-password-strength-bars span.active {
+  background: linear-gradient(90deg, #7dffd5, #26d7a2);
+}
+
+.signup-password-strength.idle .signup-password-strength-bars span.active {
+  background: linear-gradient(90deg, #d7eef5, #c7e6ef);
+}
+
+.signup-password-checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.signup-password-checklist span {
+  color: #5c8ea3;
+  font-size: 0.76rem;
+}
+
+.signup-password-checklist span.met {
+  color: #1783aa;
+  font-weight: 600;
+}
+
 .signup-password-hint {
   margin: -8px 8px 0;
   color: #4a8399;
   font-size: 0.82rem;
   line-height: 1.45;
+}
+
+.signup-confirm-status.match {
+  color: #1c9172;
+  font-weight: 600;
+}
+
+.signup-confirm-status.mismatch {
+  color: #c2557e;
+  font-weight: 600;
 }
 
 /* ===== CANDY BUTTON ===== */
