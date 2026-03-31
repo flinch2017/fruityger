@@ -13,6 +13,10 @@ const mapApiUrl = (url) => {
     return url;
   }
 
+  if (url.startsWith("/api")) {
+    return configuredApiBaseUrl ? `${configuredApiBaseUrl}${url}` : url;
+  }
+
   if (!url.startsWith("http://localhost:5000") && !url.startsWith("https://localhost:5000")) {
     return url;
   }
