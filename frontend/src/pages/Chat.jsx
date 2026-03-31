@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import supabase from "../lib/supabaseClient";
 import "../css/Chat.css";
+import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function Chat() {
   const menuRef = useRef(null);
@@ -326,7 +327,7 @@ export default function Chat() {
         >
           <div className="chat-user-avatar">
             {otherUser.profile_pic ? (
-              <img src={otherUser.profile_pic} alt={otherUser.username} />
+              <img src={getSafeMediaUrl(otherUser.profile_pic)} alt={otherUser.username} />
             ) : (
               "👤"
             )}

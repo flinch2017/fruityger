@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import "../css/FollowListPage.css";
+import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function FollowListPage() {
   const navigate = useNavigate();
@@ -135,7 +136,7 @@ export default function FollowListPage() {
                 >
                   <div className="follow-list-avatar">
                     {account.profile_pic ? (
-                      <img src={account.profile_pic} alt={account.username} />
+                      <img src={getSafeMediaUrl(account.profile_pic)} alt={account.username} />
                     ) : (
                       "👤"
                     )}

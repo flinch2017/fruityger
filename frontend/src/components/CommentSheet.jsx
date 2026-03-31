@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import "../css/CommentSheet.css";
 import { formatRelativeTime } from "../utils/timeFormatter";
 import supabase from "../lib/supabaseClient";
+import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function CommentSheet({
   postId,
@@ -451,7 +452,7 @@ const loadMoreReplies = (commentId) => {
                     <div className="comment-avatar">
                       {c.profile_pic ? (
                         <img
-                          src={c.profile_pic}
+                          src={getSafeMediaUrl(c.profile_pic)}
                           alt="pfp"
                           loading="lazy"
                           onError={(e) => {
@@ -562,7 +563,7 @@ const loadMoreReplies = (commentId) => {
                               <div className="comment-avatar small">
                                 {r.profile_pic ? (
                                   <img
-                                    src={r.profile_pic}
+                                    src={getSafeMediaUrl(r.profile_pic)}
                                     alt="pfp"
                                     loading="lazy"
                                     onError={(e) => {
@@ -668,7 +669,7 @@ const loadMoreReplies = (commentId) => {
             <div className="replying-left">
               <div className="replying-avatar">
                 {replyingTo.profile_pic ? (
-                  <img src={replyingTo.profile_pic} alt="pfp" />
+                  <img src={getSafeMediaUrl(replyingTo.profile_pic)} alt="pfp" />
                 ) : (
                   "👤"
                 )}

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import CommentSheet from "./CommentSheet";
 import "../css/Feed.css";
 import "../css/CommentSheet.css";
+import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function Feed() {
   const navigate = useNavigate();
@@ -587,7 +588,7 @@ export default function Feed() {
                   className="feed-post-user-avatar clickable"
                   onClick={() => navigate(`/profile/${post.username}`)}
                 >
-                  {post.profile_pic ? <img src={post.profile_pic} alt="pfp" /> : "👤"}
+                  {post.profile_pic ? <img src={getSafeMediaUrl(post.profile_pic)} alt="pfp" /> : "👤"}
                 </div>
 
                 <div className="feed-post-user-text">
@@ -648,14 +649,14 @@ export default function Feed() {
                             }
                             videoRefs.current[post.post_id][index] = el;
                           }}
-                          src={media.media_url}
+                          src={getSafeMediaUrl(media.media_url)}
                           playsInline
                           loop
                           preload="metadata"
                           className="feed-auto-video"
                         />
                       ) : (
-                        <img src={media.media_url} alt="" />
+                        <img src={getSafeMediaUrl(media.media_url)} alt="" />
                       )}
                     </div>
                   ))}

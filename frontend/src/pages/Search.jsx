@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import CommentSheet from "../components/CommentSheet";
 import "../css/Search.css";
 import "../css/CommentSheet.css";
+import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 const SEARCH_TABS = [
   { key: "profiles", label: "Profiles", resultKey: "users" },
@@ -396,7 +397,7 @@ export default function Search() {
                     >
                       <div className="avatar-placeholder">
                         {u.profile_pic ? (
-                          <img src={u.profile_pic} alt={u.username} />
+                          <img src={getSafeMediaUrl(u.profile_pic)} alt={u.username} />
                         ) : (
                           "👤"
                         )}
@@ -464,7 +465,7 @@ export default function Search() {
                           onClick={() => navigate(`/profile/${p.username}`)}
                         >
                           {p.profile_pic ? (
-                            <img src={p.profile_pic} alt={p.username} />
+                            <img src={getSafeMediaUrl(p.profile_pic)} alt={p.username} />
                           ) : (
                             "👤"
                           )}
@@ -531,7 +532,7 @@ export default function Search() {
                                       }
                                       videoRefs.current[p.post_id][index] = el;
                                     }}
-                                    src={media.media_url}
+                                    src={getSafeMediaUrl(media.media_url)}
                                     playsInline
                                     loop
                                     muted
@@ -540,7 +541,7 @@ export default function Search() {
                                   />
                                 ) : (
                                   <img
-                                    src={media.media_url}
+                                    src={getSafeMediaUrl(media.media_url)}
                                     alt=""
                                     className="search-post-image"
                                   />

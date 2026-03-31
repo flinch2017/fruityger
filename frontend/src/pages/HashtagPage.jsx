@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import "../css/HashtagPage.css";
+import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function HashtagPage() {
   const { tag } = useParams();
@@ -144,13 +145,13 @@ export default function HashtagPage() {
                 {post.preview_media_url ? (
                   post.preview_media_type === "video" ? (
                     <video
-                      src={post.preview_media_url}
+                      src={getSafeMediaUrl(post.preview_media_url)}
                       muted
                       playsInline
                       preload="metadata"
                     />
                   ) : (
-                    <img src={post.preview_media_url} alt="" />
+                    <img src={getSafeMediaUrl(post.preview_media_url)} alt="" />
                   )
                 ) : (
                   <div className="hashtag-text-fallback">

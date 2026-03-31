@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import "../css/Profile.css";
 import CommentSheet from "../components/CommentSheet";
 import "../css/CommentSheet.css";
+import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function Profile() {
 
@@ -672,7 +673,7 @@ export default function Profile() {
         <div className="profile-info">
           <div className="profile-avatar">
             {user.profile_pic ?
-              <img src={user.profile_pic} alt="Avatar" />
+              <img src={getSafeMediaUrl(user.profile_pic)} alt="Avatar" />
               : "👤"}
           </div>
 
@@ -820,7 +821,7 @@ export default function Profile() {
               <div className="post-user-info">
                 <div className="post-user-avatar">
                   {user.profile_pic ? (
-                    <img src={user.profile_pic} alt="pfp" />
+                    <img src={getSafeMediaUrl(user.profile_pic)} alt="pfp" />
                   ) : "👤"}
                 </div>
 
@@ -890,14 +891,14 @@ export default function Profile() {
                             }
                             videoRefs.current[post.post_id][i] = el;
                           }}
-                          src={m.media_url}
+                          src={getSafeMediaUrl(m.media_url)}
                           playsInline
                           loop
                           preload="metadata"
                           className="auto-video"
                         />
                       ) : (
-                        <img src={m.media_url} alt="" />
+                        <img src={getSafeMediaUrl(m.media_url)} alt="" />
                       )}
                     </div>
                   ))}

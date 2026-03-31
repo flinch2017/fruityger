@@ -8,6 +8,12 @@ import { authenticateToken } from "../middleware/auth.js";
 import { ensureHashtagSchema, syncPostHashtags } from "../utils/hashtags.js";
 
 const router = express.Router();
+const sanitizeFileName = (value = "") =>
+    String(value)
+        .normalize("NFKD")
+        .replace(/[^\w.\-]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "") || "file";
 
 /* Memory storage (files go directly to buffer) */
 const upload = multer({
@@ -57,7 +63,7 @@ router.post(
 
                 const mediaId = uuidv4();
 
-                const key = `posts/${postId}/${mediaId}-${file.originalname}`;
+                const key = `posts/${postId}/${mediaId}-${sanitizeFileName(file.originalname)}`;
 
                 await r2.send(
                     new PutObjectCommand({

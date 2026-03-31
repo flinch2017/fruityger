@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/Messages.css";
+import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function Messages() {
   const navigate = useNavigate();
@@ -263,7 +264,7 @@ export default function Messages() {
               >
                 <div className="chat-avatar">
                   {user.profile_pic ? (
-                    <img src={user.profile_pic} alt={user.username} />
+                    <img src={getSafeMediaUrl(user.profile_pic)} alt={user.username} />
                   ) : (
                     "👤"
                   )}
@@ -321,7 +322,7 @@ export default function Messages() {
 
                   <div className="chat-avatar">
                     {otherUser?.profile_pic ? (
-                      <img src={otherUser.profile_pic} alt={otherUser.username} />
+                      <img src={getSafeMediaUrl(otherUser.profile_pic)} alt={otherUser.username} />
                     ) : (
                       <span className="avatar-initial">
                         {otherUser?.username?.[0]?.toUpperCase() || "?"}

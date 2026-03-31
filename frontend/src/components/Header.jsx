@@ -2,6 +2,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import React, { useState, useEffect, useRef } from "react";
 import "../css/Header.css";
 import { clearAuthStorage } from "../utils/authSession";
+import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function Header() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -265,7 +266,7 @@ export default function Header() {
               <div className="profile-placeholder" onClick={toggleDropdown}>
                 {currentUser?.profile_pic || storedProfilePic ? (
                   <img
-                    src={currentUser?.profile_pic || storedProfilePic}
+                    src={getSafeMediaUrl(currentUser?.profile_pic || storedProfilePic)}
                     alt="Avatar"
                     style={{
                       width: "100%",
@@ -284,7 +285,7 @@ export default function Header() {
                   <div className="profile-dropdown-hero">
                     <div className="profile-dropdown-avatar">
                       {currentUser?.profile_pic || storedProfilePic ? (
-                        <img src={currentUser?.profile_pic || storedProfilePic} alt="Avatar" />
+                        <img src={getSafeMediaUrl(currentUser?.profile_pic || storedProfilePic)} alt="Avatar" />
                       ) : (
                         "👤"
                       )}

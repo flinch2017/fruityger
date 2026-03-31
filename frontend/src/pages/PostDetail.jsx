@@ -4,6 +4,7 @@ import CommentSheet from "../components/CommentSheet";
 import "../css/Feed.css";
 import "../css/CommentSheet.css";
 import "../css/PostDetail.css";
+import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function PostDetail() {
   const { postId } = useParams();
@@ -200,7 +201,7 @@ export default function PostDetail() {
                 className="feed-post-user-avatar clickable"
                 onClick={() => navigate(`/profile/${post.username}`)}
               >
-                {post.profile_pic ? <img src={post.profile_pic} alt="pfp" /> : "👤"}
+                {post.profile_pic ? <img src={getSafeMediaUrl(post.profile_pic)} alt="pfp" /> : "👤"}
               </div>
 
               <div className="feed-post-user-text">
@@ -242,14 +243,14 @@ export default function PostDetail() {
                           if (!el) return;
                           videoRefs.current[index] = el;
                         }}
-                        src={media.media_url}
+                        src={getSafeMediaUrl(media.media_url)}
                         playsInline
                         loop
                         preload="metadata"
                         className="feed-auto-video"
                       />
                     ) : (
-                      <img src={media.media_url} alt="" />
+                      <img src={getSafeMediaUrl(media.media_url)} alt="" />
                     )}
                   </div>
                 ))}

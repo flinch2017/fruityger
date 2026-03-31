@@ -8,6 +8,12 @@ import { v4 as uuidv4 } from "uuid";
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
+const sanitizeFileName = (value = "") =>
+  String(value)
+    .normalize("NFKD")
+    .replace(/[^\w.\-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "file";
 
 router.post("/upload-pfp", upload.single("file"), async (req, res) => {
   try {
@@ -15,8 +21,13 @@ router.post("/upload-pfp", upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
-    const fileExtension = req.file.originalname.split(".").pop();
-    const fileName = `pfp/${uuidv4()}.${fileExtension}`;
+    const sanitizedOriginalName = sanitizeFileName(req.file.originalname);
+    const fileExtension = sanitizedOriginalName.includes(".")
+      ? sanitizedOriginalName.split(".").pop()
+      : "";
+    const fileName = fileExtension
+      ? `pfp/${uuidv4()}.${fileExtension}`
+      : `pfp/${uuidv4()}`;
 
     await r2.send(
       new PutObjectCommand({
