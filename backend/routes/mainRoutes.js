@@ -4,6 +4,7 @@ import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { deleteR2Object } from "../utils/r2Delete.js";
 import { ensureUserOnboardingSchema, normalizeInterests } from "../utils/userOnboarding.js";
+import { ensureRepostSchema } from "../utils/reposts.js";
 
 const router = express.Router();
 
@@ -348,6 +349,7 @@ router.put("/settings/notifications", authenticateToken, async (req, res) => {
 
 router.get("/post/:postId", authenticateToken, async (req, res) => {
   try {
+    await ensureRepostSchema();
     const userId = req.user.id;
     const { postId } = req.params;
 
@@ -370,12 +372,19 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
           '[]'
         ) AS media,
         COUNT(DISTINCT l.like_id)::int AS like_count,
+        COUNT(DISTINCT r.user_id)::int AS repost_count,
         EXISTS (
           SELECT 1
           FROM likes
           WHERE post_id = p.post_id
             AND liker = $1
         ) AS is_liked,
+        EXISTS (
+          SELECT 1
+          FROM reposts
+          WHERE post_id = p.post_id
+            AND user_id = $1
+        ) AS is_reposted,
         (
           SELECT COUNT(*)
           FROM comments c
@@ -384,13 +393,15 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
       FROM posts p
       JOIN users u
         ON u.id = p.user_id
-      LEFT JOIN post_media pm
-        ON pm.post_id = p.post_id
-      LEFT JOIN likes l
-        ON l.post_id = p.post_id
-      WHERE p.post_id = $2
-      GROUP BY p.post_id, u.id, u.username, u.profile_pic
-      `,
+        LEFT JOIN post_media pm
+          ON pm.post_id = p.post_id
+        LEFT JOIN likes l
+          ON l.post_id = p.post_id
+        LEFT JOIN reposts r
+          ON r.post_id = p.post_id
+        WHERE p.post_id = $2
+        GROUP BY p.post_id, u.id, u.username, u.profile_pic
+        `,
       [userId, postId]
     );
 
@@ -408,6 +419,7 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
 router.get("/feed", authenticateToken, async (req, res) => {
   try {
     await ensureBlockedUsersTable();
+    await ensureRepostSchema();
     const userId = req.user.id;
     const limit = parseInt(req.query.limit, 10) || 5;
     const offset = parseInt(req.query.offset, 10) || 0;
@@ -418,6 +430,14 @@ router.get("/feed", authenticateToken, async (req, res) => {
         p.*,
         u.username,
         u.profile_pic,
+        latest_repost.reposter_id,
+        latest_repost.reposter_username,
+        latest_repost.reposter_profile_pic,
+        latest_repost.reposted_at,
+        CASE
+          WHEN latest_repost.reposter_id IS NOT NULL THEN 'repost'
+          ELSE 'post'
+        END AS feed_activity_type,
 
         COALESCE(
           json_agg(
@@ -433,6 +453,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
         ) AS media,
 
         COUNT(DISTINCT l.like_id)::int AS like_count,
+        COUNT(DISTINCT all_reposts.user_id)::int AS repost_count,
 
         EXISTS (
           SELECT 1
@@ -440,6 +461,12 @@ router.get("/feed", authenticateToken, async (req, res) => {
           WHERE post_id = p.post_id
             AND liker = $1
         ) AS is_liked,
+        EXISTS (
+          SELECT 1
+          FROM reposts
+          WHERE post_id = p.post_id
+            AND user_id = $1
+        ) AS is_reposted,
 
         (
           SELECT COUNT(*)
@@ -454,12 +481,49 @@ router.get("/feed", authenticateToken, async (req, res) => {
         ON pm.post_id = p.post_id
       LEFT JOIN likes l
         ON l.post_id = p.post_id
-      WHERE p.user_id = $1
-         OR p.user_id IN (
-           SELECT following_id
-           FROM follows
-           WHERE follower_id = $1
-         )
+      LEFT JOIN reposts all_reposts
+        ON all_reposts.post_id = p.post_id
+      LEFT JOIN LATERAL (
+        SELECT
+          r.user_id AS reposter_id,
+          ru.username AS reposter_username,
+          ru.profile_pic AS reposter_profile_pic,
+          r.created_at AS reposted_at
+        FROM reposts r
+        JOIN users ru
+          ON ru.id = r.user_id
+        WHERE r.post_id = p.post_id
+          AND (
+            r.user_id = $1
+            OR r.user_id IN (
+              SELECT following_id
+              FROM follows
+              WHERE follower_id = $1
+            )
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM blocked_users bu_rep
+            WHERE (
+              bu_rep.blocker_id = $1
+              AND bu_rep.blocked_id = ru.id
+            ) OR (
+              bu_rep.blocker_id = ru.id
+              AND bu_rep.blocked_id = $1
+            )
+          )
+        ORDER BY r.created_at DESC
+        LIMIT 1
+      ) latest_repost ON TRUE
+      WHERE (
+          p.user_id = $1
+          OR p.user_id IN (
+            SELECT following_id
+            FROM follows
+            WHERE follower_id = $1
+          )
+          OR latest_repost.reposter_id IS NOT NULL
+        )
         AND NOT EXISTS (
           SELECT 1
           FROM blocked_users bu
@@ -471,8 +535,16 @@ router.get("/feed", authenticateToken, async (req, res) => {
             AND bu.blocked_id = $1
           )
         )
-      GROUP BY p.post_id, u.id, u.username, u.profile_pic
-      ORDER BY p.date_posted DESC
+      GROUP BY
+        p.post_id,
+        u.id,
+        u.username,
+        u.profile_pic,
+        latest_repost.reposter_id,
+        latest_repost.reposter_username,
+        latest_repost.reposter_profile_pic,
+        latest_repost.reposted_at
+      ORDER BY COALESCE(latest_repost.reposted_at, p.date_posted) DESC
       LIMIT $2 OFFSET $3
       `,
       [userId, limit, offset]

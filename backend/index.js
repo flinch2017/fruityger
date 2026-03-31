@@ -14,6 +14,7 @@ import followRoutes from "./routes/follow.js";
 import reportRoutes from "./routes/report.js";
 import messageRoutes from "./routes/messages.js";
 import notificationRoutes from "./routes/notifications.js";
+import repostRoutes from "./routes/reposts.js";
 import { cleanupExpiredUnverifiedUsers, ensureEmailVerificationSchema } from "./utils/emailVerification.js";
 import { backfillPostHashtags, ensureHashtagSchema } from "./utils/hashtags.js";
 
@@ -61,6 +62,7 @@ app.use("/api/follow", followRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/reposts", repostRoutes);
 
 
 

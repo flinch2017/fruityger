@@ -2,28 +2,21 @@ import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { ensureHashtagSchema, removePostHashtags, syncPostHashtags } from "../utils/hashtags.js";
+import { ensureRepostSchema } from "../utils/reposts.js";
 
 const router = express.Router();
 
-/* ============================================
-   GET USER POSTS
-============================================ */
-
 router.get("/posts", authenticateToken, async (req, res) => {
-  
-
   try {
+    await ensureRepostSchema();
 
     const viewerId = req.user.id;
     let userId = viewerId;
-
-    // ⭐ If frontend sends username, override profile owner
     const username = req.query.username;
 
     if (username) {
-
       const userResult = await pool.query(
-        "SELECT id FROM users WHERE username=$1",
+        "SELECT id FROM users WHERE username = $1 LIMIT 1",
         [username]
       );
 
@@ -59,14 +52,14 @@ router.get("/posts", authenticateToken, async (req, res) => {
         return res.json({ posts: [], isBlocked: true });
       }
     }
-    const limit = parseInt(req.query.limit) || 5;
-    const offset = parseInt(req.query.offset) || 0;
 
-    const query = `
+    const limit = parseInt(req.query.limit, 10) || 5;
+    const offset = parseInt(req.query.offset, 10) || 0;
+
+    const { rows } = await pool.query(
+      `
       SELECT 
         p.*,
-
-        -- ✅ ORDERED MEDIA ARRAY (IMPORTANT)
         COALESCE(
           json_agg(
             json_build_object(
@@ -79,49 +72,41 @@ router.get("/posts", authenticateToken, async (req, res) => {
           FILTER (WHERE pm.media_url IS NOT NULL),
           '[]'
         ) AS media,
-
-        -- ✅ LIKE COUNT
         COUNT(DISTINCT l.like_id)::int AS like_count,
-
-        -- ✅ IS LIKED
+        COUNT(DISTINCT r.user_id)::int AS repost_count,
         EXISTS (
-          SELECT 1 FROM likes
+          SELECT 1
+          FROM likes
           WHERE post_id = p.post_id
-          AND liker = $1
+            AND liker = $1
         ) AS is_liked,
-
-         -- ⭐ COMMENT COUNT (ADD THIS)
+        EXISTS (
+          SELECT 1
+          FROM reposts
+          WHERE post_id = p.post_id
+            AND user_id = $1
+        ) AS is_reposted,
         (
-            SELECT COUNT(*)
-            FROM comments c
-            WHERE c.post_id = p.post_id
-        ) AS comment_count
-
+          SELECT COUNT(*)
+          FROM comments c
+          WHERE c.post_id = p.post_id
+        )::int AS comment_count
       FROM posts p
-
       LEFT JOIN post_media pm
         ON pm.post_id = p.post_id
-
       LEFT JOIN likes l
         ON l.post_id = p.post_id
-
+      LEFT JOIN reposts r
+        ON r.post_id = p.post_id
       WHERE p.user_id = $1
-
       GROUP BY p.post_id
-
       ORDER BY p.date_posted DESC
-
       LIMIT $2 OFFSET $3
-    `;
-
-    const { rows } = await pool.query(query, [
-      userId,
-      limit,
-      offset
-    ]);
+      `,
+      [userId, limit, offset]
+    );
 
     res.json({ posts: rows, isBlocked: false });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
@@ -130,6 +115,7 @@ router.get("/posts", authenticateToken, async (req, res) => {
 
 router.get("/public-posts", async (req, res) => {
   try {
+    await ensureRepostSchema();
     const username = req.query.username;
 
     if (!username) {
@@ -166,7 +152,9 @@ router.get("/public-posts", async (req, res) => {
           '[]'
         ) AS media,
         COUNT(DISTINCT l.like_id)::int AS like_count,
+        COUNT(DISTINCT r.user_id)::int AS repost_count,
         FALSE AS is_liked,
+        FALSE AS is_reposted,
         (
           SELECT COUNT(*)
           FROM comments c
@@ -177,6 +165,8 @@ router.get("/public-posts", async (req, res) => {
         ON pm.post_id = p.post_id
       LEFT JOIN likes l
         ON l.post_id = p.post_id
+      LEFT JOIN reposts r
+        ON r.post_id = p.post_id
       WHERE p.user_id = $1
       GROUP BY p.post_id
       ORDER BY p.date_posted DESC
@@ -260,13 +250,11 @@ router.put("/:postId", authenticateToken, async (req, res) => {
 });
 
 router.delete("/:postId", authenticateToken, async (req, res) => {
-  console.log("Authenticated user:", req.user);
   const { postId } = req.params;
   const userId = req.user.id;
 
   try {
     await ensureHashtagSchema();
-    // ✅ Check if post exists + ownership
     const postCheck = await pool.query(
       "SELECT user_id FROM posts WHERE post_id = $1",
       [postId]
@@ -280,23 +268,18 @@ router.delete("/:postId", authenticateToken, async (req, res) => {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
-    // 🔥 IMPORTANT: delete dependencies first (if no CASCADE yet)
-
     await pool.query("DELETE FROM comments WHERE post_id = $1", [postId]);
     await pool.query("DELETE FROM likes WHERE post_id = $1", [postId]);
+    await pool.query("DELETE FROM reposts WHERE post_id = $1", [postId]);
     await removePostHashtags(postId);
     await pool.query("DELETE FROM post_media WHERE post_id = $1", [postId]);
-
-    // ✅ Delete the post
     await pool.query("DELETE FROM posts WHERE post_id = $1", [postId]);
 
     res.json({ message: "Post deleted successfully" });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
-
 
 export default router;

@@ -178,7 +178,7 @@ html, body, #root {
 }
 
 /* Desktop: show desktop nav, hide hamburger */
-@media (min-width: 481px) {
+@media (min-width: 901px) {
   .welcome-hamburger {
     display: none;
   }

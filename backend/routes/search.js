@@ -2,6 +2,7 @@ import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { backfillPostHashtags, ensureHashtagSchema } from "../utils/hashtags.js";
+import { ensureRepostSchema } from "../utils/reposts.js";
 
 const router = express.Router();
 
@@ -23,6 +24,7 @@ router.get("/hashtags/:tag", authenticateToken, async (req, res) => {
     await ensureHashtagSchema();
     await backfillPostHashtags();
     await ensureBlockedUsersTable();
+    await ensureRepostSchema();
 
     const tag = normalizeTag(req.params.tag);
     const userId = req.user.id;
@@ -251,12 +253,19 @@ router.get("/", authenticateToken, async (req, res) => {
           '[]'
         ) AS media,
         COUNT(DISTINCT l.like_id)::int AS like_count,
+        COUNT(DISTINCT r.user_id)::int AS repost_count,
         EXISTS (
           SELECT 1
           FROM likes
           WHERE post_id = p.post_id
             AND liker = $2
         ) AS is_liked,
+        EXISTS (
+          SELECT 1
+          FROM reposts
+          WHERE post_id = p.post_id
+            AND user_id = $2
+        ) AS is_reposted,
         (
           SELECT COUNT(*)
           FROM comments c
@@ -269,6 +278,8 @@ router.get("/", authenticateToken, async (req, res) => {
         ON pm.post_id = p.post_id
       LEFT JOIN likes l
         ON l.post_id = p.post_id
+      LEFT JOIN reposts r
+        ON r.post_id = p.post_id
       WHERE p.caption ILIKE $1
         AND NOT EXISTS (
           SELECT 1
