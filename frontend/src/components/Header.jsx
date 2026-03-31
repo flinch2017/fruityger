@@ -11,6 +11,13 @@ export default function Header() {
   const [currentUser, setCurrentUser] = useState(null);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const [searchSuggestions, setSearchSuggestions] = useState({
+    users: [],
+    hashtags: [],
+    posts: [],
+  });
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const profileRef = useRef(null);
@@ -166,6 +173,7 @@ export default function Header() {
 
       if (searchRef.current && !searchRef.current.contains(e.target)) {
         setMobileSearchOpen(false);
+        setSearchFocused(false);
       }
     };
 
@@ -176,25 +184,197 @@ export default function Header() {
     };
   }, []);
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-
+  useEffect(() => {
+    const token = localStorage.getItem("token");
     const keyword = searchQuery.trim();
-    if (!keyword) return;
 
-    const encoded = encodeURIComponent(keyword);
+    if (!token || !keyword) {
+      setSearchSuggestions({ users: [], hashtags: [], posts: [] });
+      setSearchLoading(false);
+      return undefined;
+    }
+
+    let isCancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      setSearchLoading(true);
+
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(keyword)}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || "Search failed");
+        }
+
+        if (!isCancelled) {
+          setSearchSuggestions({
+            users: (data.users || []).slice(0, 4),
+            hashtags: (data.hashtags || []).slice(0, 4),
+            posts: (data.posts || []).slice(0, 3),
+          });
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          console.error(error);
+          setSearchSuggestions({ users: [], hashtags: [], posts: [] });
+        }
+      } finally {
+        if (!isCancelled) {
+          setSearchLoading(false);
+        }
+      }
+    }, 180);
+
+    return () => {
+      isCancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setSearchFocused(false);
+    setMobileSearchOpen(false);
+  }, [location.pathname, location.search]);
+
+  const hasSuggestions =
+    searchSuggestions.users.length > 0 ||
+    searchSuggestions.hashtags.length > 0 ||
+    searchSuggestions.posts.length > 0;
+  const showSuggestions = Boolean(
+    searchQuery.trim() && searchFocused && (searchLoading || hasSuggestions)
+  );
+
+  const submitSearch = (keyword) => {
+    const trimmedKeyword = keyword.trim();
+    if (!trimmedKeyword) return;
+
+    const encoded = encodeURIComponent(trimmedKeyword);
 
     if (
       location.pathname === "/search" &&
-      new URLSearchParams(location.search).get("q") === keyword
+      new URLSearchParams(location.search).get("q") === trimmedKeyword
     ) {
+      setSearchFocused(false);
+      setMobileSearchOpen(false);
       return;
     }
 
     navigate(`/search?q=${encoded}`);
     setSearchQuery("");
+    setSearchSuggestions({ users: [], hashtags: [], posts: [] });
+    setSearchFocused(false);
     setMobileSearchOpen(false);
   };
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    submitSearch(searchQuery);
+  };
+
+  const renderSuggestionContent = () => (
+    <div className="search-suggestions">
+      <button
+        type="button"
+        className="search-suggestion-item search-suggestion-primary"
+        onClick={() => submitSearch(searchQuery)}
+      >
+        <span className="search-suggestion-icon">🔎</span>
+        <span className="search-suggestion-copy">
+          <strong>Search for "{searchQuery.trim()}"</strong>
+          <span>See all matching profiles, posts, and hashtags</span>
+        </span>
+      </button>
+
+      {searchLoading && (
+        <div className="search-suggestion-state">Finding matches...</div>
+      )}
+
+      {!searchLoading && searchSuggestions.users.length > 0 && (
+        <div className="search-suggestion-group">
+          <p className="search-suggestion-label">People</p>
+          {searchSuggestions.users.map((user) => (
+            <button
+              key={user.id}
+              type="button"
+              className="search-suggestion-item"
+              onClick={() => {
+                navigate(`/profile/${user.username}`);
+                setSearchQuery("");
+                setSearchFocused(false);
+                setMobileSearchOpen(false);
+              }}
+            >
+              <span className="search-suggestion-avatar">
+                {user.profile_pic ? (
+                  <img src={getSafeMediaUrl(user.profile_pic)} alt={user.username} />
+                ) : (
+                  "👤"
+                )}
+              </span>
+              <span className="search-suggestion-copy">
+                <strong>{user.username}</strong>
+                <span>Open profile</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!searchLoading && searchSuggestions.hashtags.length > 0 && (
+        <div className="search-suggestion-group">
+          <p className="search-suggestion-label">Hashtags</p>
+          {searchSuggestions.hashtags.map((hashtag) => (
+            <button
+              key={hashtag.tag}
+              type="button"
+              className="search-suggestion-item"
+              onClick={() => {
+                navigate(`/hashtag/${hashtag.tag}`);
+                setSearchQuery("");
+                setSearchFocused(false);
+                setMobileSearchOpen(false);
+              }}
+            >
+              <span className="search-suggestion-icon">#</span>
+              <span className="search-suggestion-copy">
+                <strong>#{hashtag.tag}</strong>
+                <span>{(hashtag.post_count || 0).toLocaleString()} posts</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!searchLoading && searchSuggestions.posts.length > 0 && (
+        <div className="search-suggestion-group">
+          <p className="search-suggestion-label">Posts</p>
+          {searchSuggestions.posts.map((post) => (
+            <button
+              key={post.post_id}
+              type="button"
+              className="search-suggestion-item"
+              onClick={() => {
+                navigate(`/post/${post.post_id}`);
+                setSearchQuery("");
+                setSearchFocused(false);
+                setMobileSearchOpen(false);
+              }}
+            >
+              <span className="search-suggestion-icon">✦</span>
+              <span className="search-suggestion-copy">
+                <strong>{post.username}</strong>
+                <span>{post.caption ? post.caption.slice(0, 56) : "Open post"}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <>
@@ -207,15 +387,20 @@ export default function Header() {
           Fruityger
         </div>
 
-        <form className="search-form" onSubmit={handleSearch}>
-          <input
-            type="text"
-            placeholder="Search accounts..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="search-input"
-          />
-        </form>
+        <div className="search-shell" ref={searchRef}>
+          <form className="search-form" onSubmit={handleSearch}>
+            <input
+              type="text"
+              placeholder="Search people, posts, hashtags..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              className="search-input"
+            />
+          </form>
+
+          {showSuggestions && renderSuggestionContent()}
+        </div>
 
         <div className="nav-row">
           <nav className="nav-items">
@@ -349,13 +534,16 @@ export default function Header() {
             >
               <input
                 type="text"
-                placeholder="Search accounts..."
+                placeholder="Search people, posts, hashtags..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
                 className="mobile-search-input"
                 autoFocus
               />
             </form>
+
+            {showSuggestions && renderSuggestionContent()}
           </div>
         )}
       </header>
