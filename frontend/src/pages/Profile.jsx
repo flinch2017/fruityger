@@ -485,6 +485,22 @@ export default function Profile() {
     });
   };
 
+  const tryAutoplayProfileVideo = (video) => {
+    if (!video) return;
+
+    const rect = video.getBoundingClientRect();
+    const viewportHeight =
+      window.innerHeight || document.documentElement.clientHeight || 0;
+    const visibleHeight =
+      Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0);
+    const visibilityRatio =
+      rect.height > 0 ? Math.max(0, visibleHeight) / rect.height : 0;
+
+    if (visibilityRatio >= 0.75) {
+      video.play().catch(() => {});
+    }
+  };
+
   /* ================= SWIPE GESTURE ================= */
 
   const handlePointerStart = (e) => {
@@ -1116,12 +1132,23 @@ export default function Profile() {
                         <>
                           <video
                             ref={el => {
-                              if (!el) return;
                               if (!videoRefs.current[post.post_id]) {
                                 videoRefs.current[post.post_id] = [];
                               }
+                              if (!el) {
+                                delete videoRefs.current[post.post_id][i];
+                                return;
+                              }
                               videoRefs.current[post.post_id][i] = el;
                               el.muted = videoMutedMap[post.post_id] ?? true;
+                              if (observerRef.current) {
+                                observerRef.current.observe(el);
+                              }
+                              if ((activeIndexMap[post.post_id] || 0) === i) {
+                                requestAnimationFrame(() => {
+                                  tryAutoplayProfileVideo(el);
+                                });
+                              }
                             }}
                             src={getSafeMediaUrl(m.media_url)}
                             playsInline
@@ -1129,6 +1156,11 @@ export default function Profile() {
                             muted={videoMutedMap[post.post_id] ?? true}
                             preload="metadata"
                             className="auto-video"
+                            onLoadedData={(e) => {
+                              if ((activeIndexMap[post.post_id] || 0) === i) {
+                                tryAutoplayProfileVideo(e.currentTarget);
+                              }
+                            }}
                           />
                           <button
                             type="button"
