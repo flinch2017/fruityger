@@ -19,8 +19,7 @@ export default function Welcome() {
             <p className="welcome-kicker">Daydream social</p>
             <h1>Fruityger</h1>
             <p className="welcome-description">
-              Drift into a glossy little internet where posts sparkle, profiles feel playful,
-              and every corner hums with Modern + Frutiger Aero nostalgia combined.
+              Drift into a glossy little internet!
             </p>
 
             <div className="welcome-buttons">
