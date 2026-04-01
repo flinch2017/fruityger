@@ -314,6 +314,7 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
+  border-radius: 25px;
   background: rgba(17, 75, 96, 0.18);
   backdrop-filter: blur(16px) saturate(1.06);
 }
