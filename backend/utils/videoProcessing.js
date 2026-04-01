@@ -28,30 +28,36 @@ export async function transcodeVideoToMp4(fileBuffer, originalName = "video") {
   try {
     await fs.writeFile(inputPath, fileBuffer);
 
-    await execFileAsync(ffmpegPath, [
-      "-y",
-      "-i",
-      inputPath,
-      "-map",
-      "0:v:0",
-      "-map",
-      "0:a?",
-      "-c:v",
-      "libx264",
-      "-preset",
-      "veryfast",
-      "-crf",
-      "28",
-      "-pix_fmt",
-      "yuv420p",
-      "-c:a",
-      "aac",
-      "-b:a",
-      "128k",
-      "-movflags",
-      "+faststart",
-      outputPath,
-    ]);
+    try {
+      await execFileAsync(ffmpegPath, [
+        "-y",
+        "-i",
+        inputPath,
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a?",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "28",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-movflags",
+        "+faststart",
+        outputPath,
+      ]);
+    } catch (error) {
+      const stderr = error?.stderr ? String(error.stderr).trim() : "";
+      const ffmpegMessage = stderr.split("\n").slice(-3).join(" ").trim();
+      throw new Error(ffmpegMessage || "Video transcoding failed");
+    }
 
     const outputBuffer = await fs.readFile(outputPath);
 

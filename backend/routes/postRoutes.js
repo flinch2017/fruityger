@@ -20,7 +20,7 @@ const sanitizeFileName = (value = "") =>
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: {
-        fileSize: 50 * 1024 * 1024 // 50MB limit
+        fileSize: 150 * 1024 * 1024 // 150MB raw upload limit before compression
     }
 });
 
@@ -117,7 +117,7 @@ router.post(
         } catch (err) {
             console.error(err);
             res.status(500).json({
-                error: "Post creation failed"
+                error: err?.message || "Post creation failed"
             });
         }
     }
