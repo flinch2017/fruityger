@@ -7,6 +7,8 @@ const router = express.Router();
 let deletedChatsTableReadyPromise = null;
 let blockedUsersTableReadyPromise = null;
 let activeUsersTableReadyPromise = null;
+let messageRepliesSchemaReadyPromise = null;
+let messageReactionsSchemaReadyPromise = null;
 
 async function ensureDeletedChatsTable() {
   if (!deletedChatsTableReadyPromise) {
@@ -64,6 +66,102 @@ async function ensureActiveUsersTable() {
   }
 
   await activeUsersTableReadyPromise;
+}
+
+async function ensureMessageRepliesSchema() {
+  if (!messageRepliesSchemaReadyPromise) {
+    messageRepliesSchemaReadyPromise = (async () => {
+      await pool.query(`
+        ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS reply_to_message_id UUID REFERENCES messages(id) ON DELETE SET NULL
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_messages_reply_to_message_id
+        ON messages(reply_to_message_id)
+      `);
+    })().catch((error) => {
+      messageRepliesSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await messageRepliesSchemaReadyPromise;
+}
+
+async function ensureMessageReactionsSchema() {
+  if (!messageReactionsSchemaReadyPromise) {
+    messageReactionsSchemaReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS message_reactions (
+          message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          reaction VARCHAR(20) NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (message_id, user_id)
+        )
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_message_reactions_message_id
+        ON message_reactions(message_id)
+      `);
+    })().catch((error) => {
+      messageReactionsSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await messageReactionsSchemaReadyPromise;
+}
+
+async function fetchMessageForUser(messageId, userId) {
+  const { rows } = await pool.query(
+    `
+    SELECT
+      m.*,
+      CASE
+        WHEN reply_dm.message_id IS NULL THEN reply_message.content
+        ELSE NULL
+      END AS reply_to_content,
+      CASE
+        WHEN reply_dm.message_id IS NULL THEN reply_message.sender_id
+        ELSE NULL
+      END AS reply_to_sender_id,
+      COALESCE(reactions_agg.reactions, '[]'::json) AS reactions
+    FROM messages m
+    LEFT JOIN messages reply_message
+      ON reply_message.id = m.reply_to_message_id
+    LEFT JOIN deleted_messages reply_dm
+      ON reply_dm.message_id = reply_message.id
+     AND reply_dm.user_id = $2
+    LEFT JOIN LATERAL (
+      SELECT json_agg(
+        json_build_object(
+          'reaction', grouped.reaction,
+          'count', grouped.reaction_count,
+          'reacted_by_me', grouped.reacted_by_me
+        )
+        ORDER BY grouped.first_reacted_at ASC, grouped.reaction ASC
+      ) AS reactions
+      FROM (
+        SELECT
+          mr.reaction,
+          COUNT(*)::int AS reaction_count,
+          BOOL_OR(mr.user_id = $2) AS reacted_by_me,
+          MIN(mr.created_at) AS first_reacted_at
+        FROM message_reactions mr
+        WHERE mr.message_id = m.id
+        GROUP BY mr.reaction
+      ) grouped
+    ) reactions_agg ON true
+    WHERE m.id = $1
+    LIMIT 1
+    `,
+    [messageId, userId]
+  );
+
+  return rows[0] || null;
 }
 
 router.get("/chats", authenticateToken, async (req, res) => {
@@ -205,11 +303,13 @@ router.get("/unread-count", authenticateToken, async (req, res) => {
 });
 
 router.post("/send", authenticateToken, async (req, res) => {
-  const { chatId, receiverId, content } = req.body;
+  const { chatId, receiverId, content, replyToMessageId = null } = req.body;
   const senderId = req.user.id;
 
   try {
     await ensureDeletedChatsTable();
+    await ensureMessageRepliesSchema();
+    await ensureMessageReactionsSchema();
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS blocked_users (
@@ -235,13 +335,30 @@ router.post("/send", authenticateToken, async (req, res) => {
       return res.status(403).json({ error: "Messaging is unavailable with this user" });
     }
 
+    if (replyToMessageId) {
+      const replyTargetResult = await pool.query(
+        `
+        SELECT id
+        FROM messages
+        WHERE id = $1
+          AND chat_id = $2
+        LIMIT 1
+        `,
+        [replyToMessageId, chatId]
+      );
+
+      if (replyTargetResult.rows.length === 0) {
+        return res.status(400).json({ error: "Reply target was not found" });
+      }
+    }
+
     const message = await pool.query(
       `
-      INSERT INTO messages (chat_id, sender_id, receiver_id, content)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO messages (chat_id, sender_id, receiver_id, content, reply_to_message_id)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *
       `,
-      [chatId, senderId, receiverId, content]
+      [chatId, senderId, receiverId, content, replyToMessageId]
     );
 
     await pool.query(
@@ -253,7 +370,9 @@ router.post("/send", authenticateToken, async (req, res) => {
       [content, chatId]
     );
 
-    res.json(message.rows[0]);
+    const enrichedMessage = await fetchMessageForUser(message.rows[0].id, senderId);
+
+    res.json(enrichedMessage || message.rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to send message" });
@@ -445,12 +564,56 @@ router.post("/presence/heartbeat", authenticateToken, async (req, res) => {
   }
 });
 
+router.get("/presence/:targetUserId", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  const { targetUserId } = req.params;
+
+  try {
+    await ensureBlockedUsersTable();
+    await ensureActiveUsersTable();
+
+    const blockedResult = await pool.query(
+      `
+      SELECT 1
+      FROM blocked_users
+      WHERE (blocker_id = $1 AND blocked_id = $2)
+         OR (blocker_id = $2 AND blocked_id = $1)
+      LIMIT 1
+      `,
+      [userId, targetUserId]
+    );
+
+    if (blockedResult.rows.length > 0) {
+      return res.json({ is_online: false });
+    }
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        last_seen_at IS NOT NULL
+        AND last_seen_at >= NOW() - INTERVAL '3 minutes' AS is_online
+      FROM active_users
+      WHERE user_id = $1
+      LIMIT 1
+      `,
+      [targetUserId]
+    );
+
+    res.json({ is_online: Boolean(rows[0]?.is_online) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load presence status" });
+  }
+});
+
 router.get("/:chatId", authenticateToken, async (req, res) => {
   const { chatId } = req.params;
   const userId = req.user.id;
 
   try {
     await ensureDeletedChatsTable();
+    await ensureMessageRepliesSchema();
+    await ensureMessageReactionsSchema();
 
     const chatResult = await pool.query(
       `
@@ -531,11 +694,46 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
 
     const messagesResult = await pool.query(
       `
-      SELECT m.*
+      SELECT
+        m.*,
+        CASE
+          WHEN reply_dm.message_id IS NULL THEN reply_message.content
+          ELSE NULL
+        END AS reply_to_content,
+        CASE
+          WHEN reply_dm.message_id IS NULL THEN reply_message.sender_id
+          ELSE NULL
+        END AS reply_to_sender_id,
+        COALESCE(reactions_agg.reactions, '[]'::json) AS reactions
       FROM messages m
       LEFT JOIN deleted_messages dm
         ON dm.message_id = m.id
        AND dm.user_id = $2
+      LEFT JOIN messages reply_message
+        ON reply_message.id = m.reply_to_message_id
+      LEFT JOIN deleted_messages reply_dm
+        ON reply_dm.message_id = reply_message.id
+       AND reply_dm.user_id = $2
+      LEFT JOIN LATERAL (
+        SELECT json_agg(
+          json_build_object(
+            'reaction', grouped.reaction,
+            'count', grouped.reaction_count,
+            'reacted_by_me', grouped.reacted_by_me
+          )
+          ORDER BY grouped.first_reacted_at ASC, grouped.reaction ASC
+        ) AS reactions
+        FROM (
+          SELECT
+            mr.reaction,
+            COUNT(*)::int AS reaction_count,
+            BOOL_OR(mr.user_id = $2) AS reacted_by_me,
+            MIN(mr.created_at) AS first_reacted_at
+          FROM message_reactions mr
+          WHERE mr.message_id = m.id
+          GROUP BY mr.reaction
+        ) grouped
+      ) reactions_agg ON true
       WHERE m.chat_id = $1
         AND dm.message_id IS NULL
         AND (
@@ -567,6 +765,63 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch chat" });
+  }
+});
+
+router.post("/:messageId/react", authenticateToken, async (req, res) => {
+  const { messageId } = req.params;
+  const { reaction = null } = req.body || {};
+  const userId = req.user.id;
+  const allowedReactions = new Set(["heart", "laugh", "sad", "angry", "care"]);
+
+  if (reaction && !allowedReactions.has(reaction)) {
+    return res.status(400).json({ error: "Invalid reaction" });
+  }
+
+  try {
+    await ensureMessageReactionsSchema();
+
+    const messageResult = await pool.query(
+      `
+      SELECT id, chat_id
+      FROM messages
+      WHERE id = $1
+        AND (sender_id = $2 OR receiver_id = $2)
+      LIMIT 1
+      `,
+      [messageId, userId]
+    );
+
+    if (messageResult.rows.length === 0) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    if (!reaction) {
+      await pool.query(
+        `
+        DELETE FROM message_reactions
+        WHERE message_id = $1
+          AND user_id = $2
+        `,
+        [messageId, userId]
+      );
+    } else {
+      await pool.query(
+        `
+        INSERT INTO message_reactions (message_id, user_id, reaction)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (message_id, user_id)
+        DO UPDATE SET reaction = EXCLUDED.reaction, created_at = NOW()
+        `,
+        [messageId, userId, reaction]
+      );
+    }
+
+    const enrichedMessage = await fetchMessageForUser(messageId, userId);
+    return res.json({ success: true, message: enrichedMessage });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to update reaction" });
   }
 });
 

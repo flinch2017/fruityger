@@ -1,13 +1,28 @@
-import React, { useEffect, useState, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  FaArrowLeft,
+  FaCog,
+  FaEllipsisV,
+  FaRegSmileBeam,
+  FaReply,
+  FaTimes,
+  FaUserCircle,
+} from "react-icons/fa";
 import supabase from "../lib/supabaseClient";
 import AeroNotice from "../components/AeroNotice";
 import "../css/Chat.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function Chat() {
-  const menuRef = useRef(null);
-  const headerMenuRef = useRef(null);
+  const reactionOptions = [
+    { key: "heart", emoji: "\u2764\uFE0F", label: "Heart" },
+    { key: "laugh", emoji: "\u{1F602}", label: "Laugh" },
+    { key: "sad", emoji: "\u{1F622}", label: "Sad" },
+    { key: "angry", emoji: "\u{1F621}", label: "Angry" },
+    { key: "care", emoji: "\u{1F917}", label: "Care" },
+  ];
+
   const { chatId } = useParams();
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
@@ -23,11 +38,15 @@ export default function Chat() {
   const [blockedByThem, setBlockedByThem] = useState(false);
   const [notice, setNotice] = useState(null);
   const [sending, setSending] = useState(false);
+  const [otherUserOnline, setOtherUserOnline] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [openReactionPickerId, setOpenReactionPickerId] = useState(null);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
   const pollingIntervalRef = useRef(null);
+  const presenceIntervalRef = useRef(null);
   const shouldStickToBottomRef = useRef(true);
   const previousMessagesLengthRef = useRef(0);
 
@@ -48,6 +67,19 @@ export default function Chat() {
     window.dispatchEvent(new CustomEvent("fruityger:messages-refresh"));
   };
 
+  const getReplyAuthorLabel = (message) => {
+    if (!message) return "Message";
+    return String(message.sender_id) === String(userId) ? "You" : otherUser.username;
+  };
+
+  const getReplyPreviewText = (content) => {
+    const safeContent = (content || "Original message unavailable").trim();
+    return safeContent.length > 90 ? `${safeContent.slice(0, 90)}...` : safeContent;
+  };
+
+  const getReactionEmoji = (reactionKey) =>
+    reactionOptions.find((option) => option.key === reactionKey)?.emoji || "\u2764\uFE0F";
+
   const markChatRead = async () => {
     if (!token) return;
 
@@ -62,6 +94,27 @@ export default function Chat() {
       console.error(err);
     } finally {
       dispatchMessagesRefresh();
+    }
+  };
+
+  const fetchOtherUserPresence = async (targetUserId) => {
+    if (!token || !targetUserId) return;
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/presence/${targetUserId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load presence");
+      }
+
+      setOtherUserOnline(Boolean(data.is_online));
+    } catch (error) {
+      console.error(error);
     }
   };
 
@@ -86,6 +139,7 @@ export default function Chat() {
       const other = chat.user1.id === userId ? chat.user2 : chat.user1;
 
       setOtherUser(other);
+      fetchOtherUserPresence(other.id);
       setMessages(data.messages || []);
       setBlockedByMe(Boolean(chat.blocked_by_me));
       setBlockedByThem(Boolean(chat.blocked_by_them));
@@ -150,13 +204,7 @@ export default function Chat() {
           async (payload) => {
             const newMessage = payload.new;
 
-            setMessages((prev) => {
-              if (prev.some((message) => message.id === newMessage.id)) {
-                return prev;
-              }
-
-              return [...prev, newMessage];
-            });
+            await fetchChatSnapshot();
 
             if (String(newMessage.receiver_id) === String(userId)) {
               await markChatRead();
@@ -179,7 +227,9 @@ export default function Chat() {
             const updated = payload.new;
 
             setMessages((prev) =>
-              prev.map((message) => (message.id === updated.id ? updated : message))
+              prev.map((message) =>
+                message.id === updated.id ? { ...message, ...updated } : message
+              )
             );
           }
         )
@@ -249,12 +299,31 @@ export default function Chat() {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
+      if (presenceIntervalRef.current) {
+        clearInterval(presenceIntervalRef.current);
+      }
       if (refreshTimeoutRef.current) {
         clearTimeout(refreshTimeoutRef.current);
       }
       if (channel) supabase.removeChannel(channel);
     };
   }, [chatId, token, userId]);
+
+  useEffect(() => {
+    if (!otherUser?.id || !token) return;
+
+    fetchOtherUserPresence(otherUser.id);
+
+    presenceIntervalRef.current = setInterval(() => {
+      fetchOtherUserPresence(otherUser.id);
+    }, 2500);
+
+    return () => {
+      if (presenceIntervalRef.current) {
+        clearInterval(presenceIntervalRef.current);
+      }
+    };
+  }, [otherUser?.id, token]);
 
   const sendMessage = async () => {
     if (!input.trim() || blockedByMe || blockedByThem || sending) return;
@@ -272,6 +341,7 @@ export default function Chat() {
           chatId,
           receiverId: otherUser.id,
           content: input,
+          replyToMessageId: replyingTo?.id || null,
         }),
       });
 
@@ -290,6 +360,7 @@ export default function Chat() {
       });
 
       setInput("");
+      setReplyingTo(null);
       scrollToBottom("smooth");
       dispatchMessagesRefresh();
     } catch (err) {
@@ -329,6 +400,9 @@ export default function Chat() {
       }
 
       setMessages((prev) => prev.filter((message) => message.id !== msg.id));
+      if (replyingTo?.id === msg.id) {
+        setReplyingTo(null);
+      }
       setOpenMenuId(null);
       dispatchMessagesRefresh();
     } catch (err) {
@@ -340,6 +414,41 @@ export default function Chat() {
   const handleReport = (msg) => {
     setOpenMenuId(null);
     navigate(`/report?type=message&id=${msg.id}`);
+  };
+
+  const handleReact = async (message, reactionKey) => {
+    try {
+      const currentReaction = Array.isArray(message.reactions)
+        ? message.reactions.find((reaction) => reaction.reacted_by_me)?.reaction
+        : null;
+      const nextReaction = currentReaction === reactionKey ? null : reactionKey;
+
+      const res = await fetch(`http://localhost:5000/api/messages/${message.id}/react`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reaction: nextReaction }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to react to message");
+      }
+
+      if (data.message) {
+        setMessages((prev) =>
+          prev.map((entry) => (entry.id === message.id ? data.message : entry))
+        );
+      }
+
+      setOpenReactionPickerId(null);
+      dispatchMessagesRefresh();
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: "Failed to update reaction." });
+    }
   };
 
   const handleDeleteConversation = async () => {
@@ -392,6 +501,7 @@ export default function Chat() {
       setHeaderMenuOpen(false);
       setBlockedByMe((prev) => !prev);
       setInput("");
+      setReplyingTo(null);
     } catch (err) {
       console.error(err);
       setNotice({
@@ -412,6 +522,10 @@ export default function Chat() {
         setOpenMenuId(null);
       }
 
+      if (!e.target.closest(".message-reaction-wrap")) {
+        setOpenReactionPickerId(null);
+      }
+
       if (!e.target.closest(".chat-header-menu-wrap")) {
         setHeaderMenuOpen(false);
       }
@@ -426,38 +540,51 @@ export default function Chat() {
 
   useEffect(() => {
     const closeMenu = () => setOpenMenuId(null);
-    document.addEventListener("scroll", closeMenu);
+    const closeOverlays = () => {
+      closeMenu();
+      setOpenReactionPickerId(null);
+    };
+    document.addEventListener("scroll", closeOverlays);
 
-    return () => document.removeEventListener("scroll", closeMenu);
+    return () => document.removeEventListener("scroll", closeOverlays);
   }, []);
 
   return (
     <div className="chat-window">
       <AeroNotice notice={notice ? { ...notice, inline: true } : null} onClose={() => setNotice(null)} />
       <div className="chat-header">
-        <button className="back-btn" onClick={() => navigate(-1)}>
-          ←
+        <button className="back-btn" onClick={() => navigate(-1)} aria-label="Go back">
+          <FaArrowLeft />
         </button>
         <button
           type="button"
           className="chat-user-link"
           onClick={() => navigate(`/profile/${otherUser.username}`)}
         >
-          <div className="chat-user-avatar">
-            {otherUser.profile_pic ? (
-              <img src={getSafeMediaUrl(otherUser.profile_pic)} alt={otherUser.username} />
-            ) : (
-              "👤"
-            )}
+          <div className="chat-user-avatar-wrap">
+            <div className="chat-user-avatar">
+              {otherUser.profile_pic ? (
+                <img src={getSafeMediaUrl(otherUser.profile_pic)} alt={otherUser.username} />
+              ) : (
+                <FaUserCircle />
+              )}
+            </div>
+            {otherUserOnline && <span className="chat-user-online-dot"></span>}
           </div>
-          <h3>{otherUser.username}</h3>
+          <div className="chat-user-heading">
+            <h3>{otherUser.username}</h3>
+            <span className={`chat-user-status ${otherUserOnline ? "online" : ""}`}>
+              {otherUserOnline ? "Online" : "Offline"}
+            </span>
+          </div>
         </button>
-        <div className="chat-header-menu-wrap" ref={headerMenuRef}>
+        <div className="chat-header-menu-wrap">
           <button
             className="chat-header-menu-btn"
             onClick={() => setHeaderMenuOpen((prev) => !prev)}
+            aria-label="Open conversation options"
           >
-            ⚙
+            <FaCog />
           </button>
 
           {headerMenuOpen && (
@@ -498,13 +625,15 @@ export default function Chat() {
               >
                 <div className="message-row">
                   {isMine && (
-                    <div className="message-options-wrapper" ref={menuRef}>
-                      <div
+                    <div className="message-options-wrapper">
+                      <button
+                        type="button"
                         className="message-options"
                         onClick={() => setOpenMenuId(openMenuId === msg.id ? null : msg.id)}
+                        aria-label="Open message options"
                       >
-                        ⋯
-                      </div>
+                        <FaEllipsisV />
+                      </button>
 
                       {openMenuId === msg.id && (
                         <div className="message-dropdown">
@@ -516,16 +645,123 @@ export default function Chat() {
                     </div>
                   )}
 
-                  <div className={bubbleClass}>{msg.content}</div>
+                  {isMine && (
+                    <button
+                      type="button"
+                      className="message-reply-btn"
+                      onClick={() => setReplyingTo(msg)}
+                      aria-label="Reply to message"
+                      title="Reply"
+                    >
+                      <FaReply />
+                    </button>
+                  )}
+
+                  {isMine && (
+                    <div className="message-reaction-wrap">
+                      <button
+                        type="button"
+                        className="message-reaction-trigger"
+                        onClick={() =>
+                          setOpenReactionPickerId((prev) => (prev === msg.id ? null : msg.id))
+                        }
+                        aria-label="React to message"
+                        title="React"
+                      >
+                        <FaRegSmileBeam />
+                      </button>
+
+                      {openReactionPickerId === msg.id && (
+                        <div className="message-reaction-picker">
+                          {reactionOptions.map((option) => (
+                            <button
+                              key={option.key}
+                              type="button"
+                              className="message-reaction-choice"
+                              onClick={() => handleReact(msg, option.key)}
+                              aria-label={option.label}
+                              title={option.label}
+                            >
+                              {option.emoji}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className={bubbleClass}>
+                    {msg.reply_to_message_id && (
+                      <div className="message-reply-preview">
+                        <span className="message-reply-preview-label">
+                          Replying to{" "}
+                          {msg.reply_to_sender_id
+                            ? String(msg.reply_to_sender_id) === String(userId)
+                              ? "You"
+                              : otherUser.username
+                            : "Message"}
+                        </span>
+                        <p>{getReplyPreviewText(msg.reply_to_content)}</p>
+                      </div>
+                    )}
+                    <div className="message-bubble-text">{msg.content}</div>
+                  </div>
 
                   {!isMine && (
-                    <div className="message-options-wrapper" ref={menuRef}>
-                      <div
+                    <div className="message-reaction-wrap">
+                      <button
+                        type="button"
+                        className="message-reaction-trigger"
+                        onClick={() =>
+                          setOpenReactionPickerId((prev) => (prev === msg.id ? null : msg.id))
+                        }
+                        aria-label="React to message"
+                        title="React"
+                      >
+                        <FaRegSmileBeam />
+                      </button>
+
+                      {openReactionPickerId === msg.id && (
+                        <div className="message-reaction-picker">
+                          {reactionOptions.map((option) => (
+                            <button
+                              key={option.key}
+                              type="button"
+                              className="message-reaction-choice"
+                              onClick={() => handleReact(msg, option.key)}
+                              aria-label={option.label}
+                              title={option.label}
+                            >
+                              {option.emoji}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!isMine && (
+                    <button
+                      type="button"
+                      className="message-reply-btn"
+                      onClick={() => setReplyingTo(msg)}
+                      aria-label="Reply to message"
+                      title="Reply"
+                    >
+                      <FaReply />
+                    </button>
+                  )}
+
+                  {!isMine && (
+                    <div className="message-options-wrapper">
+                      <button
+                        type="button"
                         className="message-options"
                         onClick={() => setOpenMenuId(openMenuId === msg.id ? null : msg.id)}
+                        aria-label="Open message options"
                       >
-                        ⋯
-                      </div>
+                        <FaEllipsisV />
+                      </button>
 
                       {openMenuId === msg.id && (
                         <div className="message-dropdown">
@@ -541,6 +777,24 @@ export default function Chat() {
                     </div>
                   )}
                 </div>
+
+                {Array.isArray(msg.reactions) && msg.reactions.length > 0 && (
+                  <div className={`message-reactions ${isMine ? "sent" : "received"}`}>
+                    {msg.reactions.map((reaction) => (
+                      <button
+                        key={reaction.reaction}
+                        type="button"
+                        className={`message-reaction-pill ${
+                          reaction.reacted_by_me ? "active" : ""
+                        }`}
+                        onClick={() => handleReact(msg, reaction.reaction)}
+                      >
+                        <span>{getReactionEmoji(reaction.reaction)}</span>
+                        <span>{reaction.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 <div className="message-meta">
                   <span className="message-time">
@@ -562,20 +816,39 @@ export default function Chat() {
 
       {blockedByMe || blockedByThem ? (
         <div className="chat-blocked-banner">
-          Sorry you can't message this user
+          Sorry you can&apos;t message this user
         </div>
       ) : (
-        <div className="chat-input">
-          <input
-            type="text"
-            placeholder="Type a message..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !sending && sendMessage()}
-          />
-          <button onClick={sendMessage} disabled={sending || !input.trim()}>
-            {sending ? "Sending..." : "Send"}
-          </button>
+        <div className="chat-composer">
+          {replyingTo && (
+            <div className="chat-replying-bar">
+              <div className="chat-replying-copy">
+                <span>Replying to {getReplyAuthorLabel(replyingTo)}</span>
+                <p>{getReplyPreviewText(replyingTo.content)}</p>
+              </div>
+              <button
+                type="button"
+                className="chat-replying-close"
+                onClick={() => setReplyingTo(null)}
+                aria-label="Cancel reply"
+              >
+                <FaTimes />
+              </button>
+            </div>
+          )}
+
+          <div className="chat-input">
+            <input
+              type="text"
+              placeholder={replyingTo ? "Write your reply..." : "Type a message..."}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !sending && sendMessage()}
+            />
+            <button onClick={sendMessage} disabled={sending || !input.trim()}>
+              {sending ? "Sending..." : "Send"}
+            </button>
+          </div>
         </div>
       )}
     </div>
