@@ -41,6 +41,10 @@ export default function Chat() {
   const [otherUserOnline, setOtherUserOnline] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [openReactionPickerId, setOpenReactionPickerId] = useState(null);
+  const [reactionPickerAlign, setReactionPickerAlign] = useState("center");
+  const [reactionPickerVertical, setReactionPickerVertical] = useState("top");
+  const [reactionViewer, setReactionViewer] = useState(null);
+  const [reactionViewerLoading, setReactionViewerLoading] = useState(false);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -79,6 +83,44 @@ export default function Chat() {
 
   const getReactionEmoji = (reactionKey) =>
     reactionOptions.find((option) => option.key === reactionKey)?.emoji || "\u2764\uFE0F";
+
+  const toggleReactionPicker = (messageId, event) => {
+    if (openReactionPickerId === messageId) {
+      setOpenReactionPickerId(null);
+      return;
+    }
+
+    const triggerRect = event.currentTarget.getBoundingClientRect();
+    const estimatedPickerWidth = 248;
+    const estimatedPickerHeight = 56;
+    const viewportPadding = 16;
+    const containerRect = messagesContainerRef.current?.getBoundingClientRect();
+    const availableLeft = triggerRect.left - viewportPadding;
+    const availableRight = window.innerWidth - triggerRect.right - viewportPadding;
+    const availableAbove = containerRect
+      ? triggerRect.top - containerRect.top - viewportPadding
+      : triggerRect.top - viewportPadding;
+    const availableBelow = containerRect
+      ? containerRect.bottom - triggerRect.bottom - viewportPadding
+      : window.innerHeight - triggerRect.bottom - viewportPadding;
+
+    let nextAlign = "center";
+    let nextVertical = "top";
+
+    if (availableRight < estimatedPickerWidth / 2 && availableLeft > availableRight) {
+      nextAlign = "right";
+    } else if (availableLeft < estimatedPickerWidth / 2 && availableRight > availableLeft) {
+      nextAlign = "left";
+    }
+
+    if (availableAbove < estimatedPickerHeight && availableBelow > availableAbove) {
+      nextVertical = "bottom";
+    }
+
+    setReactionPickerAlign(nextAlign);
+    setReactionPickerVertical(nextVertical);
+    setOpenReactionPickerId(messageId);
+  };
 
   const markChatRead = async () => {
     if (!token) return;
@@ -451,6 +493,80 @@ export default function Chat() {
     }
   };
 
+  const openReactionViewer = async (message) => {
+    setReactionViewerLoading(true);
+    setReactionViewer({
+      messageId: message.id,
+      reactions: [],
+    });
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/${message.id}/reactions`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load reactions");
+      }
+
+      setReactionViewer({
+        messageId: message.id,
+        reactions: data.reactions || [],
+      });
+    } catch (error) {
+      console.error(error);
+      setReactionViewer(null);
+      setNotice({ type: "error", message: "Failed to load reaction viewers." });
+    } finally {
+      setReactionViewerLoading(false);
+    }
+  };
+
+  const removeOwnReactionFromViewer = async () => {
+    if (!reactionViewer?.messageId) return;
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/messages/${reactionViewer.messageId}/react`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ reaction: null }),
+        }
+      );
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to remove reaction");
+      }
+
+      if (data.message) {
+        setMessages((prev) =>
+          prev.map((entry) => (entry.id === reactionViewer.messageId ? data.message : entry))
+        );
+      }
+
+      setReactionViewer((prev) =>
+        prev
+          ? {
+              ...prev,
+              reactions: prev.reactions.filter((reaction) => !reaction.reacted_by_me),
+            }
+          : prev
+      );
+      dispatchMessagesRefresh();
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: "Failed to remove reaction." });
+    }
+  };
+
   const handleDeleteConversation = async () => {
     try {
       const res = await fetch("http://localhost:5000/api/messages/delete-chats", {
@@ -524,6 +640,10 @@ export default function Chat() {
 
       if (!e.target.closest(".message-reaction-wrap")) {
         setOpenReactionPickerId(null);
+      }
+
+      if (!e.target.closest(".message-reaction-modal") && !e.target.closest(".message-reaction-pill")) {
+        setReactionViewer(null);
       }
 
       if (!e.target.closest(".chat-header-menu-wrap")) {
@@ -662,9 +782,7 @@ export default function Chat() {
                       <button
                         type="button"
                         className="message-reaction-trigger"
-                        onClick={() =>
-                          setOpenReactionPickerId((prev) => (prev === msg.id ? null : msg.id))
-                        }
+                        onClick={(event) => toggleReactionPicker(msg.id, event)}
                         aria-label="React to message"
                         title="React"
                       >
@@ -672,7 +790,9 @@ export default function Chat() {
                       </button>
 
                       {openReactionPickerId === msg.id && (
-                        <div className="message-reaction-picker">
+                        <div
+                          className={`message-reaction-picker ${reactionPickerAlign} ${reactionPickerVertical}`}
+                        >
                           {reactionOptions.map((option) => (
                             <button
                               key={option.key}
@@ -712,9 +832,7 @@ export default function Chat() {
                       <button
                         type="button"
                         className="message-reaction-trigger"
-                        onClick={() =>
-                          setOpenReactionPickerId((prev) => (prev === msg.id ? null : msg.id))
-                        }
+                        onClick={(event) => toggleReactionPicker(msg.id, event)}
                         aria-label="React to message"
                         title="React"
                       >
@@ -722,7 +840,9 @@ export default function Chat() {
                       </button>
 
                       {openReactionPickerId === msg.id && (
-                        <div className="message-reaction-picker">
+                        <div
+                          className={`message-reaction-picker ${reactionPickerAlign} ${reactionPickerVertical}`}
+                        >
                           {reactionOptions.map((option) => (
                             <button
                               key={option.key}
@@ -787,7 +907,7 @@ export default function Chat() {
                         className={`message-reaction-pill ${
                           reaction.reacted_by_me ? "active" : ""
                         }`}
-                        onClick={() => handleReact(msg, reaction.reaction)}
+                        onClick={() => openReactionViewer(msg)}
                       >
                         <span>{getReactionEmoji(reaction.reaction)}</span>
                         <span>{reaction.count}</span>
@@ -848,6 +968,67 @@ export default function Chat() {
             <button onClick={sendMessage} disabled={sending || !input.trim()}>
               {sending ? "Sending..." : "Send"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {reactionViewer && (
+        <div className="message-reaction-modal-backdrop">
+          <div className="message-reaction-modal">
+            <div className="message-reaction-modal-header">
+              <div>
+                <h4>Reactions</h4>
+                <p>See who reacted to this message.</p>
+              </div>
+              <button
+                type="button"
+                className="message-reaction-modal-close"
+                onClick={() => setReactionViewer(null)}
+                aria-label="Close reactions viewer"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            {reactionViewerLoading ? (
+              <p className="message-reaction-modal-empty">Loading reactions...</p>
+            ) : reactionViewer.reactions.length === 0 ? (
+              <p className="message-reaction-modal-empty">No reactions yet.</p>
+            ) : (
+              <div className="message-reaction-modal-list">
+                {reactionViewer.reactions.map((reaction) => (
+                  <div key={`${reaction.user_id}-${reaction.reaction}`} className="message-reaction-modal-item">
+                    <div className="message-reaction-modal-user">
+                      <div className="message-reaction-modal-avatar">
+                        {reaction.profile_pic ? (
+                          <img
+                            src={getSafeMediaUrl(reaction.profile_pic)}
+                            alt={reaction.username}
+                          />
+                        ) : (
+                          <FaUserCircle />
+                        )}
+                      </div>
+                      <div className="message-reaction-modal-copy">
+                        <strong>{reaction.username}</strong>
+                        <span>
+                          {getReactionEmoji(reaction.reaction)} {reaction.reaction}
+                        </span>
+                      </div>
+                    </div>
+                    {reaction.reacted_by_me && (
+                      <button
+                        type="button"
+                        className="message-reaction-remove-btn"
+                        onClick={removeOwnReactionFromViewer}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

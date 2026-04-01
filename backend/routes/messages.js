@@ -164,6 +164,28 @@ async function fetchMessageForUser(messageId, userId) {
   return rows[0] || null;
 }
 
+async function fetchMessageReactionViewers(messageId, userId) {
+  const { rows } = await pool.query(
+    `
+    SELECT
+      mr.reaction,
+      mr.created_at,
+      u.id AS user_id,
+      u.username,
+      u.profile_pic,
+      mr.user_id = $2 AS reacted_by_me
+    FROM message_reactions mr
+    JOIN users u
+      ON u.id = mr.user_id
+    WHERE mr.message_id = $1
+    ORDER BY mr.created_at ASC, u.username ASC
+    `,
+    [messageId, userId]
+  );
+
+  return rows;
+}
+
 router.get("/chats", authenticateToken, async (req, res) => {
   const userId = req.user.id;
 
@@ -765,6 +787,36 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch chat" });
+  }
+});
+
+router.get("/:messageId/reactions", authenticateToken, async (req, res) => {
+  const { messageId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await ensureMessageReactionsSchema();
+
+    const messageResult = await pool.query(
+      `
+      SELECT id
+      FROM messages
+      WHERE id = $1
+        AND (sender_id = $2 OR receiver_id = $2)
+      LIMIT 1
+      `,
+      [messageId, userId]
+    );
+
+    if (messageResult.rows.length === 0) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    const viewers = await fetchMessageReactionViewers(messageId, userId);
+    return res.json({ reactions: viewers });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to load reaction viewers" });
   }
 });
 
