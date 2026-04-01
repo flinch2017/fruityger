@@ -2,6 +2,7 @@ export const clearAuthStorage = () => {
   localStorage.removeItem("token");
   localStorage.removeItem("userId");
   localStorage.removeItem("username");
+  localStorage.removeItem("profile_pic");
   localStorage.removeItem("emailVerified");
   localStorage.removeItem("interestsCompleted");
   localStorage.removeItem("pendingEmail");
@@ -19,6 +20,12 @@ export const persistAuthSession = (data) => {
 
   if (data?.user?.username) {
     localStorage.setItem("username", data.user.username);
+  }
+
+  if (typeof data?.user?.profile_pic === "string" && data.user.profile_pic) {
+    localStorage.setItem("profile_pic", data.user.profile_pic);
+  } else {
+    localStorage.removeItem("profile_pic");
   }
 
   if (data?.user?.email) {
