@@ -39,12 +39,14 @@ export default function Chat() {
   const [notice, setNotice] = useState(null);
   const [sending, setSending] = useState(false);
   const [otherUserOnline, setOtherUserOnline] = useState(false);
+  const [otherUserTyping, setOtherUserTyping] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [reactionTargetMessage, setReactionTargetMessage] = useState(null);
   const [reacting, setReacting] = useState(false);
   const [pendingReactionKey, setPendingReactionKey] = useState(null);
   const [reactionViewer, setReactionViewer] = useState(null);
   const [reactionViewerLoading, setReactionViewerLoading] = useState(false);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -53,6 +55,9 @@ export default function Chat() {
   const presenceIntervalRef = useRef(null);
   const shouldStickToBottomRef = useRef(true);
   const previousMessagesLengthRef = useRef(0);
+  const channelRef = useRef(null);
+  const typingStopTimeoutRef = useRef(null);
+  const typingIndicatorTimeoutRef = useRef(null);
 
   const scrollToBottom = (behavior = "smooth") => {
     messagesEndRef.current?.scrollIntoView({ behavior });
@@ -83,6 +88,24 @@ export default function Chat() {
 
   const getReactionEmoji = (reactionKey) =>
     reactionOptions.find((option) => option.key === reactionKey)?.emoji || "\u2764\uFE0F";
+
+  const sendTypingState = async (isTyping) => {
+    if (!channelRef.current || !userId) return;
+
+    try {
+      await channelRef.current.send({
+        type: "broadcast",
+        event: "typing",
+        payload: {
+          chatId,
+          userId,
+          isTyping,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to send typing state:", error);
+    }
+  };
 
   const markChatRead = async () => {
     if (!token) return;
@@ -197,6 +220,23 @@ export default function Chat() {
 
       channel = supabase
         .channel(`chat-${chatId}`)
+        .on("broadcast", { event: "typing" }, ({ payload }) => {
+          if (!payload) return;
+          if (String(payload.chatId) !== String(chatId)) return;
+          if (String(payload.userId) === String(userId)) return;
+
+          setOtherUserTyping(Boolean(payload.isTyping));
+
+          if (typingIndicatorTimeoutRef.current) {
+            clearTimeout(typingIndicatorTimeoutRef.current);
+          }
+
+          if (payload.isTyping) {
+            typingIndicatorTimeoutRef.current = setTimeout(() => {
+              setOtherUserTyping(false);
+            }, 1800);
+          }
+        })
         .on(
           "postgres_changes",
           {
@@ -207,6 +247,10 @@ export default function Chat() {
           },
           async (payload) => {
             const newMessage = payload.new;
+
+            if (String(newMessage.sender_id) !== String(userId)) {
+              setOtherUserTyping(false);
+            }
 
             await fetchChatSnapshot();
 
@@ -292,6 +336,8 @@ export default function Chat() {
         )
         .subscribe();
 
+      channelRef.current = channel;
+
       pollingIntervalRef.current = setInterval(() => {
         fetchChatSnapshot();
       }, 2500);
@@ -309,9 +355,81 @@ export default function Chat() {
       if (refreshTimeoutRef.current) {
         clearTimeout(refreshTimeoutRef.current);
       }
+      if (typingStopTimeoutRef.current) {
+        clearTimeout(typingStopTimeoutRef.current);
+      }
+      if (typingIndicatorTimeoutRef.current) {
+        clearTimeout(typingIndicatorTimeoutRef.current);
+      }
+      channelRef.current = null;
       if (channel) supabase.removeChannel(channel);
     };
   }, [chatId, token, userId]);
+
+  useEffect(() => {
+    const updateKeyboardOffset = () => {
+      if (!window.visualViewport) {
+        setKeyboardOffset(0);
+        return;
+      }
+
+      const viewport = window.visualViewport;
+      const overlap = Math.max(
+        0,
+        window.innerHeight - viewport.height - viewport.offsetTop
+      );
+
+      setKeyboardOffset(overlap);
+    };
+
+    updateKeyboardOffset();
+
+    if (!window.visualViewport) return undefined;
+
+    window.visualViewport.addEventListener("resize", updateKeyboardOffset);
+    window.visualViewport.addEventListener("scroll", updateKeyboardOffset);
+    window.addEventListener("orientationchange", updateKeyboardOffset);
+
+    return () => {
+      window.visualViewport.removeEventListener("resize", updateKeyboardOffset);
+      window.visualViewport.removeEventListener("scroll", updateKeyboardOffset);
+      window.removeEventListener("orientationchange", updateKeyboardOffset);
+    };
+  }, []);
+
+  useEffect(() => {
+    setOtherUserTyping(false);
+  }, [chatId]);
+
+  useEffect(() => {
+    if (!channelRef.current) return undefined;
+
+    const hasText = input.trim().length > 0;
+
+    if (!hasText) {
+      if (typingStopTimeoutRef.current) {
+        clearTimeout(typingStopTimeoutRef.current);
+      }
+      sendTypingState(false);
+      return undefined;
+    }
+
+    sendTypingState(true);
+
+    if (typingStopTimeoutRef.current) {
+      clearTimeout(typingStopTimeoutRef.current);
+    }
+
+    typingStopTimeoutRef.current = setTimeout(() => {
+      sendTypingState(false);
+    }, 1200);
+
+    return () => {
+      if (typingStopTimeoutRef.current) {
+        clearTimeout(typingStopTimeoutRef.current);
+      }
+    };
+  }, [input]);
 
   useEffect(() => {
     if (!otherUser?.id || !token) return;
@@ -639,7 +757,10 @@ export default function Chat() {
   }, []);
 
   return (
-    <div className="chat-window">
+    <div
+      className="chat-window"
+      style={{ "--chat-keyboard-offset": `${keyboardOffset}px` }}
+    >
       <AeroNotice notice={notice ? { ...notice, inline: true } : null} onClose={() => setNotice(null)} />
       <div className="chat-header">
         <button className="back-btn" onClick={() => navigate(-1)} aria-label="Go back">
@@ -662,8 +783,12 @@ export default function Chat() {
           </div>
           <div className="chat-user-heading">
             <h3>{otherUser.username}</h3>
-            <span className={`chat-user-status ${otherUserOnline ? "online" : ""}`}>
-              {otherUserOnline ? "Online" : "Offline"}
+            <span
+              className={`chat-user-status ${
+                otherUserTyping ? "typing" : otherUserOnline ? "online" : ""
+              }`}
+            >
+              {otherUserTyping ? "Typing..." : otherUserOnline ? "Online" : "Offline"}
             </span>
           </div>
         </button>
@@ -895,6 +1020,9 @@ export default function Chat() {
               placeholder={replyingTo ? "Write your reply..." : "Type a message..."}
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onFocus={() => {
+                setTimeout(() => scrollToBottom("auto"), 120);
+              }}
               onKeyDown={(e) => e.key === "Enter" && !sending && sendMessage()}
             />
             <button onClick={sendMessage} disabled={sending || !input.trim()}>

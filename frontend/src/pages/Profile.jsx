@@ -57,6 +57,12 @@ export default function Profile() {
 
   const LIMIT = 5;
   const navigate = useNavigate();
+
+  const goToProfile = (targetUsername) => {
+    if (!targetUsername) return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    navigate(`/profile/${targetUsername}`);
+  };
   
 
   /* ================= FETCH DATA ================= */
@@ -355,6 +361,13 @@ export default function Profile() {
   };
 
   useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+    setPosts([]);
+    setOffset(0);
+    setHasMore(true);
+    setActiveIndexMap({});
+    setActiveMenuPostId(null);
+    setActiveCommentPost(null);
     fetchCurrentUser();
     fetchUser();
     fetchPosts(true);
@@ -1024,20 +1037,26 @@ export default function Profile() {
 
             <div className="post-header">
               <div className="post-user-info">
-                <div className="post-user-avatar">
-                  {post.profile_pic ? (
-                    <img src={getSafeMediaUrl(post.profile_pic)} alt="pfp" />
-                  ) : <FaUser />}
-                </div>
+                <button
+                  type="button"
+                  className="post-user-link"
+                  onClick={() => goToProfile(post.username || user.username)}
+                >
+                  <div className="post-user-avatar">
+                    {post.profile_pic ? (
+                      <img src={getSafeMediaUrl(post.profile_pic)} alt="pfp" />
+                    ) : <FaUser />}
+                  </div>
 
-                <div className="post-user-text">
-                  <span className="post-username">
-                    {post.username || user.username}
-                  </span>
-                  <span className="post-date">
-                    {formatDate(post.date_posted)}
-                  </span>
-                </div>
+                  <div className="post-user-text">
+                    <span className="post-username">
+                      {post.username || user.username}
+                    </span>
+                    <span className="post-date">
+                      {formatDate(post.date_posted)}
+                    </span>
+                  </div>
+                </button>
               </div>
             </div>
 
