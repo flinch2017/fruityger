@@ -27,6 +27,7 @@ export default function Header() {
   const storedProfilePic = localStorage.getItem("profile_pic") || "";
   const profileUsername = currentUser?.username || localStorage.getItem("username") || "You";
   const profileHandle = `@${profileUsername}`;
+  const mergedProfilePic = currentUser?.profile_pic || storedProfilePic || "";
 
   const syncCurrentUserFromStorage = () => {
     const storedUsername = localStorage.getItem("username");
@@ -65,7 +66,15 @@ export default function Header() {
         const data = await res.json();
 
         if (res.ok) {
-          setCurrentUser(data.user);
+          setCurrentUser((prev) => ({
+            ...(prev || {}),
+            ...(data.user || {}),
+            profile_pic:
+              data.user?.profile_pic ||
+              localStorage.getItem("profile_pic") ||
+              prev?.profile_pic ||
+              "",
+          }));
         }
       } catch (err) {
         console.error(err);
@@ -449,9 +458,9 @@ export default function Header() {
 
             <div className="profile-container" ref={profileRef}>
               <div className="profile-placeholder" onClick={toggleDropdown}>
-                {currentUser?.profile_pic || storedProfilePic ? (
+                {mergedProfilePic ? (
                   <img
-                    src={getSafeMediaUrl(currentUser?.profile_pic || storedProfilePic)}
+                    src={getSafeMediaUrl(mergedProfilePic)}
                     alt="Avatar"
                     style={{
                       width: "100%",
@@ -469,8 +478,8 @@ export default function Header() {
                 <div className="profile-dropdown">
                   <div className="profile-dropdown-hero">
                     <div className="profile-dropdown-avatar">
-                      {currentUser?.profile_pic || storedProfilePic ? (
-                        <img src={getSafeMediaUrl(currentUser?.profile_pic || storedProfilePic)} alt="Avatar" />
+                      {mergedProfilePic ? (
+                        <img src={getSafeMediaUrl(mergedProfilePic)} alt="Avatar" />
                       ) : (
                         "👤"
                       )}
@@ -559,3 +568,4 @@ export default function Header() {
     </>
   );
 }
+

@@ -627,16 +627,22 @@ router.put("/edit-profile", authenticateToken, async (req, res) => {
     await ensureUserProfileSchema();
 
     const userResult = await pool.query(
-      "SELECT profile_pic_key FROM users WHERE id=$1",
+      "SELECT profile_pic, profile_pic_key FROM users WHERE id=$1",
       [req.user.id]
     );
 
-    const oldKey = userResult.rows[0]?.profile_pic_key;
+    const existingUser = userResult.rows[0];
+    const oldKey = existingUser?.profile_pic_key || null;
+    const nextProfilePic = typeof profile_pic === "string" ? profile_pic : existingUser?.profile_pic || null;
+    const nextProfilePicKey =
+      typeof profile_pic_key === "string" && profile_pic_key.trim()
+        ? profile_pic_key.trim()
+        : oldKey;
 
-    // ⭐ Delete old R2 image
-    await deleteR2Object(process.env.R2_BUCKET, oldKey);
+    if (oldKey && nextProfilePicKey !== oldKey) {
+      await deleteR2Object(process.env.R2_BUCKET, oldKey);
+    }
 
-    // ⭐ Update profile
     const query = `
       UPDATE users 
       SET username=$1,
@@ -649,8 +655,8 @@ router.put("/edit-profile", authenticateToken, async (req, res) => {
 
     const params = [
       username,
-      profile_pic,
-      profile_pic_key,
+      nextProfilePic,
+      nextProfilePicKey,
       typeof bio === "string" ? bio.trim().slice(0, 160) : null,
       req.user.id
     ];
