@@ -2,12 +2,16 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   FaArrowLeft,
+  FaFileAlt,
+  FaFilePdf,
+  FaFileWord,
   FaCog,
   FaEllipsisV,
   FaRegSmileBeam,
   FaReply,
   FaTimes,
   FaUserCircle,
+  FaPlayCircle,
 } from "react-icons/fa";
 import supabase from "../lib/supabaseClient";
 import AeroNotice from "../components/AeroNotice";
@@ -41,6 +45,7 @@ export default function Chat() {
   const [otherUserOnline, setOtherUserOnline] = useState(false);
   const [otherUserTyping, setOtherUserTyping] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
+  const [selectedAttachment, setSelectedAttachment] = useState(null);
   const [reactionTargetMessage, setReactionTargetMessage] = useState(null);
   const [reacting, setReacting] = useState(false);
   const [pendingReactionKey, setPendingReactionKey] = useState(null);
@@ -58,6 +63,7 @@ export default function Chat() {
   const channelRef = useRef(null);
   const typingStopTimeoutRef = useRef(null);
   const typingIndicatorTimeoutRef = useRef(null);
+  const attachmentInputRef = useRef(null);
 
   const scrollToBottom = (behavior = "smooth") => {
     messagesEndRef.current?.scrollIntoView({ behavior });
@@ -88,6 +94,54 @@ export default function Chat() {
 
   const getReactionEmoji = (reactionKey) =>
     reactionOptions.find((option) => option.key === reactionKey)?.emoji || "\u2764\uFE0F";
+
+  const attachmentIcon = (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M8.5 12.5 15 6a3 3 0 1 1 4.24 4.24l-8.13 8.13a5 5 0 1 1-7.07-7.07l8.84-8.84"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+
+  const getAttachmentKindLabel = (attachment) => {
+    if (!attachment) return "";
+    if (attachment.attachment_type === "image" || attachment.type?.startsWith("image/")) {
+      return "Image";
+    }
+    if (attachment.attachment_type === "video" || attachment.type?.startsWith("video/")) {
+      return "Video";
+    }
+    if (attachment.attachment_type === "pdf" || attachment.type === "application/pdf") {
+      return "PDF";
+    }
+    if (
+      attachment.attachment_type === "docx" ||
+      attachment.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ) {
+      return "DOCX";
+    }
+    return "File";
+  };
+
+  const getAttachmentIcon = (attachment) => {
+    const kind = getAttachmentKindLabel(attachment);
+    if (kind === "PDF") return <FaFilePdf />;
+    if (kind === "DOCX") return <FaFileWord />;
+    if (kind === "Video") return <FaPlayCircle />;
+    return <FaFileAlt />;
+  };
+
+  const formatFileSize = (bytes) => {
+    const size = Number(bytes || 0);
+    if (!size) return "";
+    if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   const sendTypingState = async (isTyping) => {
     if (!channelRef.current || !userId) return;
@@ -448,26 +502,31 @@ export default function Chat() {
   }, [otherUser?.id, token]);
 
   const sendMessage = async () => {
-    if (!input.trim() || blockedByMe || blockedByThem || sending) return;
+    if ((!input.trim() && !selectedAttachment) || blockedByMe || blockedByThem || sending) {
+      return;
+    }
 
     setSending(true);
 
     try {
+      const formData = new FormData();
+      formData.append("chatId", chatId);
+      formData.append("receiverId", otherUser.id);
+      formData.append("content", input);
+      formData.append("replyToMessageId", replyingTo?.id || "");
+      if (selectedAttachment) {
+        formData.append("attachment", selectedAttachment);
+      }
+
       const res = await fetch("http://localhost:5000/api/messages/send", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          chatId,
-          receiverId: otherUser.id,
-          content: input,
-          replyToMessageId: replyingTo?.id || null,
-        }),
+        body: formData,
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         throw new Error(data.error || "Failed to send message");
@@ -482,11 +541,16 @@ export default function Chat() {
       });
 
       setInput("");
+      setSelectedAttachment(null);
+      if (attachmentInputRef.current) {
+        attachmentInputRef.current.value = "";
+      }
       setReplyingTo(null);
       scrollToBottom("smooth");
       dispatchMessagesRefresh();
     } catch (err) {
       console.error(err);
+      setNotice({ type: "error", message: err.message || "Failed to send message." });
     } finally {
       setSending(false);
     }
@@ -720,6 +784,101 @@ export default function Chat() {
     navigate(`/report?type=user&id=${otherUser.id}`);
   };
 
+  const handleAttachmentSelection = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const allowedMimeTypes = new Set([
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ]);
+    const lowerName = String(file.name || "").toLowerCase();
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+    const isDocument =
+      allowedMimeTypes.has(file.type) || lowerName.endsWith(".pdf") || lowerName.endsWith(".docx");
+
+    if (!isImage && !isVideo && !isDocument) {
+      setNotice({
+        type: "error",
+        message: "Only images, videos, PDF, and DOCX files are allowed.",
+      });
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setNotice({
+        type: "error",
+        message: "Attachments must be 5MB or smaller.",
+      });
+      event.target.value = "";
+      return;
+    }
+
+    setSelectedAttachment(file);
+  };
+
+  const clearSelectedAttachment = () => {
+    setSelectedAttachment(null);
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = "";
+    }
+  };
+
+  const renderMessageAttachment = (message) => {
+    if (!message?.attachment_url) return null;
+
+    if (message.attachment_type === "image") {
+      return (
+        <a
+          href={getSafeMediaUrl(message.attachment_url)}
+          target="_blank"
+          rel="noreferrer"
+          className="chat-attachment-image-link"
+        >
+          <img
+            className="chat-attachment-image"
+            src={getSafeMediaUrl(message.attachment_url)}
+            alt={message.attachment_name || "Shared image"}
+          />
+        </a>
+      );
+    }
+
+    if (message.attachment_type === "video") {
+      return (
+        <video
+          className="chat-attachment-video"
+          src={getSafeMediaUrl(message.attachment_url)}
+          controls
+          playsInline
+          preload="metadata"
+        />
+      );
+    }
+
+    return (
+      <a
+        href={getSafeMediaUrl(message.attachment_url)}
+        target="_blank"
+        rel="noreferrer"
+        className="chat-attachment-file"
+      >
+        <span className={`chat-attachment-file-icon ${message.attachment_type || "file"}`}>
+          {getAttachmentIcon(message)}
+        </span>
+        <span className="chat-attachment-file-copy">
+          <strong>{message.attachment_name || "Attachment"}</strong>
+          <span>
+            {getAttachmentKindLabel(message)}
+            {message.attachment_size ? ` · ${formatFileSize(message.attachment_size)}` : ""}
+          </span>
+        </span>
+      </a>
+    );
+  };
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (!e.target.closest(".message-options-wrapper")) {
@@ -899,7 +1058,10 @@ export default function Chat() {
                         <p>{getReplyPreviewText(msg.reply_to_content)}</p>
                       </div>
                     )}
-                    <div className="message-bubble-text">{msg.content}</div>
+                    {renderMessageAttachment(msg)}
+                    {msg.content ? (
+                      <div className="message-bubble-text">{msg.content}</div>
+                    ) : null}
                   </div>
 
                   {!isMine && (
@@ -1014,7 +1176,45 @@ export default function Chat() {
             </div>
           )}
 
+          {selectedAttachment && (
+            <div className="chat-attachment-preview">
+              <div className="chat-attachment-preview-copy">
+                <span className="chat-attachment-preview-label">
+                  {getAttachmentKindLabel(selectedAttachment)} ready to send
+                </span>
+                <strong>{selectedAttachment.name}</strong>
+                <span>{formatFileSize(selectedAttachment.size)}</span>
+              </div>
+              <button
+                type="button"
+                className="chat-attachment-preview-remove"
+                onClick={clearSelectedAttachment}
+                aria-label="Remove selected attachment"
+              >
+                <FaTimes />
+              </button>
+            </div>
+          )}
+
           <div className="chat-input">
+            <input
+              ref={attachmentInputRef}
+              type="file"
+              className="chat-attachment-input"
+              accept="image/*,video/*,.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={handleAttachmentSelection}
+            />
+            <button
+              type="button"
+              className="chat-attachment-trigger"
+              onClick={() => attachmentInputRef.current?.click()}
+              disabled={sending}
+              aria-label="Attach a file"
+              title="Attach"
+            >
+              {attachmentIcon}
+              
+            </button>
             <input
               type="text"
               placeholder={replyingTo ? "Write your reply..." : "Type a message..."}
@@ -1025,7 +1225,12 @@ export default function Chat() {
               }}
               onKeyDown={(e) => e.key === "Enter" && !sending && sendMessage()}
             />
-            <button onClick={sendMessage} disabled={sending || !input.trim()}>
+            <button
+              type="button"
+              className="chat-send-btn"
+              onClick={sendMessage}
+              disabled={sending || (!input.trim() && !selectedAttachment)}
+            >
               {sending ? "Sending..." : "Send"}
             </button>
           </div>

@@ -1,6 +1,11 @@
 import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
+import multer from "multer";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { v4 as uuidv4 } from "uuid";
+import path from "path";
+import { r2 } from "../utils/r2.js";
 
 const router = express.Router();
 
@@ -9,6 +14,80 @@ let blockedUsersTableReadyPromise = null;
 let activeUsersTableReadyPromise = null;
 let messageRepliesSchemaReadyPromise = null;
 let messageReactionsSchemaReadyPromise = null;
+let messageAttachmentsSchemaReadyPromise = null;
+
+const CHAT_ATTACHMENT_MAX_SIZE = 5 * 1024 * 1024;
+const allowedDocumentExtensions = new Set([".pdf", ".docx"]);
+const allowedDocumentMimeTypes = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+
+const sanitizeFileName = (value = "") =>
+  String(value)
+    .normalize("NFKD")
+    .replace(/[^\w.\-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "file";
+
+const uploadAttachment = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: CHAT_ATTACHMENT_MAX_SIZE,
+    files: 1,
+  },
+  fileFilter: (_req, file, cb) => {
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    const mime = String(file.mimetype || "").toLowerCase();
+    const isImage = mime.startsWith("image/");
+    const isVideo = mime.startsWith("video/");
+    const isAllowedDocument =
+      allowedDocumentMimeTypes.has(mime) || allowedDocumentExtensions.has(extension);
+
+    if (isImage || isVideo || isAllowedDocument) {
+      cb(null, true);
+      return;
+    }
+
+    cb(new Error("Only images, videos, PDF, and DOCX files are allowed"));
+  },
+});
+
+const parseChatAttachment = (req, res) =>
+  new Promise((resolve, reject) => {
+    uploadAttachment.single("attachment")(req, res, (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+
+function classifyAttachment(file) {
+  const mime = String(file?.mimetype || "").toLowerCase();
+  const extension = path.extname(file?.originalname || "").toLowerCase();
+
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime === "application/pdf" || extension === ".pdf") return "pdf";
+  if (
+    mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    extension === ".docx"
+  ) {
+    return "docx";
+  }
+
+  return "file";
+}
+
+function getAttachmentFallbackText(type) {
+  if (type === "image") return "Sent an image";
+  if (type === "video") return "Sent a video";
+  if (type === "pdf") return "Sent a PDF";
+  if (type === "docx") return "Sent a DOCX file";
+  return "Sent an attachment";
+}
 
 async function ensureDeletedChatsTable() {
   if (!deletedChatsTableReadyPromise) {
@@ -115,6 +194,42 @@ async function ensureMessageReactionsSchema() {
   await messageReactionsSchemaReadyPromise;
 }
 
+async function ensureMessageAttachmentsSchema() {
+  if (!messageAttachmentsSchemaReadyPromise) {
+    messageAttachmentsSchemaReadyPromise = (async () => {
+      await pool.query(`
+        ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS attachment_url TEXT
+      `);
+
+      await pool.query(`
+        ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS attachment_type VARCHAR(20)
+      `);
+
+      await pool.query(`
+        ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS attachment_name TEXT
+      `);
+
+      await pool.query(`
+        ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS attachment_mime TEXT
+      `);
+
+      await pool.query(`
+        ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS attachment_size INTEGER
+      `);
+    })().catch((error) => {
+      messageAttachmentsSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await messageAttachmentsSchemaReadyPromise;
+}
+
 async function fetchMessageForUser(messageId, userId) {
   const { rows } = await pool.query(
     `
@@ -191,6 +306,7 @@ router.get("/chats", authenticateToken, async (req, res) => {
 
   try {
     await ensureDeletedChatsTable();
+    await ensureMessageAttachmentsSchema();
 
     const { rows } = await pool.query(
       `
@@ -199,6 +315,7 @@ router.get("/chats", authenticateToken, async (req, res) => {
         dc.deleted_at,
         m.id AS last_message_id,
         m.content AS last_message,
+        m.attachment_type AS last_message_attachment_type,
         m.created_at AS last_message_at,
         m.sender_id AS last_message_sender_id,
         m.read_status AS last_message_read,
@@ -266,6 +383,7 @@ router.get("/chats", authenticateToken, async (req, res) => {
     const formatted = rows.map((chat) => ({
       id: chat.id,
       last_message: chat.last_message,
+      last_message_attachment_type: chat.last_message_attachment_type,
       last_message_at: chat.last_message_at,
       last_message_sender_id: chat.last_message_sender_id,
       last_message_read: chat.last_message_read,
@@ -325,13 +443,27 @@ router.get("/unread-count", authenticateToken, async (req, res) => {
 });
 
 router.post("/send", authenticateToken, async (req, res) => {
-  const { chatId, receiverId, content, replyToMessageId = null } = req.body;
-  const senderId = req.user.id;
-
   try {
+    await parseChatAttachment(req, res);
+
+    const { chatId, receiverId, content, replyToMessageId = null } = req.body;
+    const senderId = req.user.id;
+    const trimmedContent = String(content || "").trim();
+    const attachment = req.file || null;
+    const normalizedReplyToMessageId = String(replyToMessageId || "").trim() || null;
+
     await ensureDeletedChatsTable();
     await ensureMessageRepliesSchema();
     await ensureMessageReactionsSchema();
+    await ensureMessageAttachmentsSchema();
+
+    if (!chatId || !receiverId) {
+      return res.status(400).json({ error: "chatId and receiverId are required" });
+    }
+
+    if (!trimmedContent && !attachment) {
+      return res.status(400).json({ error: "Message content or an attachment is required" });
+    }
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS blocked_users (
@@ -357,7 +489,7 @@ router.post("/send", authenticateToken, async (req, res) => {
       return res.status(403).json({ error: "Messaging is unavailable with this user" });
     }
 
-    if (replyToMessageId) {
+    if (normalizedReplyToMessageId) {
       const replyTargetResult = await pool.query(
         `
         SELECT id
@@ -366,7 +498,7 @@ router.post("/send", authenticateToken, async (req, res) => {
           AND chat_id = $2
         LIMIT 1
         `,
-        [replyToMessageId, chatId]
+        [normalizedReplyToMessageId, chatId]
       );
 
       if (replyTargetResult.rows.length === 0) {
@@ -374,14 +506,66 @@ router.post("/send", authenticateToken, async (req, res) => {
       }
     }
 
+    let attachmentUrl = null;
+    let attachmentType = null;
+    let attachmentName = null;
+    let attachmentMime = null;
+    let attachmentSize = null;
+
+    if (attachment) {
+      attachmentType = classifyAttachment(attachment);
+      attachmentName = sanitizeFileName(attachment.originalname);
+      attachmentMime = attachment.mimetype;
+      attachmentSize = attachment.size;
+
+      const key = `messages/${chatId}/${uuidv4()}-${attachmentName}`;
+
+      await r2.send(
+        new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET,
+          Key: key,
+          Body: attachment.buffer,
+          ContentType: attachmentMime,
+        })
+      );
+
+      attachmentUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+    }
+
+    const storedContent = trimmedContent || getAttachmentFallbackText(attachmentType);
+
     const message = await pool.query(
       `
-      INSERT INTO messages (chat_id, sender_id, receiver_id, content, reply_to_message_id)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO messages (
+        chat_id,
+        sender_id,
+        receiver_id,
+        content,
+        reply_to_message_id,
+        attachment_url,
+        attachment_type,
+        attachment_name,
+        attachment_mime,
+        attachment_size
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
       `,
-      [chatId, senderId, receiverId, content, replyToMessageId]
+      [
+        chatId,
+        senderId,
+        receiverId,
+        storedContent,
+        normalizedReplyToMessageId,
+        attachmentUrl,
+        attachmentType,
+        attachmentName,
+        attachmentMime,
+        attachmentSize,
+      ]
     );
+
+    const lastMessagePreview = storedContent;
 
     await pool.query(
       `
@@ -389,7 +573,7 @@ router.post("/send", authenticateToken, async (req, res) => {
       SET last_message = $1, last_message_at = CURRENT_TIMESTAMP
       WHERE id = $2
       `,
-      [content, chatId]
+      [lastMessagePreview, chatId]
     );
 
     const enrichedMessage = await fetchMessageForUser(message.rows[0].id, senderId);
@@ -397,7 +581,15 @@ router.post("/send", authenticateToken, async (req, res) => {
     res.json(enrichedMessage || message.rows[0]);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to send message" });
+    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "Attachments must be 5MB or smaller" });
+    }
+
+    if (err?.message === "Only images, videos, PDF, and DOCX files are allowed") {
+      return res.status(400).json({ error: err.message });
+    }
+
+    res.status(500).json({ error: err?.message || "Failed to send message" });
   }
 });
 
