@@ -86,6 +86,8 @@ export default function Search() {
     });
   };
 
+  const getVideoControlKey = (postId, index) => `${postId}-${index}`;
+
   const getRelevantReposters = (post) =>
     Array.isArray(post?.reposters) ? post.reposters : [];
 
@@ -113,18 +115,18 @@ export default function Search() {
     });
   };
 
-  const toggleVideoMuted = (postId) => {
+  const toggleVideoMuted = (postId, index) => {
+    const videoKey = getVideoControlKey(postId, index);
     setVideoMutedMap((prev) => {
-      const nextMuted = !(prev[postId] ?? true);
-      const next = { ...prev, [postId]: nextMuted };
-      (videoRefs.current[postId] || []).forEach((video) => {
-        if (video) {
-          video.muted = nextMuted;
-          if (!nextMuted) {
-            video.play().catch(() => {});
-          }
+      const nextMuted = !(prev[videoKey] ?? true);
+      const next = { ...prev, [videoKey]: nextMuted };
+      const video = videoRefs.current[postId]?.[index];
+      if (video) {
+        video.muted = nextMuted;
+        if (!nextMuted) {
+          video.play().catch(() => {});
         }
-      });
+      }
       return next;
     });
   };
@@ -712,25 +714,15 @@ export default function Search() {
                                           videoRefs.current[p.post_id] = [];
                                         }
                                         videoRefs.current[p.post_id][index] = el;
-                                        el.muted = videoMutedMap[p.post_id] ?? true;
+                                        el.muted = videoMutedMap[getVideoControlKey(p.post_id, index)] ?? true;
                                       }}
                                       src={getSafeMediaUrl(media.media_url)}
                                       playsInline
                                       loop
-                                      muted={videoMutedMap[p.post_id] ?? true}
+                                      muted={videoMutedMap[getVideoControlKey(p.post_id, index)] ?? true}
                                       preload="metadata"
                                       className="search-post-video"
                                     />
-                                    <button
-                                      type="button"
-                                      className={`post-video-sound-btn ${(
-                                        videoMutedMap[p.post_id] ?? true
-                                      ) ? "muted" : ""}`}
-                                      onClick={() => toggleVideoMuted(p.post_id)}
-                                      aria-label={(videoMutedMap[p.post_id] ?? true) ? "Turn on sound" : "Mute video"}
-                                    >
-                                      {(videoMutedMap[p.post_id] ?? true) ? <FaVolumeMute /> : <FaVolumeUp />}
-                                    </button>
                                   </>
                                 ) : (
                                   <img
@@ -742,6 +734,19 @@ export default function Search() {
                               </div>
                             ))}
                           </div>
+
+                          {p.media[(activeIndexMap[p.post_id] || 0)]?.media_type === "video" && (
+                            <button
+                              type="button"
+                              className={`post-video-sound-btn ${(
+                                videoMutedMap[getVideoControlKey(p.post_id, activeIndexMap[p.post_id] || 0)] ?? true
+                              ) ? "muted" : ""}`}
+                              onClick={() => toggleVideoMuted(p.post_id, activeIndexMap[p.post_id] || 0)}
+                              aria-label={(videoMutedMap[getVideoControlKey(p.post_id, activeIndexMap[p.post_id] || 0)] ?? true) ? "Turn on sound" : "Mute video"}
+                            >
+                              {(videoMutedMap[getVideoControlKey(p.post_id, activeIndexMap[p.post_id] || 0)] ?? true) ? <FaVolumeMute /> : <FaVolumeUp />}
+                            </button>
+                          )}
 
                           {p.media.length > 1 && (
                             <div className="search-post-carousel-indicator">

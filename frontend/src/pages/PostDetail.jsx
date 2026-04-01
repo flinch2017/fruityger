@@ -22,7 +22,7 @@ export default function PostDetail() {
   const [liking, setLiking] = useState(false);
   const [reposting, setReposting] = useState(false);
   const [repostDropdownOpen, setRepostDropdownOpen] = useState(false);
-  const [videoMuted, setVideoMuted] = useState(true);
+  const [videoMutedMap, setVideoMutedMap] = useState({});
   const [commentOpen, setCommentOpen] = useState(Boolean(location.state?.openComments));
   const [dragging, setDragging] = useState(false);
   const [dragStartX, setDragStartX] = useState(0);
@@ -52,6 +52,8 @@ export default function PostDetail() {
       year: "numeric",
     });
   };
+
+  const getVideoControlKey = (index) => `detail-${index}`;
 
   const getRelevantReposters = () =>
     Array.isArray(post?.reposters) ? post.reposters : [];
@@ -199,18 +201,19 @@ export default function PostDetail() {
     setDragging(false);
   };
 
-  const toggleVideoMuted = () => {
-    setVideoMuted((prev) => {
-      const nextMuted = !prev;
-      Object.values(videoRefs.current).forEach((video) => {
-        if (video) {
-          video.muted = nextMuted;
-          if (!nextMuted) {
-            video.play().catch(() => {});
-          }
+  const toggleVideoMuted = (index) => {
+    const videoKey = getVideoControlKey(index);
+    setVideoMutedMap((prev) => {
+      const nextMuted = !(prev[videoKey] ?? true);
+      const next = { ...prev, [videoKey]: nextMuted };
+      const video = videoRefs.current[index];
+      if (video) {
+        video.muted = nextMuted;
+        if (!nextMuted) {
+          video.play().catch(() => {});
         }
-      });
-      return nextMuted;
+      }
+      return next;
     });
   };
 
@@ -433,23 +436,15 @@ export default function PostDetail() {
                           ref={(el) => {
                             if (!el) return;
                             videoRefs.current[index] = el;
-                            el.muted = videoMuted;
+                            el.muted = videoMutedMap[getVideoControlKey(index)] ?? true;
                           }}
                           src={getSafeMediaUrl(media.media_url)}
                           playsInline
                           loop
-                          muted={videoMuted}
+                          muted={videoMutedMap[getVideoControlKey(index)] ?? true}
                           preload="metadata"
                           className="feed-auto-video"
                         />
-                        <button
-                          type="button"
-                          className={`post-video-sound-btn ${videoMuted ? "muted" : ""}`}
-                          onClick={toggleVideoMuted}
-                          aria-label={videoMuted ? "Turn on sound" : "Mute video"}
-                        >
-                          {videoMuted ? <FaVolumeMute /> : <FaVolumeUp />}
-                        </button>
                       </>
                     ) : (
                       <img src={getSafeMediaUrl(media.media_url)} alt="" />
@@ -457,6 +452,17 @@ export default function PostDetail() {
                   </div>
                 ))}
               </div>
+
+              {post.media[activeIndex]?.media_type === "video" && (
+                <button
+                  type="button"
+                  className={`post-video-sound-btn ${(videoMutedMap[getVideoControlKey(activeIndex)] ?? true) ? "muted" : ""}`}
+                  onClick={() => toggleVideoMuted(activeIndex)}
+                  aria-label={(videoMutedMap[getVideoControlKey(activeIndex)] ?? true) ? "Turn on sound" : "Mute video"}
+                >
+                  {(videoMutedMap[getVideoControlKey(activeIndex)] ?? true) ? <FaVolumeMute /> : <FaVolumeUp />}
+                </button>
+              )}
 
               {post.media.length > 1 && (
                 <div className="feed-carousel-indicator">

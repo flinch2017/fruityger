@@ -85,6 +85,8 @@ export default function Feed() {
     });
   };
 
+  const getVideoControlKey = (postId, index) => `${postId}-${index}`;
+
   const getRelevantReposters = (post) =>
     Array.isArray(post?.reposters) ? post.reposters : [];
 
@@ -328,18 +330,18 @@ export default function Feed() {
     isPullingRef.current = true;
   };
 
-  const toggleVideoMuted = (postId) => {
+  const toggleVideoMuted = (postId, index) => {
+    const videoKey = getVideoControlKey(postId, index);
     setVideoMutedMap((prev) => {
-      const nextMuted = !(prev[postId] ?? true);
-      const next = { ...prev, [postId]: nextMuted };
-      (videoRefs.current[postId] || []).forEach((video) => {
-        if (video) {
-          video.muted = nextMuted;
-          if (!nextMuted) {
-            video.play().catch(() => {});
-          }
+      const nextMuted = !(prev[videoKey] ?? true);
+      const next = { ...prev, [videoKey]: nextMuted };
+      const video = videoRefs.current[postId]?.[index];
+      if (video) {
+        video.muted = nextMuted;
+        if (!nextMuted) {
+          video.play().catch(() => {});
         }
-      });
+      }
       return next;
     });
   };
@@ -827,25 +829,15 @@ export default function Feed() {
                                 videoRefs.current[post.post_id] = [];
                               }
                               videoRefs.current[post.post_id][index] = el;
-                              el.muted = videoMutedMap[post.post_id] ?? true;
+                              el.muted = videoMutedMap[getVideoControlKey(post.post_id, index)] ?? true;
                             }}
                             src={getSafeMediaUrl(media.media_url)}
                             playsInline
                             loop
-                            muted={videoMutedMap[post.post_id] ?? true}
+                            muted={videoMutedMap[getVideoControlKey(post.post_id, index)] ?? true}
                             preload="metadata"
                             className="feed-auto-video"
                           />
-                          <button
-                            type="button"
-                            className={`post-video-sound-btn ${
-                              (videoMutedMap[post.post_id] ?? true) ? "muted" : ""
-                            }`}
-                            onClick={() => toggleVideoMuted(post.post_id)}
-                            aria-label={(videoMutedMap[post.post_id] ?? true) ? "Turn on sound" : "Mute video"}
-                          >
-                            {(videoMutedMap[post.post_id] ?? true) ? <FaVolumeMute /> : <FaVolumeUp />}
-                          </button>
                         </>
                       ) : (
                         <img src={getSafeMediaUrl(media.media_url)} alt="" />
@@ -853,6 +845,19 @@ export default function Feed() {
                     </div>
                   ))}
                 </div>
+
+                {post.media[(activeIndexMap[post.post_id] || 0)]?.media_type === "video" && (
+                  <button
+                    type="button"
+                    className={`post-video-sound-btn ${
+                      (videoMutedMap[getVideoControlKey(post.post_id, activeIndexMap[post.post_id] || 0)] ?? true) ? "muted" : ""
+                    }`}
+                    onClick={() => toggleVideoMuted(post.post_id, activeIndexMap[post.post_id] || 0)}
+                    aria-label={(videoMutedMap[getVideoControlKey(post.post_id, activeIndexMap[post.post_id] || 0)] ?? true) ? "Turn on sound" : "Mute video"}
+                  >
+                    {(videoMutedMap[getVideoControlKey(post.post_id, activeIndexMap[post.post_id] || 0)] ?? true) ? <FaVolumeMute /> : <FaVolumeUp />}
+                  </button>
+                )}
 
                 {post.media.length > 1 && (
                   <div className="feed-carousel-indicator">
