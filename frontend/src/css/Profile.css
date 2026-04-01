@@ -1,4 +1,4 @@
-/* ===== PROFILE PAGE LAYOUT ===== */
+﻿/* ===== PROFILE PAGE LAYOUT ===== */
 .profile-page {
   display: flex;
   flex-direction: column;
@@ -70,39 +70,51 @@
 /* Action Buttons */
 
 .post-action-btn {
-  width: 38px;
-  height: 38px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
 
-  border-radius: 50%;
+  border-radius: 0;
   border: none;
-
-  background: linear-gradient(
-    to bottom,
-    rgba(255,255,255,0.95),
-    rgba(180,240,255,0.6)
-  );
-
-  backdrop-filter: blur(10px);
-
-  font-size: 16px;
+  background: transparent;
+  backdrop-filter: none;
+  color: #0c88ba;
+  font-size: 18px;
+  line-height: 1;
 
   cursor: pointer;
-
-  box-shadow:
-    0 6px 18px rgba(0,180,255,0.25),
-    inset 0 2px 6px rgba(255,255,255,0.9);
-
-  transition: all 0.25s ease;
+  box-shadow: none;
+  transition: transform 0.25s ease, color 0.25s ease, filter 0.25s ease;
 }
 
 .post-action-btn:hover {
   transform: translateY(-3px);
-  box-shadow:
-    0 10px 25px rgba(0,200,255,0.4);
+  color: #06a8e2;
+  filter: drop-shadow(0 4px 10px rgba(0, 184, 255, 0.28));
 }
 
 .post-action-btn:active {
   transform: scale(0.92);
+}
+
+.profile-repost-label {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: 0 0 4px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.98), rgba(255,255,255,0.42) 40%, transparent 58%),
+    linear-gradient(180deg, rgba(238,255,252,0.95), rgba(189,245,232,0.84));
+  border: 1px solid rgba(255,255,255,0.94);
+  box-shadow:
+    0 10px 22px rgba(0, 184, 155, 0.16),
+    inset 0 1px 0 rgba(255,255,255,0.98);
+  color: #117d70;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 
@@ -143,7 +155,7 @@
   width: 100%;
   height: 100%;
 
-  object-fit: cover; /* ⭐ THIS fixes zoom distortion */
+  object-fit: cover; /* â­ THIS fixes zoom distortion */
 
   border-radius: 50%;
 }
@@ -651,18 +663,19 @@
 }
 
 .post-action-btn.liked {
-  background: linear-gradient(
-    to bottom,
-    #ffb6e6,
-    #ff5ec4
-  );
-
-  box-shadow:
-    0 0 18px rgba(255, 0, 170, 0.8),
-    0 8px 25px rgba(255, 0, 200, 0.6);
-
-  color: white;
+  background: transparent;
+  box-shadow: none;
+  color: #ff4ea8;
+  filter: drop-shadow(0 0 10px rgba(255, 94, 196, 0.38));
   transform: scale(1.08);
+}
+
+.post-action-btn.reposted {
+  background: transparent;
+  box-shadow: none;
+  color: #16bfa2;
+  filter: drop-shadow(0 0 10px rgba(22, 191, 162, 0.32));
+  transform: scale(1.05);
 }
 
 .like-count {
@@ -676,35 +689,33 @@
 
 .post-more-wrapper {
   position: absolute;
-  top: 10px;
-  right: 12px;
+  top: 2px;
+  right: -4px;
 }
 
 /* Keep your existing button, just enhance slightly */
 .post-more {
-  font-size: 20px;
+  font-size: 14px;
   color: #00aaff;
-
-  width: 34px;
-  height: 34px;
+  width: 24px;
+  height: 24px;
 
   display: flex;
   align-items: center;
   justify-content: center;
 
-  border-radius: 50%;
-
   cursor: pointer;
 
-  transition: all 0.25s ease;
+  background: transparent;
+  box-shadow: none;
+  transition: transform 0.25s ease, color 0.25s ease, filter 0.25s ease;
 
 }
 
 .post-more:hover {
   transform: translateY(-2px);
-  box-shadow:
-    0 8px 20px rgba(0,200,255,0.5),
-    inset 0 2px 6px rgba(255,255,255,1);
+  color: #06a8e2;
+  filter: drop-shadow(0 4px 10px rgba(0, 184, 255, 0.28));
 }
 
 
@@ -828,16 +839,18 @@
 }
 
 .modal-card {
-  background: rgba(245,246,250,0.9); /* frosted glass effect */
-  border: 1px solid rgba(255,255,255,0.25);
+  background:
+    radial-gradient(circle at top left, rgba(255,255,255,0.84), transparent 42%),
+    linear-gradient(165deg, rgba(255,255,255,0.94), rgba(206,244,255,0.72));
+  border: 1px solid rgba(255,255,255,0.92);
   padding: 28px 36px;
-  border-radius: 20px;
+  border-radius: 28px;
   width: 380px;
   max-width: 90%;
   text-align: center;
   box-shadow:
-    0 16px 32px rgba(0,0,0,0.15),
-    0 0 24px rgba(0,180,255,0.1);
+    0 18px 42px rgba(0,0,0,0.14),
+    inset 0 1px 0 rgba(255,255,255,0.95);
   font-family: "Inter", sans-serif;
   color: #111;
   transform: scale(0.9) translateY(-20px);
@@ -943,16 +956,19 @@
   left: 50%;
   transform: translateX(-50%);
   padding: 14px 28px;
-  border-radius: 18px;
+  border-radius: 24px;
   font-weight: 600;
   z-index: 10001;
   opacity: 0.95;
   backdrop-filter: blur(6px);
-  box-shadow: 0 6px 24px rgba(0,180,255,0.2);
+  border: 1px solid rgba(255,255,255,0.84);
+  box-shadow:
+    0 18px 34px rgba(0,180,255,0.14),
+    inset 0 1px 0 rgba(255,255,255,0.82);
 }
 
-.toast.success { background: linear-gradient(135deg, #4caf50, #00ff90); color: #fff; }
-.toast.error { background: linear-gradient(135deg, #ff4d6d, #ff80a0); color: #fff; }
+.toast.success { background: linear-gradient(135deg, rgba(123, 241, 197, 0.96), rgba(18, 202, 147, 0.92)); color: #fff; }
+.toast.error { background: linear-gradient(135deg, rgba(255, 137, 174, 0.96), rgba(255, 87, 142, 0.92)); color: #fff; }
 
 .no-posts-message {
   text-align: center;
@@ -977,26 +993,22 @@
 }
 
 .profile-card-menu-btn {
-  width: 38px;
-  height: 38px;
+  width: 24px;
+  height: 24px;
   border: none;
-  border-radius: 50%;
   cursor: pointer;
-  font-size: 22px;
+  font-size: 14px;
   line-height: 1;
   color: #0690bd;
-  background: rgba(255,255,255,0.74);
-  box-shadow:
-    0 8px 20px rgba(0, 180, 255, 0.18),
-    inset 0 1px 0 rgba(255,255,255,0.95);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  background: transparent;
+  box-shadow: none;
+  transition: transform 0.2s ease, color 0.2s ease, filter 0.2s ease;
 }
 
 .profile-card-menu-btn:hover {
   transform: translateY(-1px);
-  box-shadow:
-    0 12px 24px rgba(0, 180, 255, 0.25),
-    inset 0 1px 0 rgba(255,255,255,1);
+  color: #06a8e2;
+  filter: drop-shadow(0 4px 10px rgba(0, 184, 255, 0.28));
 }
 
 .profile-card-dropdown {
@@ -1165,3 +1177,5 @@
   color: #0a6f92;
   font-weight: 700;
 }
+
+

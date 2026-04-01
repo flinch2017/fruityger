@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useParams } from "react-router-dom";
+import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaTimes, FaUser } from "react-icons/fa";
+import AeroNotice from "../components/AeroNotice";
 import "../css/Profile.css";
 import CommentSheet from "../components/CommentSheet";
 import "../css/CommentSheet.css";
@@ -24,6 +26,7 @@ export default function Profile() {
   const [loadingPosts, setLoadingPosts] = useState(false);
 
   const [likingMap, setLikingMap] = useState({});
+  const [repostingMap, setRepostingMap] = useState({});
 
   const loaderRef = useRef(null);
   const videoRefs = useRef({});
@@ -49,6 +52,7 @@ export default function Profile() {
   const [isBlockedProfile, setIsBlockedProfile] = useState(false);
   const [guestPromptOpen, setGuestPromptOpen] = useState(false);
   const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
+  const [notice, setNotice] = useState(null);
 
   const LIMIT = 5;
   const navigate = useNavigate();
@@ -219,7 +223,10 @@ export default function Profile() {
       }
     } catch (err) {
       console.error(err);
-      alert(err.message || `Failed to ${user?.blocked_by_me ? "unblock" : "block"} user`);
+      setNotice({
+        type: "error",
+        message: err.message || `Failed to ${user?.blocked_by_me ? "unblock" : "block"} user.`,
+      });
     }
   };
 
@@ -492,7 +499,7 @@ export default function Profile() {
     const token = localStorage.getItem("token");
     if (!token) return;
 
-    // 🚫 Prevent spam clicking
+    // ?? Prevent spam clicking
     if (likingMap[postId]) return;
 
     const currentPost = posts.find(p => p.post_id === postId);
@@ -503,7 +510,7 @@ export default function Profile() {
     // Mark as processing
     setLikingMap(prev => ({ ...prev, [postId]: true }));
 
-    // ✨ Optimistic UI update
+    // ? Optimistic UI update
     setPosts(prev =>
       prev.map(post =>
         post.post_id === postId
@@ -538,7 +545,7 @@ export default function Profile() {
     } catch (err) {
       console.error(err);
 
-      // 🔄 Revert on failure
+      // ?? Revert on failure
       setPosts(prev =>
         prev.map(post =>
           post.post_id === postId
@@ -551,8 +558,85 @@ export default function Profile() {
         )
       );
     } finally {
-      // ✅ Unlock button
+      // ? Unlock button
       setLikingMap(prev => {
+        const updated = { ...prev };
+        delete updated[postId];
+        return updated;
+      });
+    }
+  };
+
+  const toggleRepost = async (postId) => {
+    if (!token) {
+      openGuestPrompt();
+      return;
+    }
+
+    if (repostingMap[postId]) return;
+
+    const currentPost = posts.find((p) => p.post_id === postId);
+    if (!currentPost) return;
+
+    const wasReposted = currentPost.is_reposted;
+    const previousCount = currentPost.repost_count || 0;
+
+    setRepostingMap((prev) => ({ ...prev, [postId]: true }));
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.post_id === postId
+          ? {
+              ...post,
+              is_reposted: !wasReposted,
+              repost_count: wasReposted
+                ? Math.max(previousCount - 1, 0)
+                : previousCount + 1,
+            }
+          : post
+      )
+    );
+
+    try {
+      const res = await fetch("http://localhost:5000/api/reposts/toggle", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ postId }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to repost post");
+      }
+
+      setPosts((prev) =>
+        prev.map((post) =>
+          post.post_id === postId
+            ? {
+                ...post,
+                is_reposted: data.reposted,
+                repost_count: data.repost_count ?? post.repost_count,
+              }
+            : post
+        )
+      );
+    } catch (err) {
+      console.error(err);
+      setPosts((prev) =>
+        prev.map((post) =>
+          post.post_id === postId
+            ? {
+                ...post,
+                is_reposted: wasReposted,
+                repost_count: previousCount,
+              }
+            : post
+        )
+      );
+    } finally {
+      setRepostingMap((prev) => {
         const updated = { ...prev };
         delete updated[postId];
         return updated;
@@ -608,7 +692,7 @@ export default function Profile() {
 
       if (!res.ok) throw new Error("Failed");
 
-      // ✅ Optimistic UI: toggle state and update followers count
+      // ? Optimistic UI: toggle state and update followers count
       setFollowing(prev => !prev);
       setUser(prev => ({
         ...prev,
@@ -616,7 +700,7 @@ export default function Profile() {
       }));
     } catch (err) {
       console.error(err);
-      alert("Failed to update follow status");
+      setNotice({ type: "error", message: "Failed to update follow status." });
     } finally {
       setFollowLoading(false);
     }
@@ -636,6 +720,7 @@ export default function Profile() {
   
   return (
     <div className="profile-page">
+      <AeroNotice notice={notice ? { ...notice, inline: true } : null} onClose={() => setNotice(null)} />
 
       {/* ===== DELETE CONFIRM MODAL ===== */}
       {deleteModal.visible && (
@@ -702,7 +787,7 @@ export default function Profile() {
               className="profile-avatar-close"
               onClick={() => setAvatarViewerOpen(false)}
             >
-              ×
+              <FaTimes />
             </button>
 
             <img
@@ -721,7 +806,7 @@ export default function Profile() {
           postId={activeCommentPost}
           user={user}
 
-          // ✅ Add this (VERY IMPORTANT)
+          // ? Add this (VERY IMPORTANT)
           postAuthorId={user?.id}
 
           onClose={() => setActiveCommentPost(null)}
@@ -736,7 +821,7 @@ export default function Profile() {
               className="profile-card-menu-btn"
               onClick={() => setProfileMenuOpen(prev => !prev)}
             >
-              ⋯
+              <FaEllipsisV />
             </button>
 
             {profileMenuOpen && (
@@ -764,7 +849,7 @@ export default function Profile() {
           >
             {user.profile_pic ?
               <img src={getSafeMediaUrl(user.profile_pic)} alt="Avatar" />
-              : "👤"}
+              : <FaUser />}
           </button>
 
           <h2>{user.username}</h2>
@@ -848,7 +933,7 @@ export default function Profile() {
       </div>
 
       <div className="profile-posts">
-        <h3>Posts</h3>
+        <h3>Posts & Reposts</h3>
 
         {isBlockedProfile && !isOwnProfile ? (
           <p className="no-posts-message">
@@ -879,13 +964,13 @@ export default function Profile() {
                 toggleMenu(post.post_id);
               }}
             >
-              ⋮
+              <FaEllipsisV />
             </div>
 
             {activeMenuPostId === post.post_id && (
               <div className="post-dropdown">
 
-                {/* ✅ YOUR PROFILE ONLY */}
+                {/* ? YOUR PROFILE ONLY */}
                 {isOwnProfile && (
                   <>
                     <div
@@ -904,7 +989,7 @@ export default function Profile() {
                   </>
                 )}
 
-                {/* ✅ OTHER PEOPLE'S PROFILE */}
+                {/* ? OTHER PEOPLE'S PROFILE */}
                 {!isOwnProfile && (
                   <div
                     className="dropdown-item report"
@@ -923,14 +1008,14 @@ export default function Profile() {
             <div className="post-header">
               <div className="post-user-info">
                 <div className="post-user-avatar">
-                  {user.profile_pic ? (
-                    <img src={getSafeMediaUrl(user.profile_pic)} alt="pfp" />
-                  ) : "👤"}
+                  {post.profile_pic ? (
+                    <img src={getSafeMediaUrl(post.profile_pic)} alt="pfp" />
+                  ) : <FaUser />}
                 </div>
 
                 <div className="post-user-text">
                   <span className="post-username">
-                    {user.username}
+                    {post.username || user.username}
                   </span>
                   <span className="post-date">
                     {formatDate(post.date_posted)}
@@ -938,6 +1023,12 @@ export default function Profile() {
                 </div>
               </div>
             </div>
+
+            {post.activity_type === "repost" && (
+              <p className="profile-repost-label">
+                Reposted by @{user.username}
+              </p>
+            )}
 
             {post.caption && (
               <p className="post-content">{post.caption}</p>
@@ -953,14 +1044,14 @@ export default function Profile() {
                       onClick={() =>
                         moveSlide(post.post_id, -1, post.media.length)
                       }
-                    >‹</button>
+                    ><FaChevronLeft /></button>
 
                     <button
                       className="carousel-arrow right"
                       onClick={() =>
                         moveSlide(post.post_id, 1, post.media.length)
                       }
-                    >›</button>
+                    ><FaChevronRight /></button>
                   </>
                 )}
 
@@ -1034,7 +1125,7 @@ export default function Profile() {
                     className={`post-action-btn ${post.is_liked ? "liked" : ""}`}
                     onClick={() => (token ? toggleLike(post.post_id) : openGuestPrompt())}
                   >
-                    ❤️
+                    {post.is_liked ? <FaHeart /> : <FaRegHeart />}
                   </button>
 
                   <span className="like-count">
@@ -1049,7 +1140,7 @@ export default function Profile() {
                     className="post-action-btn"
                     onClick={() => (token ? setActiveCommentPost(post.post_id) : openGuestPrompt())}
                   >
-                    💬
+                    <FaCommentDots />
                   </button>
 
                   <span className="like-count">
@@ -1058,12 +1149,18 @@ export default function Profile() {
 
                 </div>
 
-                <button
-                  className="post-action-btn"
-                  onClick={() => (token ? navigate(`/post/${post.post_id}`) : openGuestPrompt())}
-                >
-                  🔗
-                </button>
+                <div className="like-wrapper">
+                  <button
+                    className={`post-action-btn ${post.is_reposted ? "reposted" : ""}`}
+                    onClick={() => toggleRepost(post.post_id)}
+                  >
+                    <FaRetweet />
+                  </button>
+
+                  <span className="like-count">
+                    {post.repost_count || 0}
+                  </span>
+                </div>
               </div>
 
             </div>

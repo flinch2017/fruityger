@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaUser } from "react-icons/fa";
 import CommentSheet from "./CommentSheet";
 import "../css/Feed.css";
 import "../css/CommentSheet.css";
@@ -25,6 +26,7 @@ export default function Feed() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [likingMap, setLikingMap] = useState({});
+  const [repostingMap, setRepostingMap] = useState({});
   const [activeCommentPost, setActiveCommentPost] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
@@ -397,6 +399,79 @@ export default function Feed() {
     setActiveMenuPostId((prev) => (prev === postId ? null : postId));
   };
 
+  const toggleRepost = async (postId) => {
+    const token = localStorage.getItem("token");
+    if (!token || repostingMap[postId]) return;
+
+    const currentPost = posts.find((post) => post.post_id === postId);
+    if (!currentPost) return;
+
+    const wasReposted = currentPost.is_reposted;
+    const previousCount = currentPost.repost_count || 0;
+
+    setRepostingMap((prev) => ({ ...prev, [postId]: true }));
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.post_id === postId
+          ? {
+              ...post,
+              is_reposted: !wasReposted,
+              repost_count: wasReposted ? Math.max(previousCount - 1, 0) : previousCount + 1,
+            }
+          : post
+      )
+    );
+
+    try {
+      const res = await fetch("http://localhost:5000/api/reposts/toggle", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ postId }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to repost post");
+      }
+
+      setPosts((prev) =>
+        prev.map((post) =>
+          post.post_id === postId
+            ? {
+                ...post,
+                is_reposted: data.reposted,
+                repost_count: data.repost_count ?? post.repost_count,
+              }
+            : post
+        )
+      );
+    } catch (err) {
+      console.error(err);
+      setPosts((prev) =>
+        prev.map((post) =>
+          post.post_id === postId
+            ? {
+                ...post,
+                is_reposted: wasReposted,
+                repost_count: previousCount,
+              }
+            : post
+        )
+      );
+      setActionResult({ type: "error", message: err.message || "Failed to repost post!" });
+      setTimeout(() => setActionResult(null), 3000);
+    } finally {
+      setRepostingMap((prev) => {
+        const updated = { ...prev };
+        delete updated[postId];
+        return updated;
+      });
+    }
+  };
+
   const promptDeletePost = (postId) => {
     setActiveMenuPostId(null);
     setDeleteModal({ visible: true, postId });
@@ -564,7 +639,7 @@ export default function Feed() {
                   toggleMenu(post.post_id);
                 }}
               >
-                ⋮
+                <FaEllipsisV />
               </div>
 
               {activeMenuPostId === post.post_id && (
@@ -603,7 +678,7 @@ export default function Feed() {
                   className="feed-post-user-avatar clickable"
                   onClick={() => navigate(`/profile/${post.username}`)}
                 >
-                  {post.profile_pic ? <img src={getSafeMediaUrl(post.profile_pic)} alt="pfp" /> : "👤"}
+                  {post.profile_pic ? <img src={getSafeMediaUrl(post.profile_pic)} alt="pfp" /> : <FaUser />}
                 </div>
 
                 <div className="feed-post-user-text">
@@ -618,6 +693,12 @@ export default function Feed() {
               </div>
             </div>
 
+            {post.feed_activity_type === "repost" && post.reposter_username && (
+              <div className="feed-repost-banner">
+                Reposted by @{post.reposter_username}
+              </div>
+            )}
+
             {post.caption && <p className="feed-post-content">{post.caption}</p>}
 
             {post.media?.length > 0 && (
@@ -628,14 +709,14 @@ export default function Feed() {
                       className="feed-carousel-arrow left"
                       onClick={() => moveSlide(post.post_id, -1, post.media.length)}
                     >
-                      ‹
+                      <FaChevronLeft />
                     </button>
 
                     <button
                       className="feed-carousel-arrow right"
                       onClick={() => moveSlide(post.post_id, 1, post.media.length)}
                     >
-                      ›
+                      <FaChevronRight />
                     </button>
                   </>
                 )}
@@ -701,7 +782,7 @@ export default function Feed() {
                     className={`feed-post-action-btn ${post.is_liked ? "liked" : ""}`}
                     onClick={() => toggleLike(post.post_id)}
                   >
-                    ❤️
+                    {post.is_liked ? <FaHeart /> : <FaRegHeart />}
                   </button>
 
                   <span className="feed-like-count">{post.like_count || 0}</span>
@@ -717,18 +798,21 @@ export default function Feed() {
                       })
                     }
                   >
-                    💬
+                    <FaCommentDots />
                   </button>
 
                   <span className="feed-like-count">{post.comment_count || 0}</span>
                 </div>
 
-                <button
-                  className="feed-post-action-btn"
-                  onClick={() => navigate(`/profile/${post.username}`)}
-                >
-                  🔗
-                </button>
+                <div className="feed-like-wrapper">
+                  <button
+                    className={`feed-post-action-btn ${post.is_reposted ? "reposted" : ""}`}
+                    onClick={() => toggleRepost(post.post_id)}
+                  >
+                    <FaRetweet />
+                  </button>
+                  <span className="feed-like-count">{post.repost_count || 0}</span>
+                </div>
               </div>
             </div>
           </div>

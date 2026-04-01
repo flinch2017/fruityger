@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import AeroNotice from "./AeroNotice";
 import "../css/CommentSheet.css";
 import { formatRelativeTime } from "../utils/timeFormatter";
 import supabase from "../lib/supabaseClient";
@@ -22,6 +23,7 @@ export default function CommentSheet({
   const listRef = useRef(null);
   const [replyPageMap, setReplyPageMap] = useState({});
   const [initialLoading, setInitialLoading] = useState(true);
+  const [notice, setNotice] = useState(null);
   const REPLY_PAGE_SIZE = 5;
 
   const [activeMenu, setActiveMenu] = useState(null);
@@ -140,7 +142,7 @@ export default function CommentSheet({
 
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Failed to delete comment");
+        setNotice({ type: "error", message: data.error || "Failed to delete comment." });
         return;
       }
 
@@ -150,7 +152,7 @@ export default function CommentSheet({
       closeMenu();
     } catch (err) {
       console.error(err);
-      alert("Failed to delete comment");
+      setNotice({ type: "error", message: "Failed to delete comment." });
     }
   };
 
@@ -392,6 +394,7 @@ const loadMoreReplies = (commentId) => {
     <div className="comment-overlay" onClick={onClose}>
 
       <div className="comment-sheet" onClick={e => e.stopPropagation()}>
+        <AeroNotice notice={notice ? { ...notice, inline: true } : null} onClose={() => setNotice(null)} />
 
         <div className="comment-header">
           Comments

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaUser } from "react-icons/fa";
 import CommentSheet from "../components/CommentSheet";
 import "../css/Search.css";
 import "../css/CommentSheet.css";
@@ -33,6 +34,7 @@ export default function Search() {
   const [dragStartX, setDragStartX] = useState(0);
   const [touchStartY, setTouchStartY] = useState(0);
   const [likingMap, setLikingMap] = useState({});
+  const [repostingMap, setRepostingMap] = useState({});
   const [activeCommentPost, setActiveCommentPost] = useState(null);
   const [activeMenuPostId, setActiveMenuPostId] = useState(null);
   const [deleteModal, setDeleteModal] = useState({
@@ -273,6 +275,80 @@ export default function Search() {
     }
   };
 
+  const toggleRepost = async (postId) => {
+    const token = localStorage.getItem("token");
+    if (!token || repostingMap[postId]) return;
+
+    const currentPost = result.posts.find((post) => post.post_id === postId);
+    if (!currentPost) return;
+
+    const wasReposted = currentPost.is_reposted;
+    const previousCount = currentPost.repost_count || 0;
+
+    setRepostingMap((prev) => ({ ...prev, [postId]: true }));
+    setResult((prev) => ({
+      ...prev,
+      posts: prev.posts.map((post) =>
+        post.post_id === postId
+          ? {
+              ...post,
+              is_reposted: !wasReposted,
+              repost_count: wasReposted ? Math.max(previousCount - 1, 0) : previousCount + 1
+            }
+          : post
+      )
+    }));
+
+    try {
+      const res = await fetch("http://localhost:5000/api/reposts/toggle", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ postId })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to repost post");
+      }
+
+      setResult((prev) => ({
+        ...prev,
+        posts: prev.posts.map((post) =>
+          post.post_id === postId
+            ? {
+                ...post,
+                is_reposted: data.reposted,
+                repost_count: data.repost_count ?? post.repost_count
+              }
+            : post
+        )
+      }));
+    } catch (err) {
+      console.error(err);
+      setResult((prev) => ({
+        ...prev,
+        posts: prev.posts.map((post) =>
+          post.post_id === postId
+            ? {
+                ...post,
+                is_reposted: wasReposted,
+                repost_count: previousCount
+              }
+            : post
+        )
+      }));
+    } finally {
+      setRepostingMap((prev) => {
+        const updated = { ...prev };
+        delete updated[postId];
+        return updated;
+      });
+    }
+  };
+
   const toggleMenu = (postId) => {
     setActiveMenuPostId((prev) => (prev === postId ? null : postId));
   };
@@ -378,7 +454,7 @@ export default function Search() {
         <h2 className="search-title">Results for "{query}"</h2>
       </div>
 
-      {/* 🔥 Tabs */}
+      {/* Tabs */}
       <div className="search-tabs">
         {orderedTabs.map(tab => (
           <button
@@ -391,7 +467,7 @@ export default function Search() {
         ))}
       </div>
 
-      {/* 🔥 Tab Content */}
+      {/* Tab Content */}
       <section className={`search-section ${loading ? "loading" : ""}`}>
         {loading ? (
           <div className="search-loading">
@@ -414,7 +490,7 @@ export default function Search() {
                         {u.profile_pic ? (
                           <img src={getSafeMediaUrl(u.profile_pic)} alt={u.username} />
                         ) : (
-                          "👤"
+                          <FaUser />
                         )}
                       </div>
                       <span>{u.username}</span>
@@ -442,7 +518,7 @@ export default function Search() {
                             toggleMenu(p.post_id);
                           }}
                         >
-                          ⋮
+                          <FaEllipsisV />
                         </div>
 
                         {activeMenuPostId === p.post_id && (
@@ -482,7 +558,7 @@ export default function Search() {
                           {p.profile_pic ? (
                             <img src={getSafeMediaUrl(p.profile_pic)} alt={p.username} />
                           ) : (
-                            "👤"
+                            <FaUser />
                           )}
                         </div>
 
@@ -511,14 +587,14 @@ export default function Search() {
                                 className="search-post-carousel-arrow left"
                                 onClick={() => moveSlide(p.post_id, -1, p.media.length)}
                               >
-                                ‹
+                                <FaChevronLeft />
                               </button>
 
                               <button
                                 className="search-post-carousel-arrow right"
                                 onClick={() => moveSlide(p.post_id, 1, p.media.length)}
                               >
-                                ›
+                                <FaChevronRight />
                               </button>
                             </>
                           )}
@@ -589,7 +665,7 @@ export default function Search() {
                               className={`search-post-action-btn ${p.is_liked ? "liked" : ""}`}
                               onClick={() => toggleLike(p.post_id)}
                             >
-                              ❤️
+                              {p.is_liked ? <FaHeart /> : <FaRegHeart />}
                             </button>
                             <span>{p.like_count || 0}</span>
                           </div>
@@ -604,17 +680,20 @@ export default function Search() {
                                 })
                               }
                             >
-                              💬
+                              <FaCommentDots />
                             </button>
                             <span>{p.comment_count || 0}</span>
                           </div>
 
-                          <button
-                            className="search-post-action-btn"
-                            onClick={() => navigate(`/post/${p.post_id}`)}
-                          >
-                            🔗
-                          </button>
+                          <div className="search-post-count-group">
+                            <button
+                              className={`search-post-action-btn ${p.is_reposted ? "reposted" : ""}`}
+                              onClick={() => toggleRepost(p.post_id)}
+                            >
+                              <FaRetweet />
+                            </button>
+                            <span>{p.repost_count || 0}</span>
+                          </div>
                         </div>
                       </div>
                     </div>

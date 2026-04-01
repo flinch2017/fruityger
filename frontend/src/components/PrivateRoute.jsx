@@ -1,6 +1,7 @@
 import { Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { fetchAuthSession } from "../utils/authSession";
+import RouteLoadingScreen from "./RouteLoadingScreen";
 
 export default function PrivateRoute({ children }) {
   const [status, setStatus] = useState("loading");
@@ -35,7 +36,7 @@ export default function PrivateRoute({ children }) {
   }, []);
 
   if (status === "loading") {
-    return null;
+    return <RouteLoadingScreen />;
   }
 
   if (status === "guest") {

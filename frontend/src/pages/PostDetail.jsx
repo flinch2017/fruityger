@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { FaChevronLeft, FaChevronRight, FaCommentDots, FaHeart, FaRegHeart, FaRetweet, FaUser } from "react-icons/fa";
 import CommentSheet from "../components/CommentSheet";
 import "../css/Feed.css";
 import "../css/CommentSheet.css";
@@ -17,6 +18,7 @@ export default function PostDetail() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [liking, setLiking] = useState(false);
+  const [reposting, setReposting] = useState(false);
   const [commentOpen, setCommentOpen] = useState(Boolean(location.state?.openComments));
 
   const formatDate = (dateString) => {
@@ -124,6 +126,52 @@ export default function PostDetail() {
     });
   };
 
+  const toggleRepost = async () => {
+    const token = localStorage.getItem("token");
+    if (!token || !post || reposting) return;
+
+    const wasReposted = post.is_reposted;
+    const previousCount = post.repost_count || 0;
+
+    setReposting(true);
+    setPost((prev) => ({
+      ...prev,
+      is_reposted: !wasReposted,
+      repost_count: wasReposted ? Math.max(previousCount - 1, 0) : previousCount + 1,
+    }));
+
+    try {
+      const res = await fetch("http://localhost:5000/api/reposts/toggle", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ postId }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to repost post");
+      }
+
+      setPost((prev) => ({
+        ...prev,
+        is_reposted: data.reposted,
+        repost_count: data.repost_count ?? prev.repost_count,
+      }));
+    } catch (err) {
+      console.error(err);
+      setPost((prev) => ({
+        ...prev,
+        is_reposted: wasReposted,
+        repost_count: previousCount,
+      }));
+    } finally {
+      setReposting(false);
+    }
+  };
+
   const toggleLike = async () => {
     const token = localStorage.getItem("token");
     if (!token || !post || liking) return;
@@ -201,7 +249,7 @@ export default function PostDetail() {
                 className="feed-post-user-avatar clickable"
                 onClick={() => navigate(`/profile/${post.username}`)}
               >
-                {post.profile_pic ? <img src={getSafeMediaUrl(post.profile_pic)} alt="pfp" /> : "👤"}
+                {post.profile_pic ? <img src={getSafeMediaUrl(post.profile_pic)} alt="pfp" /> : <FaUser />}
               </div>
 
               <div className="feed-post-user-text">
@@ -223,10 +271,10 @@ export default function PostDetail() {
               {post.media.length > 1 && (
                 <>
                   <button className="feed-carousel-arrow left" onClick={() => moveSlide(-1)}>
-                    ‹
+                    <FaChevronLeft />
                   </button>
                   <button className="feed-carousel-arrow right" onClick={() => moveSlide(1)}>
-                    ›
+                    <FaChevronRight />
                   </button>
                 </>
               )}
@@ -276,7 +324,7 @@ export default function PostDetail() {
                   className={`feed-post-action-btn ${post.is_liked ? "liked" : ""}`}
                   onClick={toggleLike}
                 >
-                  ❤️
+                  {post.is_liked ? <FaHeart /> : <FaRegHeart />}
                 </button>
                 <span className="feed-like-count">{post.like_count || 0}</span>
               </div>
@@ -286,17 +334,20 @@ export default function PostDetail() {
                   className="feed-post-action-btn"
                   onClick={() => setCommentOpen(true)}
                 >
-                  💬
+                  <FaCommentDots />
                 </button>
                 <span className="feed-like-count">{post.comment_count || 0}</span>
               </div>
 
-              <button
-                className="feed-post-action-btn"
-                onClick={() => navigate(`/profile/${post.username}`)}
-              >
-                🔗
-              </button>
+              <div className="feed-like-wrapper">
+                <button
+                  className={`feed-post-action-btn ${post.is_reposted ? "reposted" : ""}`}
+                  onClick={toggleRepost}
+                >
+                  <FaRetweet />
+                </button>
+                <span className="feed-like-count">{post.repost_count || 0}</span>
+              </div>
             </div>
           </div>
         </div>

@@ -306,6 +306,7 @@ body[data-theme="dark"] .profile-card-dropdown,
 body[data-theme="dark"] .profile-dropdown,
 body[data-theme="dark"] .modal-card,
 body[data-theme="dark"] .search-post-modal-card,
+body[data-theme="dark"] .aero-notice,
 body[data-theme="dark"] .follow-user-card,
 body[data-theme="dark"] .notification-card,
 body[data-theme="dark"] .chat-preview,
@@ -381,7 +382,10 @@ body[data-theme="dark"] .follow-list-item {
 body[data-theme="dark"] .feed-dropdown-item,
 body[data-theme="dark"] .search-post-dropdown-item,
 body[data-theme="dark"] .dropdown-item,
-body[data-theme="dark"] .comment-menu-item {
+body[data-theme="dark"] .comment-menu-item,
+body[data-theme="dark"] .aero-notice-copy strong,
+body[data-theme="dark"] .aero-notice-copy p,
+body[data-theme="dark"] .aero-notice-close {
   color: #d7f7ff !important;
 }
 

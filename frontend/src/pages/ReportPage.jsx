@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import AeroNotice from "../components/AeroNotice";
 import "../css/ReportPage.css";
 
 const REPORT_REASONS = [
@@ -19,6 +20,7 @@ export default function ReportPage() {
 
   const [selectedReasons, setSelectedReasons] = useState([]);
   const [details, setDetails] = useState("");
+  const [notice, setNotice] = useState(null);
   const token = localStorage.getItem("token");
 
   const toggleReason = (value) => {
@@ -30,8 +32,15 @@ export default function ReportPage() {
   };
 
   const submitReport = async () => {
-    if (selectedReasons.length === 0) return alert("Please select at least one reason");
-    if (!contentType || !contentId) return alert("Missing report target");
+    if (selectedReasons.length === 0) {
+      setNotice({ type: "info", message: "Please select at least one reason." });
+      return;
+    }
+
+    if (!contentType || !contentId) {
+      setNotice({ type: "error", message: "Missing report target." });
+      return;
+    }
 
     try {
       const res = await fetch("http://localhost:5000/api/reports/submit", {
@@ -51,11 +60,11 @@ export default function ReportPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to report");
 
-      alert("Report submitted successfully!");
-      navigate(-1); // go back to previous page
+      setNotice({ type: "success", message: "Report submitted successfully." });
+      window.setTimeout(() => navigate(-1), 900);
     } catch (err) {
       console.error(err);
-      alert(err.message);
+      setNotice({ type: "error", message: err.message || "Failed to submit report." });
     }
   };
 
@@ -64,6 +73,7 @@ export default function ReportPage() {
   return (
     <div className="report-page">
       <div className="report-card">
+        <AeroNotice notice={notice ? { ...notice, inline: true } : null} onClose={() => setNotice(null)} />
         <h2 className="report-title">Report {contentType}</h2>
         <p className="report-subtitle">Select all reasons that apply</p>
 

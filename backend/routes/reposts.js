@@ -2,6 +2,7 @@ import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { ensureRepostSchema } from "../utils/reposts.js";
+import { createNotification } from "../utils/notifications.js";
 
 const router = express.Router();
 
@@ -66,6 +67,13 @@ router.post("/toggle", authenticateToken, async (req, res) => {
         [userId, postId]
       );
       reposted = true;
+
+      await createNotification({
+        recipientId: post.user_id,
+        actorId: userId,
+        type: "post_repost",
+        postId,
+      });
     }
 
     const countResult = await pool.query(

@@ -73,7 +73,7 @@ body {
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.86);
+  border: none;
   cursor: pointer;
 
   display: flex;
@@ -82,26 +82,18 @@ body {
 
   font-size: 1rem;
 
-  background:
-    radial-gradient(circle at 30% 22%, rgba(255,255,255,0.98), rgba(255,255,255,0.34) 34%, transparent 55%),
-    linear-gradient(180deg, rgba(255,255,255,0.82), rgba(196,240,255,0.44) 58%, rgba(127,212,241,0.3));
-
+  background: transparent;
   color: #0a7fa8;
-  box-shadow:
-    0 10px 22px rgba(0, 176, 255, 0.18),
-    inset 0 2px 1px rgba(255,255,255,0.96),
-    inset 0 -10px 14px rgba(68, 180, 226, 0.14);
-  backdrop-filter: blur(12px);
-  transition: transform 0.24s ease, box-shadow 0.24s ease, background 0.24s ease, color 0.24s ease;
+  box-shadow: none;
+  backdrop-filter: none;
+  transition: transform 0.24s ease, color 0.24s ease, filter 0.24s ease;
   position: relative;
 }
 
 .nav-button:hover {
   transform: translateY(-2px) scale(1.06);
-  box-shadow:
-    0 14px 28px rgba(0, 176, 255, 0.24),
-    inset 0 2px 1px rgba(255,255,255,1),
-    inset 0 -12px 16px rgba(68, 180, 226, 0.18);
+  color: #08a8de;
+  filter: drop-shadow(0 6px 14px rgba(0, 176, 255, 0.26));
 }
 
 .nav-button:active {
@@ -109,14 +101,10 @@ body {
 }
 
 .nav-button.active {
-  color: #ffffff;
-  background:
-    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.98), rgba(255,255,255,0.42) 34%, transparent 56%),
-    linear-gradient(180deg, rgba(151,236,255,0.98), rgba(51,197,238,0.92) 56%, rgba(8,153,210,0.88));
-  box-shadow:
-    0 16px 30px rgba(0, 154, 255, 0.3),
-    inset 0 2px 1px rgba(255,255,255,0.98),
-    inset 0 -12px 18px rgba(0, 119, 181, 0.2);
+  color: #06a6de;
+  background: transparent;
+  box-shadow: none;
+  filter: drop-shadow(0 6px 18px rgba(0, 164, 255, 0.34));
 }
 
 .nav-badge {

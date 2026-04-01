@@ -24,6 +24,11 @@ const TYPE_COPY = {
     title: "Comment liked",
     body: (username) => `@${username} liked your comment.`,
   },
+  post_repost: {
+    icon: "R",
+    title: "Post reposted",
+    body: (username) => `@${username} reposted your post.`,
+  },
   new_follower: {
     icon: "👤",
     title: "New follower",

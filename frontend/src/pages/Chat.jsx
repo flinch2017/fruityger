@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import supabase from "../lib/supabaseClient";
+import AeroNotice from "../components/AeroNotice";
 import "../css/Chat.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 
@@ -20,6 +21,7 @@ export default function Chat() {
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [blockedByMe, setBlockedByMe] = useState(false);
   const [blockedByThem, setBlockedByThem] = useState(false);
+  const [notice, setNotice] = useState(null);
 
   const messagesEndRef = useRef(null);
 
@@ -219,7 +221,7 @@ export default function Chat() {
       dispatchMessagesRefresh();
     } catch (err) {
       console.error(err);
-      alert("Failed to delete message.");
+      setNotice({ type: "error", message: "Failed to delete message." });
     }
   };
 
@@ -250,7 +252,7 @@ export default function Chat() {
       navigate("/messages");
     } catch (err) {
       console.error(err);
-      alert(err.message || "Failed to delete conversation.");
+      setNotice({ type: "error", message: err.message || "Failed to delete conversation." });
     }
   };
 
@@ -280,7 +282,10 @@ export default function Chat() {
       setInput("");
     } catch (err) {
       console.error(err);
-      alert(err.message || `Failed to ${blockedByMe ? "unblock" : "block"} user.`);
+      setNotice({
+        type: "error",
+        message: err.message || `Failed to ${blockedByMe ? "unblock" : "block"} user.`,
+      });
     }
   };
 
@@ -316,6 +321,7 @@ export default function Chat() {
 
   return (
     <div className="chat-window">
+      <AeroNotice notice={notice ? { ...notice, inline: true } : null} onClose={() => setNotice(null)} />
       <div className="chat-header">
         <button className="back-btn" onClick={() => navigate(-1)}>
           ←

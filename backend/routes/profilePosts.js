@@ -58,8 +58,40 @@ router.get("/posts", authenticateToken, async (req, res) => {
 
     const { rows } = await pool.query(
       `
-      SELECT 
-        p.*,
+      WITH profile_activity AS (
+        SELECT
+          p.post_id,
+          p.user_id,
+          p.caption,
+          p.date_posted,
+          'post'::text AS activity_type,
+          NULL::timestamptz AS reposted_at
+        FROM posts p
+        WHERE p.user_id = $2
+
+        UNION ALL
+
+        SELECT
+          p.post_id,
+          p.user_id,
+          p.caption,
+          p.date_posted,
+          'repost'::text AS activity_type,
+          rp.created_at AS reposted_at
+        FROM reposts rp
+        JOIN posts p
+          ON p.post_id = rp.post_id
+        WHERE rp.user_id = $2
+      )
+      SELECT
+        activity.post_id,
+        activity.user_id,
+        activity.caption,
+        activity.date_posted,
+        activity.activity_type,
+        activity.reposted_at,
+        author.username,
+        author.profile_pic,
         COALESCE(
           json_agg(
             json_build_object(
@@ -77,33 +109,42 @@ router.get("/posts", authenticateToken, async (req, res) => {
         EXISTS (
           SELECT 1
           FROM likes
-          WHERE post_id = p.post_id
+          WHERE post_id = activity.post_id
             AND liker = $1
         ) AS is_liked,
         EXISTS (
           SELECT 1
           FROM reposts
-          WHERE post_id = p.post_id
+          WHERE post_id = activity.post_id
             AND user_id = $1
         ) AS is_reposted,
         (
           SELECT COUNT(*)
           FROM comments c
-          WHERE c.post_id = p.post_id
+          WHERE c.post_id = activity.post_id
         )::int AS comment_count
-      FROM posts p
+      FROM profile_activity activity
+      JOIN users author
+        ON author.id = activity.user_id
       LEFT JOIN post_media pm
-        ON pm.post_id = p.post_id
+        ON pm.post_id = activity.post_id
       LEFT JOIN likes l
-        ON l.post_id = p.post_id
+        ON l.post_id = activity.post_id
       LEFT JOIN reposts r
-        ON r.post_id = p.post_id
-      WHERE p.user_id = $1
-      GROUP BY p.post_id
-      ORDER BY p.date_posted DESC
-      LIMIT $2 OFFSET $3
+        ON r.post_id = activity.post_id
+      GROUP BY
+        activity.post_id,
+        activity.user_id,
+        activity.caption,
+        activity.date_posted,
+        activity.activity_type,
+        activity.reposted_at,
+        author.username,
+        author.profile_pic
+      ORDER BY COALESCE(activity.reposted_at, activity.date_posted) DESC
+      LIMIT $3 OFFSET $4
       `,
-      [userId, limit, offset]
+      [viewerId, userId, limit, offset]
     );
 
     res.json({ posts: rows, isBlocked: false });
@@ -137,8 +178,40 @@ router.get("/public-posts", async (req, res) => {
 
     const { rows } = await pool.query(
       `
+      WITH profile_activity AS (
+        SELECT
+          p.post_id,
+          p.user_id,
+          p.caption,
+          p.date_posted,
+          'post'::text AS activity_type,
+          NULL::timestamptz AS reposted_at
+        FROM posts p
+        WHERE p.user_id = $1
+
+        UNION ALL
+
+        SELECT
+          p.post_id,
+          p.user_id,
+          p.caption,
+          p.date_posted,
+          'repost'::text AS activity_type,
+          rp.created_at AS reposted_at
+        FROM reposts rp
+        JOIN posts p
+          ON p.post_id = rp.post_id
+        WHERE rp.user_id = $1
+      )
       SELECT
-        p.*,
+        activity.post_id,
+        activity.user_id,
+        activity.caption,
+        activity.date_posted,
+        activity.activity_type,
+        activity.reposted_at,
+        author.username,
+        author.profile_pic,
         COALESCE(
           json_agg(
             json_build_object(
@@ -158,18 +231,27 @@ router.get("/public-posts", async (req, res) => {
         (
           SELECT COUNT(*)
           FROM comments c
-          WHERE c.post_id = p.post_id
+          WHERE c.post_id = activity.post_id
         )::int AS comment_count
-      FROM posts p
+      FROM profile_activity activity
+      JOIN users author
+        ON author.id = activity.user_id
       LEFT JOIN post_media pm
-        ON pm.post_id = p.post_id
+        ON pm.post_id = activity.post_id
       LEFT JOIN likes l
-        ON l.post_id = p.post_id
+        ON l.post_id = activity.post_id
       LEFT JOIN reposts r
-        ON r.post_id = p.post_id
-      WHERE p.user_id = $1
-      GROUP BY p.post_id
-      ORDER BY p.date_posted DESC
+        ON r.post_id = activity.post_id
+      GROUP BY
+        activity.post_id,
+        activity.user_id,
+        activity.caption,
+        activity.date_posted,
+        activity.activity_type,
+        activity.reposted_at,
+        author.username,
+        author.profile_pic
+      ORDER BY COALESCE(activity.reposted_at, activity.date_posted) DESC
       LIMIT $2 OFFSET $3
       `,
       [userId, limit, offset]
