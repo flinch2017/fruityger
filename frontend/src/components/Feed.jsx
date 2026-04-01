@@ -302,6 +302,7 @@ export default function Feed() {
   };
 
   const handleFeedTouchStart = (e) => {
+    if (e.target.closest(".feed-carousel")) return;
     if (window.scrollY > 0 || refreshing || loadingPosts) return;
 
     pullStartYRef.current = e.touches[0].clientY;
@@ -309,6 +310,7 @@ export default function Feed() {
   };
 
   const handleFeedTouchMove = (e) => {
+    if (e.target.closest(".feed-carousel")) return;
     if (!isPullingRef.current || window.scrollY > 0) return;
 
     const currentY = e.touches[0].clientY;
