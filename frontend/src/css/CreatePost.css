@@ -114,7 +114,11 @@
 }
 
 .create-header-btn {
-  min-width: 112px;
+  min-width: 76px;
+  min-height: 38px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 999px;
 }
 
 .create-post-header .cancel-btn {
@@ -209,10 +213,10 @@
   }
 
   .create-header-btn {
-    min-width: 84px;
-    min-height: 44px;
-    padding: 10px 14px;
-    font-size: 14px;
+    min-width: 70px;
+    min-height: 34px;
+    padding: 7px 11px;
+    font-size: 12px;
   }
 
   .create-textarea {
