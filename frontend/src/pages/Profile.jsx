@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useParams } from "react-router-dom";
-import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaTimes, FaUser } from "react-icons/fa";
+import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaTimes, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import AeroNotice from "../components/AeroNotice";
 import "../css/Profile.css";
 import CommentSheet from "../components/CommentSheet";
@@ -27,6 +27,7 @@ export default function Profile() {
 
   const [likingMap, setLikingMap] = useState({});
   const [repostingMap, setRepostingMap] = useState({});
+  const [videoMutedMap, setVideoMutedMap] = useState({});
 
   const loaderRef = useRef(null);
   const videoRefs = useRef({});
@@ -452,6 +453,22 @@ export default function Profile() {
       if (nextIndex >= mediaLength) nextIndex = 0;
 
       return { ...prev, [postId]: nextIndex };
+    });
+  };
+
+  const toggleVideoMuted = (postId) => {
+    setVideoMutedMap((prev) => {
+      const nextMuted = !(prev[postId] ?? true);
+      const next = { ...prev, [postId]: nextMuted };
+      (videoRefs.current[postId] || []).forEach((video) => {
+        if (video) {
+          video.muted = nextMuted;
+          if (!nextMuted) {
+            video.play().catch(() => {});
+          }
+        }
+      });
+      return next;
     });
   };
 
@@ -1077,20 +1094,34 @@ export default function Profile() {
                   {post.media.map((m, i) => (
                     <div className="carousel-item" key={i}>
                       {m.media_type === "video" ? (
-                        <video
-                          ref={el => {
-                            if (!el) return;
-                            if (!videoRefs.current[post.post_id]) {
-                              videoRefs.current[post.post_id] = [];
-                            }
-                            videoRefs.current[post.post_id][i] = el;
-                          }}
-                          src={getSafeMediaUrl(m.media_url)}
-                          playsInline
-                          loop
-                          preload="metadata"
-                          className="auto-video"
-                        />
+                        <>
+                          <video
+                            ref={el => {
+                              if (!el) return;
+                              if (!videoRefs.current[post.post_id]) {
+                                videoRefs.current[post.post_id] = [];
+                              }
+                              videoRefs.current[post.post_id][i] = el;
+                              el.muted = videoMutedMap[post.post_id] ?? true;
+                            }}
+                            src={getSafeMediaUrl(m.media_url)}
+                            playsInline
+                            loop
+                            muted={videoMutedMap[post.post_id] ?? true}
+                            preload="metadata"
+                            className="auto-video"
+                          />
+                          <button
+                            type="button"
+                            className={`post-video-sound-btn ${(
+                              videoMutedMap[post.post_id] ?? true
+                            ) ? "muted" : ""}`}
+                            onClick={() => toggleVideoMuted(post.post_id)}
+                            aria-label={(videoMutedMap[post.post_id] ?? true) ? "Turn on sound" : "Mute video"}
+                          >
+                            {(videoMutedMap[post.post_id] ?? true) ? <FaVolumeMute /> : <FaVolumeUp />}
+                          </button>
+                        </>
                       ) : (
                         <img src={getSafeMediaUrl(m.media_url)} alt="" />
                       )}

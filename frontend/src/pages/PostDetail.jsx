@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { FaChevronLeft, FaChevronRight, FaCommentDots, FaHeart, FaRegHeart, FaRetweet, FaUser } from "react-icons/fa";
+import { FaChevronLeft, FaChevronRight, FaCommentDots, FaHeart, FaRegHeart, FaRetweet, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import CommentSheet from "../components/CommentSheet";
 import "../css/Feed.css";
 import "../css/CommentSheet.css";
@@ -20,6 +20,7 @@ export default function PostDetail() {
   const [loading, setLoading] = useState(true);
   const [liking, setLiking] = useState(false);
   const [reposting, setReposting] = useState(false);
+  const [videoMuted, setVideoMuted] = useState(true);
   const [commentOpen, setCommentOpen] = useState(Boolean(location.state?.openComments));
   const [dragging, setDragging] = useState(false);
   const [dragStartX, setDragStartX] = useState(0);
@@ -166,6 +167,21 @@ export default function PostDetail() {
   const handlePointerEnd = () => {
     gestureAxisRef.current = null;
     setDragging(false);
+  };
+
+  const toggleVideoMuted = () => {
+    setVideoMuted((prev) => {
+      const nextMuted = !prev;
+      Object.values(videoRefs.current).forEach((video) => {
+        if (video) {
+          video.muted = nextMuted;
+          if (!nextMuted) {
+            video.play().catch(() => {});
+          }
+        }
+      });
+      return nextMuted;
+    });
   };
 
   const toggleRepost = async () => {
@@ -335,17 +351,29 @@ export default function PostDetail() {
                 {post.media.map((media, index) => (
                   <div className="feed-carousel-item" key={index}>
                     {media.media_type === "video" ? (
-                      <video
-                        ref={(el) => {
-                          if (!el) return;
-                          videoRefs.current[index] = el;
-                        }}
-                        src={getSafeMediaUrl(media.media_url)}
-                        playsInline
-                        loop
-                        preload="metadata"
-                        className="feed-auto-video"
-                      />
+                      <>
+                        <video
+                          ref={(el) => {
+                            if (!el) return;
+                            videoRefs.current[index] = el;
+                            el.muted = videoMuted;
+                          }}
+                          src={getSafeMediaUrl(media.media_url)}
+                          playsInline
+                          loop
+                          muted={videoMuted}
+                          preload="metadata"
+                          className="feed-auto-video"
+                        />
+                        <button
+                          type="button"
+                          className={`post-video-sound-btn ${videoMuted ? "muted" : ""}`}
+                          onClick={toggleVideoMuted}
+                          aria-label={videoMuted ? "Turn on sound" : "Mute video"}
+                        >
+                          {videoMuted ? <FaVolumeMute /> : <FaVolumeUp />}
+                        </button>
+                      </>
                     ) : (
                       <img src={getSafeMediaUrl(media.media_url)} alt="" />
                     )}

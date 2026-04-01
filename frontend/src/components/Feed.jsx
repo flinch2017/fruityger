@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaUser } from "react-icons/fa";
+import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import CommentSheet from "./CommentSheet";
 import "../css/Feed.css";
 import "../css/CommentSheet.css";
@@ -27,6 +27,7 @@ export default function Feed() {
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [likingMap, setLikingMap] = useState({});
   const [repostingMap, setRepostingMap] = useState({});
+  const [videoMutedMap, setVideoMutedMap] = useState({});
   const [activeCommentPost, setActiveCommentPost] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
@@ -307,6 +308,22 @@ export default function Feed() {
 
     pullStartYRef.current = e.touches[0].clientY;
     isPullingRef.current = true;
+  };
+
+  const toggleVideoMuted = (postId) => {
+    setVideoMutedMap((prev) => {
+      const nextMuted = !(prev[postId] ?? true);
+      const next = { ...prev, [postId]: nextMuted };
+      (videoRefs.current[postId] || []).forEach((video) => {
+        if (video) {
+          video.muted = nextMuted;
+          if (!nextMuted) {
+            video.play().catch(() => {});
+          }
+        }
+      });
+      return next;
+    });
   };
 
   const handleFeedTouchMove = (e) => {
@@ -739,20 +756,34 @@ export default function Feed() {
                   {post.media.map((media, index) => (
                     <div className="feed-carousel-item" key={index}>
                       {media.media_type === "video" ? (
-                        <video
-                          ref={(el) => {
-                            if (!el) return;
-                            if (!videoRefs.current[post.post_id]) {
-                              videoRefs.current[post.post_id] = [];
-                            }
-                            videoRefs.current[post.post_id][index] = el;
-                          }}
-                          src={getSafeMediaUrl(media.media_url)}
-                          playsInline
-                          loop
-                          preload="metadata"
-                          className="feed-auto-video"
-                        />
+                        <>
+                          <video
+                            ref={(el) => {
+                              if (!el) return;
+                              if (!videoRefs.current[post.post_id]) {
+                                videoRefs.current[post.post_id] = [];
+                              }
+                              videoRefs.current[post.post_id][index] = el;
+                              el.muted = videoMutedMap[post.post_id] ?? true;
+                            }}
+                            src={getSafeMediaUrl(media.media_url)}
+                            playsInline
+                            loop
+                            muted={videoMutedMap[post.post_id] ?? true}
+                            preload="metadata"
+                            className="feed-auto-video"
+                          />
+                          <button
+                            type="button"
+                            className={`post-video-sound-btn ${
+                              (videoMutedMap[post.post_id] ?? true) ? "muted" : ""
+                            }`}
+                            onClick={() => toggleVideoMuted(post.post_id)}
+                            aria-label={(videoMutedMap[post.post_id] ?? true) ? "Turn on sound" : "Mute video"}
+                          >
+                            {(videoMutedMap[post.post_id] ?? true) ? <FaVolumeMute /> : <FaVolumeUp />}
+                          </button>
+                        </>
                       ) : (
                         <img src={getSafeMediaUrl(media.media_url)} alt="" />
                       )}

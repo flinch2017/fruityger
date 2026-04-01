@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaUser } from "react-icons/fa";
+import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import CommentSheet from "../components/CommentSheet";
 import "../css/Search.css";
 import "../css/CommentSheet.css";
@@ -30,6 +30,7 @@ export default function Search() {
     hashtags: []
   });
   const [activeIndexMap, setActiveIndexMap] = useState({});
+  const [videoMutedMap, setVideoMutedMap] = useState({});
   const [dragging, setDragging] = useState(false);
   const [dragStartX, setDragStartX] = useState(0);
   const [touchStartY, setTouchStartY] = useState(0);
@@ -92,6 +93,22 @@ export default function Search() {
       if (nextIndex >= mediaLength) nextIndex = 0;
 
       return { ...prev, [postId]: nextIndex };
+    });
+  };
+
+  const toggleVideoMuted = (postId) => {
+    setVideoMutedMap((prev) => {
+      const nextMuted = !(prev[postId] ?? true);
+      const next = { ...prev, [postId]: nextMuted };
+      (videoRefs.current[postId] || []).forEach((video) => {
+        if (video) {
+          video.muted = nextMuted;
+          if (!nextMuted) {
+            video.play().catch(() => {});
+          }
+        }
+      });
+      return next;
     });
   };
 
@@ -615,21 +632,34 @@ export default function Search() {
                             {p.media.map((media, index) => (
                               <div className="search-post-carousel-item" key={`${p.post_id}-${index}`}>
                                 {media.media_type === "video" ? (
-                                  <video
-                                    ref={(el) => {
-                                      if (!el) return;
-                                      if (!videoRefs.current[p.post_id]) {
-                                        videoRefs.current[p.post_id] = [];
-                                      }
-                                      videoRefs.current[p.post_id][index] = el;
-                                    }}
-                                    src={getSafeMediaUrl(media.media_url)}
-                                    playsInline
-                                    loop
-                                    muted
-                                    preload="metadata"
-                                    className="search-post-video"
-                                  />
+                                  <>
+                                    <video
+                                      ref={(el) => {
+                                        if (!el) return;
+                                        if (!videoRefs.current[p.post_id]) {
+                                          videoRefs.current[p.post_id] = [];
+                                        }
+                                        videoRefs.current[p.post_id][index] = el;
+                                        el.muted = videoMutedMap[p.post_id] ?? true;
+                                      }}
+                                      src={getSafeMediaUrl(media.media_url)}
+                                      playsInline
+                                      loop
+                                      muted={videoMutedMap[p.post_id] ?? true}
+                                      preload="metadata"
+                                      className="search-post-video"
+                                    />
+                                    <button
+                                      type="button"
+                                      className={`post-video-sound-btn ${(
+                                        videoMutedMap[p.post_id] ?? true
+                                      ) ? "muted" : ""}`}
+                                      onClick={() => toggleVideoMuted(p.post_id)}
+                                      aria-label={(videoMutedMap[p.post_id] ?? true) ? "Turn on sound" : "Mute video"}
+                                    >
+                                      {(videoMutedMap[p.post_id] ?? true) ? <FaVolumeMute /> : <FaVolumeUp />}
+                                    </button>
+                                  </>
                                 ) : (
                                   <img
                                     src={getSafeMediaUrl(media.media_url)}
