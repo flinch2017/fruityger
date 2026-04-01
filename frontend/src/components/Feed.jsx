@@ -15,6 +15,7 @@ export default function Feed() {
   const pullStartYRef = useRef(0);
   const isPullingRef = useRef(false);
   const dropdownRef = useRef(null);
+  const repostDropdownRef = useRef(null);
   const gestureAxisRef = useRef(null);
 
   const [posts, setPosts] = useState([]);
@@ -32,6 +33,7 @@ export default function Feed() {
   const [refreshing, setRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [activeMenuPostId, setActiveMenuPostId] = useState(null);
+  const [activeRepostListPostId, setActiveRepostListPostId] = useState(null);
   const [deleteModal, setDeleteModal] = useState({
     visible: false,
     postId: null,
@@ -81,6 +83,21 @@ export default function Feed() {
       day: "numeric",
       year: "numeric",
     });
+  };
+
+  const getRelevantReposters = (post) =>
+    Array.isArray(post?.reposters) ? post.reposters : [];
+
+  const getFeedRepostLabel = (post) => {
+    const reposters = getRelevantReposters(post);
+    if (reposters.length === 0) return "";
+
+    const [firstReposter] = reposters;
+    if (reposters.length === 1) {
+      return `Reposted by @${firstReposter.username}`;
+    }
+
+    return `Reposted by @${firstReposter.username} + ${reposters.length - 1} others`;
   };
 
   const fetchPosts = async ({ initial = false, refresh = false } = {}) => {
@@ -158,11 +175,12 @@ export default function Feed() {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target)
-      ) {
+      if (!e.target.closest(".feed-post-more-wrapper")) {
         setActiveMenuPostId(null);
+      }
+
+      if (!e.target.closest(".feed-repost-banner-wrap")) {
+        setActiveRepostListPostId(null);
       }
     };
 
@@ -416,6 +434,10 @@ export default function Feed() {
 
   const toggleMenu = (postId) => {
     setActiveMenuPostId((prev) => (prev === postId ? null : postId));
+  };
+
+  const toggleRepostList = (postId) => {
+    setActiveRepostListPostId((prev) => (prev === postId ? null : postId));
   };
 
   const toggleRepost = async (postId) => {
@@ -712,9 +734,50 @@ export default function Feed() {
               </div>
             </div>
 
-            {post.feed_activity_type === "repost" && post.reposter_username && (
-              <div className="feed-repost-banner">
-                Reposted by @{post.reposter_username}
+            {post.feed_activity_type === "repost" && getRelevantReposters(post).length > 0 && (
+              <div
+                className="feed-repost-banner-wrap"
+                ref={activeRepostListPostId === post.post_id ? repostDropdownRef : null}
+              >
+                <button
+                  type="button"
+                  className="feed-repost-banner"
+                  onClick={() => toggleRepostList(post.post_id)}
+                >
+                  {getFeedRepostLabel(post)}
+                </button>
+
+                {activeRepostListPostId === post.post_id && (
+                  <div className="feed-repost-dropdown">
+                    <div className="feed-repost-dropdown-title">Reposted by</div>
+                    {getRelevantReposters(post).map((reposter) => (
+                      <button
+                        key={`${post.post_id}-${reposter.user_id}`}
+                        type="button"
+                        className="feed-repost-dropdown-item"
+                        onClick={() => {
+                          setActiveRepostListPostId(null);
+                          navigate(`/profile/${reposter.username}`);
+                        }}
+                      >
+                        <span className="feed-repost-dropdown-avatar">
+                          {reposter.profile_pic ? (
+                            <img
+                              src={getSafeMediaUrl(reposter.profile_pic)}
+                              alt={reposter.username}
+                            />
+                          ) : (
+                            <FaUser />
+                          )}
+                        </span>
+                        <span className="feed-repost-dropdown-copy">
+                          <strong>@{reposter.username}</strong>
+                          <span>{formatDate(reposter.reposted_at)}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

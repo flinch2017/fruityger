@@ -400,8 +400,18 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
         u.username,
         u.profile_pic,
         COALESCE(( SELECT json_agg( json_build_object( 'media_url', pm.media_url, 'media_type', pm.media_type, 'media_order', pm.media_order ) ORDER BY pm.media_order ASC ) FROM post_media pm WHERE pm.post_id = p.post_id ), '[]') AS media,
-        COUNT(DISTINCT l.like_id)::int AS like_count,
-        COUNT(DISTINCT r.user_id)::int AS repost_count,
+        (
+          SELECT COUNT(*)::int
+          FROM likes
+          WHERE post_id = p.post_id
+        ) AS like_count,
+        (
+          SELECT COUNT(*)::int
+          FROM reposts
+          WHERE post_id = p.post_id
+        ) AS repost_count,
+        relevant_reposts.reposters,
+        relevant_reposts.reposter_count,
         EXISTS (
           SELECT 1
           FROM likes
@@ -422,12 +432,59 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
       FROM posts p
       JOIN users u
         ON u.id = p.user_id
-        LEFT JOIN likes l
-          ON l.post_id = p.post_id
-        LEFT JOIN reposts r
-          ON r.post_id = p.post_id
+        LEFT JOIN LATERAL (
+          WITH eligible_reposts AS (
+            SELECT
+              r.user_id,
+              ru.username,
+              ru.profile_pic,
+              r.created_at AS reposted_at
+            FROM reposts r
+            JOIN users ru
+              ON ru.id = r.user_id
+            WHERE r.post_id = p.post_id
+              AND (
+                r.user_id = $1
+                OR r.user_id IN (
+                  SELECT following_id
+                  FROM follows
+                  WHERE follower_id = $1
+                )
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM blocked_users bu_rep
+                WHERE (
+                  bu_rep.blocker_id = $1
+                  AND bu_rep.blocked_id = ru.id
+                ) OR (
+                  bu_rep.blocker_id = ru.id
+                  AND bu_rep.blocked_id = $1
+                )
+              )
+          )
+          SELECT
+            COALESCE(
+              (
+                SELECT jsonb_agg(
+                  jsonb_build_object(
+                    'user_id', user_id,
+                    'username', username,
+                    'profile_pic', profile_pic,
+                    'reposted_at', reposted_at
+                  )
+                  ORDER BY reposted_at DESC
+                )
+                FROM eligible_reposts
+              ),
+              '[]'::jsonb
+            ) AS reposters,
+            (
+              SELECT COUNT(*)::int
+              FROM eligible_reposts
+            ) AS reposter_count
+        ) relevant_reposts ON TRUE
         WHERE p.post_id = $2
-        GROUP BY p.post_id, u.id, u.username, u.profile_pic
         `,
       [userId, postId]
     );
@@ -461,14 +518,23 @@ router.get("/feed", authenticateToken, async (req, res) => {
         latest_repost.reposter_username,
         latest_repost.reposter_profile_pic,
         latest_repost.reposted_at,
+        latest_repost.reposters,
+        latest_repost.reposter_count,
         CASE
           WHEN latest_repost.reposter_id IS NOT NULL THEN 'repost'
           ELSE 'post'
         END AS feed_activity_type,
         COALESCE(( SELECT json_agg( json_build_object( 'media_url', pm.media_url, 'media_type', pm.media_type, 'media_order', pm.media_order ) ORDER BY pm.media_order ASC ) FROM post_media pm WHERE pm.post_id = p.post_id ), '[]') AS media,
-
-        COUNT(DISTINCT l.like_id)::int AS like_count,
-        COUNT(DISTINCT all_reposts.user_id)::int AS repost_count,
+        (
+          SELECT COUNT(*)::int
+          FROM likes
+          WHERE post_id = p.post_id
+        ) AS like_count,
+        (
+          SELECT COUNT(*)::int
+          FROM reposts
+          WHERE post_id = p.post_id
+        ) AS repost_count,
 
         EXISTS (
           SELECT 1
@@ -492,41 +558,67 @@ router.get("/feed", authenticateToken, async (req, res) => {
       FROM posts p
       JOIN users u
         ON u.id = p.user_id
-      LEFT JOIN likes l
-        ON l.post_id = p.post_id
-      LEFT JOIN reposts all_reposts
-        ON all_reposts.post_id = p.post_id
       LEFT JOIN LATERAL (
+        WITH eligible_reposts AS (
+          SELECT
+            r.user_id AS reposter_id,
+            ru.username AS reposter_username,
+            ru.profile_pic AS reposter_profile_pic,
+            r.created_at AS reposted_at
+          FROM reposts r
+          JOIN users ru
+            ON ru.id = r.user_id
+          WHERE r.post_id = p.post_id
+            AND (
+              r.user_id = $1
+              OR r.user_id IN (
+                SELECT following_id
+                FROM follows
+                WHERE follower_id = $1
+              )
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM blocked_users bu_rep
+              WHERE (
+                bu_rep.blocker_id = $1
+                AND bu_rep.blocked_id = ru.id
+              ) OR (
+                bu_rep.blocker_id = ru.id
+                AND bu_rep.blocked_id = $1
+              )
+            )
+        )
         SELECT
-          r.user_id AS reposter_id,
-          ru.username AS reposter_username,
-          ru.profile_pic AS reposter_profile_pic,
-          r.created_at AS reposted_at
-        FROM reposts r
-        JOIN users ru
-          ON ru.id = r.user_id
-        WHERE r.post_id = p.post_id
-          AND (
-            r.user_id = $1
-            OR r.user_id IN (
-              SELECT following_id
-              FROM follows
-              WHERE follower_id = $1
-            )
-          )
-          AND NOT EXISTS (
-            SELECT 1
-            FROM blocked_users bu_rep
-            WHERE (
-              bu_rep.blocker_id = $1
-              AND bu_rep.blocked_id = ru.id
-            ) OR (
-              bu_rep.blocker_id = ru.id
-              AND bu_rep.blocked_id = $1
-            )
-          )
-        ORDER BY r.created_at DESC
-        LIMIT 1
+          latest.reposter_id,
+          latest.reposter_username,
+          latest.reposter_profile_pic,
+          latest.reposted_at,
+          COALESCE(
+            (
+              SELECT jsonb_agg(
+                jsonb_build_object(
+                  'user_id', reposter_id,
+                  'username', reposter_username,
+                  'profile_pic', reposter_profile_pic,
+                  'reposted_at', reposted_at
+                )
+                ORDER BY reposted_at DESC
+              )
+              FROM eligible_reposts
+            ),
+            '[]'::jsonb
+          ) AS reposters,
+          (
+            SELECT COUNT(*)::int
+            FROM eligible_reposts
+          ) AS reposter_count
+        FROM LATERAL (
+          SELECT *
+          FROM eligible_reposts
+          ORDER BY reposted_at DESC
+          LIMIT 1
+        ) latest
       ) latest_repost ON TRUE
       WHERE (
           p.user_id = $1
@@ -548,15 +640,6 @@ router.get("/feed", authenticateToken, async (req, res) => {
             AND bu.blocked_id = $1
           )
         )
-      GROUP BY
-        p.post_id,
-        u.id,
-        u.username,
-        u.profile_pic,
-        latest_repost.reposter_id,
-        latest_repost.reposter_username,
-        latest_repost.reposter_profile_pic,
-        latest_repost.reposted_at
       ORDER BY COALESCE(latest_repost.reposted_at, p.date_posted) DESC
       LIMIT $2 OFFSET $3
       `,

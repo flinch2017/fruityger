@@ -13,6 +13,7 @@ export default function PostDetail() {
   const location = useLocation();
   const videoRefs = useRef({});
   const observerRef = useRef(null);
+  const repostDropdownRef = useRef(null);
   const gestureAxisRef = useRef(null);
 
   const [post, setPost] = useState(null);
@@ -20,6 +21,7 @@ export default function PostDetail() {
   const [loading, setLoading] = useState(true);
   const [liking, setLiking] = useState(false);
   const [reposting, setReposting] = useState(false);
+  const [repostDropdownOpen, setRepostDropdownOpen] = useState(false);
   const [videoMuted, setVideoMuted] = useState(true);
   const [commentOpen, setCommentOpen] = useState(Boolean(location.state?.openComments));
   const [dragging, setDragging] = useState(false);
@@ -49,6 +51,21 @@ export default function PostDetail() {
       day: "numeric",
       year: "numeric",
     });
+  };
+
+  const getRelevantReposters = () =>
+    Array.isArray(post?.reposters) ? post.reposters : [];
+
+  const getRepostLabel = () => {
+    const reposters = getRelevantReposters();
+    if (reposters.length === 0) return "";
+
+    const [firstReposter] = reposters;
+    if (reposters.length === 1) {
+      return `Reposted by @${firstReposter.username}`;
+    }
+
+    return `Reposted by @${firstReposter.username} + ${reposters.length - 1} others`;
   };
 
   useEffect(() => {
@@ -88,6 +105,19 @@ export default function PostDetail() {
       setCommentOpen(true);
     }
   }, [location.state]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest(".feed-repost-banner-wrap")) {
+        setRepostDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     if (observerRef.current) {
@@ -321,6 +351,53 @@ export default function PostDetail() {
               </div>
             </div>
           </div>
+
+          {getRelevantReposters().length > 0 && (
+            <div
+              className="feed-repost-banner-wrap"
+              ref={repostDropdownOpen ? repostDropdownRef : null}
+            >
+              <button
+                type="button"
+                className="feed-repost-banner"
+                onClick={() => setRepostDropdownOpen((prev) => !prev)}
+              >
+                {getRepostLabel()}
+              </button>
+
+              {repostDropdownOpen && (
+                <div className="feed-repost-dropdown">
+                  <div className="feed-repost-dropdown-title">Reposted by</div>
+                  {getRelevantReposters().map((reposter) => (
+                    <button
+                      key={`${post.post_id}-${reposter.user_id}`}
+                      type="button"
+                      className="feed-repost-dropdown-item"
+                      onClick={() => {
+                        setRepostDropdownOpen(false);
+                        navigate(`/profile/${reposter.username}`);
+                      }}
+                    >
+                      <span className="feed-repost-dropdown-avatar">
+                        {reposter.profile_pic ? (
+                          <img
+                            src={getSafeMediaUrl(reposter.profile_pic)}
+                            alt={reposter.username}
+                          />
+                        ) : (
+                          <FaUser />
+                        )}
+                      </span>
+                      <span className="feed-repost-dropdown-copy">
+                        <strong>@{reposter.username}</strong>
+                        <span>{formatDate(reposter.reposted_at)}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {post.caption && <p className="feed-post-content">{post.caption}</p>}
 

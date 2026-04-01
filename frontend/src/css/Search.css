@@ -355,6 +355,21 @@
   color: rgba(13, 101, 132, 0.72);
 }
 
+.search-repost-banner-wrap {
+  position: relative;
+  align-self: flex-start;
+  margin-bottom: 10px;
+}
+
+.search-repost-banner {
+  margin: 0;
+}
+
+.search-repost-dropdown {
+  left: 0;
+  right: auto;
+}
+
 .search-post-content {
   margin: 0 0 14px;
   font-size: 14px;

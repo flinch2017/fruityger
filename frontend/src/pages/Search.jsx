@@ -20,6 +20,7 @@ export default function Search() {
   const videoRefs = useRef({});
   const observerRef = useRef(null);
   const dropdownRef = useRef(null);
+  const repostDropdownRef = useRef(null);
   const gestureAxisRef = useRef(null);
   const currentUserId = localStorage.getItem("userId");
 
@@ -38,6 +39,7 @@ export default function Search() {
   const [repostingMap, setRepostingMap] = useState({});
   const [activeCommentPost, setActiveCommentPost] = useState(null);
   const [activeMenuPostId, setActiveMenuPostId] = useState(null);
+  const [activeRepostListPostId, setActiveRepostListPostId] = useState(null);
   const [deleteModal, setDeleteModal] = useState({
     visible: false,
     postId: null
@@ -82,6 +84,21 @@ export default function Search() {
       day: "numeric",
       year: "numeric"
     });
+  };
+
+  const getRelevantReposters = (post) =>
+    Array.isArray(post?.reposters) ? post.reposters : [];
+
+  const getRepostLabel = (post) => {
+    const reposters = getRelevantReposters(post);
+    if (reposters.length === 0) return "";
+
+    const [firstReposter] = reposters;
+    if (reposters.length === 1) {
+      return `Reposted by @${firstReposter.username}`;
+    }
+
+    return `Reposted by @${firstReposter.username} + ${reposters.length - 1} others`;
   };
 
   const moveSlide = (postId, direction, mediaLength) => {
@@ -220,8 +237,12 @@ export default function Search() {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+      if (!e.target.closest(".search-post-more-wrapper")) {
         setActiveMenuPostId(null);
+      }
+
+      if (!e.target.closest(".search-repost-banner-wrap")) {
+        setActiveRepostListPostId(null);
       }
     };
 
@@ -364,6 +385,10 @@ export default function Search() {
         return updated;
       });
     }
+  };
+
+  const toggleRepostList = (postId) => {
+    setActiveRepostListPostId((prev) => (prev === postId ? null : postId));
   };
 
   const toggleMenu = (postId) => {
@@ -591,6 +616,53 @@ export default function Search() {
                           </span>
                         </div>
                       </div>
+
+                      {getRelevantReposters(p).length > 0 && (
+                        <div
+                          className="search-repost-banner-wrap"
+                          ref={activeRepostListPostId === p.post_id ? repostDropdownRef : null}
+                        >
+                          <button
+                            type="button"
+                            className="feed-repost-banner search-repost-banner"
+                            onClick={() => toggleRepostList(p.post_id)}
+                          >
+                            {getRepostLabel(p)}
+                          </button>
+
+                          {activeRepostListPostId === p.post_id && (
+                            <div className="feed-repost-dropdown search-repost-dropdown">
+                              <div className="feed-repost-dropdown-title">Reposted by</div>
+                              {getRelevantReposters(p).map((reposter) => (
+                                <button
+                                  key={`${p.post_id}-${reposter.user_id}`}
+                                  type="button"
+                                  className="feed-repost-dropdown-item"
+                                  onClick={() => {
+                                    setActiveRepostListPostId(null);
+                                    navigate(`/profile/${reposter.username}`);
+                                  }}
+                                >
+                                  <span className="feed-repost-dropdown-avatar">
+                                    {reposter.profile_pic ? (
+                                      <img
+                                        src={getSafeMediaUrl(reposter.profile_pic)}
+                                        alt={reposter.username}
+                                      />
+                                    ) : (
+                                      <FaUser />
+                                    )}
+                                  </span>
+                                  <span className="feed-repost-dropdown-copy">
+                                    <strong>@{reposter.username}</strong>
+                                    <span>{formatDate(reposter.reposted_at)}</span>
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {p.caption && (
                         <p className="search-post-content">{p.caption}</p>
