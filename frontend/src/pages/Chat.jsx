@@ -25,11 +25,23 @@ export default function Chat() {
   const [sending, setSending] = useState(false);
 
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
   const pollingIntervalRef = useRef(null);
+  const shouldStickToBottomRef = useRef(true);
+  const previousMessagesLengthRef = useRef(0);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (behavior = "smooth") => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+  };
+
+  const updateStickiness = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    shouldStickToBottomRef.current = distanceFromBottom < 120;
   };
 
   const dispatchMessagesRefresh = () => {
@@ -91,8 +103,21 @@ export default function Chat() {
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const previousLength = previousMessagesLengthRef.current;
+    const currentLength = messages.length;
+    const lastMessage = currentLength > 0 ? messages[currentLength - 1] : null;
+    const isOwnLatestMessage =
+      lastMessage && String(lastMessage.sender_id) === String(userId);
+
+    if (
+      currentLength > previousLength &&
+      (shouldStickToBottomRef.current || isOwnLatestMessage)
+    ) {
+      scrollToBottom(previousLength === 0 ? "auto" : "smooth");
+    }
+
+    previousMessagesLengthRef.current = currentLength;
+  }, [messages, userId]);
 
   const formatMessageTime = (dateString) => {
     const date = new Date(dateString);
@@ -110,7 +135,7 @@ export default function Chat() {
 
     const initChat = async () => {
       await fetchChatSnapshot({ showLoading: true });
-      scrollToBottom();
+      scrollToBottom("auto");
 
       channel = supabase
         .channel(`chat-${chatId}`)
@@ -265,7 +290,7 @@ export default function Chat() {
       });
 
       setInput("");
-      scrollToBottom();
+      scrollToBottom("smooth");
       dispatchMessagesRefresh();
     } catch (err) {
       console.error(err);
@@ -451,7 +476,7 @@ export default function Chat() {
         </div>
       </div>
 
-      <div className="chat-messages">
+      <div className="chat-messages" ref={messagesContainerRef} onScroll={updateStickiness}>
         {loading ? (
           <div className="spinner-alpha-container">
             <div className="spinner-alpha"></div>
