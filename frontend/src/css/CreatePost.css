@@ -114,11 +114,21 @@
 }
 
 .create-header-btn {
-  min-width: 76px;
-  min-height: 38px;
-  padding: 8px 12px;
-  font-size: 13px;
+  width: 58px;
+  height: 28px;
+  min-width: 58px;
+  min-height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
   border-radius: 999px;
+  box-shadow:
+    0 4px 10px rgba(0, 160, 255, 0.12),
+    inset 0 1px 2px rgba(255,255,255,0.92);
 }
 
 .create-post-header .cancel-btn {
@@ -127,6 +137,19 @@
 
 .create-post-header .submit-btn {
   justify-self: end;
+}
+
+.create-post-header .submit-btn-content {
+  gap: 4px;
+  width: auto;
+  font-size: inherit;
+  line-height: 1;
+}
+
+.create-post-header .submit-spinner {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
 }
 
 /* Cancel */
@@ -213,10 +236,12 @@
   }
 
   .create-header-btn {
-    min-width: 70px;
-    min-height: 34px;
-    padding: 7px 11px;
-    font-size: 12px;
+    width: 54px;
+    height: 26px;
+    min-width: 54px;
+    min-height: 26px;
+    padding: 0;
+    font-size: 10px;
   }
 
   .create-textarea {
