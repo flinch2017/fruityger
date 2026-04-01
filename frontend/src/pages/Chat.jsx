@@ -22,6 +22,7 @@ export default function Chat() {
   const [blockedByMe, setBlockedByMe] = useState(false);
   const [blockedByThem, setBlockedByThem] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [sending, setSending] = useState(false);
 
   const messagesEndRef = useRef(null);
 
@@ -149,7 +150,9 @@ export default function Chat() {
   }, [chatId, token, userId]);
 
   const sendMessage = async () => {
-    if (!input.trim() || blockedByMe || blockedByThem) return;
+    if (!input.trim() || blockedByMe || blockedByThem || sending) return;
+
+    setSending(true);
 
     try {
       const res = await fetch("http://localhost:5000/api/messages/send", {
@@ -184,6 +187,8 @@ export default function Chat() {
       dispatchMessagesRefresh();
     } catch (err) {
       console.error(err);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -459,9 +464,11 @@ export default function Chat() {
             placeholder="Type a message..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            onKeyDown={(e) => e.key === "Enter" && !sending && sendMessage()}
           />
-          <button onClick={sendMessage}>Send</button>
+          <button onClick={sendMessage} disabled={sending || !input.trim()}>
+            {sending ? "Sending..." : "Send"}
+          </button>
         </div>
       )}
     </div>

@@ -43,18 +43,32 @@ export default function ReportPage() {
     }
 
     try {
-      const res = await fetch("http://localhost:5000/api/reports/submit", {
+      const reason = selectedReasons.join(", ");
+      const requestUrl =
+        contentType === "message"
+          ? "http://localhost:5000/api/messages/report"
+          : "http://localhost:5000/api/reports/submit";
+      const requestBody =
+        contentType === "message"
+          ? {
+              messageId: contentId,
+              reason,
+              details,
+            }
+          : {
+              contentType,
+              contentId,
+              reason,
+              details,
+            };
+
+      const res = await fetch(requestUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          contentType,
-          contentId,
-          reason: selectedReasons.join(", "),
-          details,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await res.json();
