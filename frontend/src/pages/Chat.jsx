@@ -40,9 +40,9 @@ export default function Chat() {
   const [sending, setSending] = useState(false);
   const [otherUserOnline, setOtherUserOnline] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
-  const [openReactionPickerId, setOpenReactionPickerId] = useState(null);
-  const [reactionPickerAlign, setReactionPickerAlign] = useState("center");
-  const [reactionPickerVertical, setReactionPickerVertical] = useState("top");
+  const [reactionTargetMessage, setReactionTargetMessage] = useState(null);
+  const [reacting, setReacting] = useState(false);
+  const [pendingReactionKey, setPendingReactionKey] = useState(null);
   const [reactionViewer, setReactionViewer] = useState(null);
   const [reactionViewerLoading, setReactionViewerLoading] = useState(false);
 
@@ -83,44 +83,6 @@ export default function Chat() {
 
   const getReactionEmoji = (reactionKey) =>
     reactionOptions.find((option) => option.key === reactionKey)?.emoji || "\u2764\uFE0F";
-
-  const toggleReactionPicker = (messageId, event) => {
-    if (openReactionPickerId === messageId) {
-      setOpenReactionPickerId(null);
-      return;
-    }
-
-    const triggerRect = event.currentTarget.getBoundingClientRect();
-    const estimatedPickerWidth = 248;
-    const estimatedPickerHeight = 56;
-    const viewportPadding = 16;
-    const containerRect = messagesContainerRef.current?.getBoundingClientRect();
-    const availableLeft = triggerRect.left - viewportPadding;
-    const availableRight = window.innerWidth - triggerRect.right - viewportPadding;
-    const availableAbove = containerRect
-      ? triggerRect.top - containerRect.top - viewportPadding
-      : triggerRect.top - viewportPadding;
-    const availableBelow = containerRect
-      ? containerRect.bottom - triggerRect.bottom - viewportPadding
-      : window.innerHeight - triggerRect.bottom - viewportPadding;
-
-    let nextAlign = "center";
-    let nextVertical = "top";
-
-    if (availableRight < estimatedPickerWidth / 2 && availableLeft > availableRight) {
-      nextAlign = "right";
-    } else if (availableLeft < estimatedPickerWidth / 2 && availableRight > availableLeft) {
-      nextAlign = "left";
-    }
-
-    if (availableAbove < estimatedPickerHeight && availableBelow > availableAbove) {
-      nextVertical = "bottom";
-    }
-
-    setReactionPickerAlign(nextAlign);
-    setReactionPickerVertical(nextVertical);
-    setOpenReactionPickerId(messageId);
-  };
 
   const markChatRead = async () => {
     if (!token) return;
@@ -459,6 +421,11 @@ export default function Chat() {
   };
 
   const handleReact = async (message, reactionKey) => {
+    if (reacting) return;
+
+    setReacting(true);
+    setPendingReactionKey(reactionKey);
+
     try {
       const currentReaction = Array.isArray(message.reactions)
         ? message.reactions.find((reaction) => reaction.reacted_by_me)?.reaction
@@ -485,11 +452,14 @@ export default function Chat() {
         );
       }
 
-      setOpenReactionPickerId(null);
+      setReactionTargetMessage(null);
       dispatchMessagesRefresh();
     } catch (error) {
       console.error(error);
       setNotice({ type: "error", message: "Failed to update reaction." });
+    } finally {
+      setReacting(false);
+      setPendingReactionKey(null);
     }
   };
 
@@ -639,7 +609,7 @@ export default function Chat() {
       }
 
       if (!e.target.closest(".message-reaction-wrap")) {
-        setOpenReactionPickerId(null);
+        return;
       }
 
       if (!e.target.closest(".message-reaction-modal") && !e.target.closest(".message-reaction-pill")) {
@@ -662,7 +632,6 @@ export default function Chat() {
     const closeMenu = () => setOpenMenuId(null);
     const closeOverlays = () => {
       closeMenu();
-      setOpenReactionPickerId(null);
     };
     document.addEventListener("scroll", closeOverlays);
 
@@ -782,31 +751,12 @@ export default function Chat() {
                       <button
                         type="button"
                         className="message-reaction-trigger"
-                        onClick={(event) => toggleReactionPicker(msg.id, event)}
+                        onClick={() => setReactionTargetMessage(msg)}
                         aria-label="React to message"
                         title="React"
                       >
                         <FaRegSmileBeam />
                       </button>
-
-                      {openReactionPickerId === msg.id && (
-                        <div
-                          className={`message-reaction-picker ${reactionPickerAlign} ${reactionPickerVertical}`}
-                        >
-                          {reactionOptions.map((option) => (
-                            <button
-                              key={option.key}
-                              type="button"
-                              className="message-reaction-choice"
-                              onClick={() => handleReact(msg, option.key)}
-                              aria-label={option.label}
-                              title={option.label}
-                            >
-                              {option.emoji}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -832,31 +782,12 @@ export default function Chat() {
                       <button
                         type="button"
                         className="message-reaction-trigger"
-                        onClick={(event) => toggleReactionPicker(msg.id, event)}
+                        onClick={() => setReactionTargetMessage(msg)}
                         aria-label="React to message"
                         title="React"
                       >
                         <FaRegSmileBeam />
                       </button>
-
-                      {openReactionPickerId === msg.id && (
-                        <div
-                          className={`message-reaction-picker ${reactionPickerAlign} ${reactionPickerVertical}`}
-                        >
-                          {reactionOptions.map((option) => (
-                            <button
-                              key={option.key}
-                              type="button"
-                              className="message-reaction-choice"
-                              onClick={() => handleReact(msg, option.key)}
-                              aria-label={option.label}
-                              title={option.label}
-                            >
-                              {option.emoji}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -901,15 +832,16 @@ export default function Chat() {
                 {Array.isArray(msg.reactions) && msg.reactions.length > 0 && (
                   <div className={`message-reactions ${isMine ? "sent" : "received"}`}>
                     {msg.reactions.map((reaction) => (
-                      <button
-                        key={reaction.reaction}
-                        type="button"
-                        className={`message-reaction-pill ${
-                          reaction.reacted_by_me ? "active" : ""
-                        }`}
-                        onClick={() => openReactionViewer(msg)}
-                      >
-                        <span>{getReactionEmoji(reaction.reaction)}</span>
+                    <button
+                      key={reaction.reaction}
+                      type="button"
+                      className={`message-reaction-pill ${
+                        reaction.reacted_by_me ? "active" : ""
+                      }`}
+                      disabled={reacting}
+                      onClick={() => openReactionViewer(msg)}
+                    >
+                      <span>{getReactionEmoji(reaction.reaction)}</span>
                         <span>{reaction.count}</span>
                       </button>
                     ))}
@@ -1029,6 +961,41 @@ export default function Chat() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {reactionTargetMessage && (
+        <div className="message-reaction-picker-modal-backdrop">
+          <div className="message-reaction-picker-modal">
+            <div className="message-reaction-picker-header">
+              <div>
+                <h4>React to message</h4>
+                <p>Choose one reaction.</p>
+              </div>
+              <button
+                type="button"
+                className="message-reaction-modal-close"
+                onClick={() => setReactionTargetMessage(null)}
+                aria-label="Close reaction picker"
+              >
+                <FaTimes />
+              </button>
+            </div>
+            <div className="message-reaction-picker-grid">
+              {reactionOptions.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  className="message-reaction-choice-large"
+                  disabled={reacting}
+                  onClick={() => handleReact(reactionTargetMessage, option.key)}
+                >
+                  <span>{option.emoji}</span>
+                  <span>{reacting && pendingReactionKey === option.key ? "Sending..." : option.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
