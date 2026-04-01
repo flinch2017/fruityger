@@ -14,6 +14,7 @@ export default function CommentSheet({
   const navigate = useNavigate();
   const historyMarkerRef = useRef(`comment-sheet-${postId}-${Date.now()}`);
   const closeHandledRef = useRef(false);
+  const overlayHashRef = useRef(`#comments-${postId}`);
 
   const [comments, setComments] = useState([]);
   const [text, setText] = useState("");
@@ -64,12 +65,13 @@ export default function CommentSheet({
   }, []);
 
   useEffect(() => {
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
     const nextState = {
       ...(window.history.state || {}),
       __commentSheet: historyMarkerRef.current,
     };
 
-    window.history.pushState(nextState, "");
+    window.history.pushState(nextState, "", `${currentUrl}${overlayHashRef.current}`);
 
     const handlePopState = () => {
       closeHandledRef.current = true;
@@ -91,7 +93,10 @@ export default function CommentSheet({
 
     const currentState = window.history.state || {};
 
-    if (currentState.__commentSheet === historyMarkerRef.current) {
+    if (
+      currentState.__commentSheet === historyMarkerRef.current ||
+      window.location.hash === overlayHashRef.current
+    ) {
       closeHandledRef.current = true;
       window.history.back();
       return;
