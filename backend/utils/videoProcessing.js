@@ -70,3 +70,59 @@ export async function transcodeVideoToMp4(fileBuffer, originalName = "video") {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
 }
+
+export async function transcodeVideoFileToMp4(inputPath, originalName = "video") {
+  if (!ffmpegPath) {
+    throw new Error("FFmpeg binary is not available");
+  }
+
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "fruityger-video-"));
+  const inputExt = path.extname(originalName) || path.extname(inputPath) || ".mov";
+  const baseName = sanitizeBaseName(path.basename(originalName, inputExt));
+  const outputPath = path.join(tempDir, `${baseName}.mp4`);
+
+  try {
+    try {
+      await execFileAsync(ffmpegPath, [
+        "-y",
+        "-i",
+        inputPath,
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a?",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "28",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-movflags",
+        "+faststart",
+        outputPath,
+      ]);
+    } catch (error) {
+      const stderr = error?.stderr ? String(error.stderr).trim() : "";
+      const ffmpegMessage = stderr.split("\n").slice(-3).join(" ").trim();
+      throw new Error(ffmpegMessage || "Video transcoding failed");
+    }
+
+    return {
+      outputPath,
+      mimetype: "video/mp4",
+      fileName: `${baseName}.mp4`,
+      cleanup: async () => {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    await fs.rm(tempDir, { recursive: true, force: true });
+    throw error;
+  }
+}

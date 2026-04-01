@@ -3,10 +3,14 @@ import pool from "../db.js";
 import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { createReadStream } from "fs";
+import { promises as fs } from "fs";
+import os from "os";
+import path from "path";
 import { r2 } from "../utils/r2.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { ensureHashtagSchema, syncPostHashtags } from "../utils/hashtags.js";
-import { transcodeVideoToMp4 } from "../utils/videoProcessing.js";
+import { transcodeVideoFileToMp4 } from "../utils/videoProcessing.js";
 
 const router = express.Router();
 const sanitizeFileName = (value = "") =>
@@ -16,9 +20,18 @@ const sanitizeFileName = (value = "") =>
         .replace(/-+/g, "-")
         .replace(/^-|-$/g, "") || "file";
 
-/* Memory storage (files go directly to buffer) */
+const tempUploadDir = path.join(os.tmpdir(), "fruityger-post-uploads");
+
+await fs.mkdir(tempUploadDir, { recursive: true });
+
 const upload = multer({
-    storage: multer.memoryStorage(),
+    storage: multer.diskStorage({
+        destination: (_req, _file, cb) => cb(null, tempUploadDir),
+        filename: (_req, file, cb) => {
+            const ext = path.extname(file.originalname) || "";
+            cb(null, `${Date.now()}-${uuidv4()}${ext}`);
+        }
+    }),
     limits: {
         fileSize: 150 * 1024 * 1024 // 150MB raw upload limit before compression
     }
@@ -34,6 +47,7 @@ router.post(
     upload.array("media", 4),
     async (req, res) => {
         let postId = null;
+        const cleanupTasks = [];
 
         try {
             await ensureHashtagSchema();
@@ -63,24 +77,34 @@ router.post(
 
                 const file = files[i];
                 const isVideo = file.mimetype.startsWith("video");
-                const processedFile = isVideo
-                    ? await transcodeVideoToMp4(file.buffer, file.originalname)
-                    : {
-                        buffer: file.buffer,
-                        mimetype: file.mimetype,
-                        fileName: sanitizeFileName(file.originalname),
-                    };
+                let uploadBody;
+                let uploadContentType;
+                let uploadFileName;
+
+                cleanupTasks.push(() => fs.rm(file.path, { force: true }));
+
+                if (isVideo) {
+                    const processedFile = await transcodeVideoFileToMp4(file.path, file.originalname);
+                    cleanupTasks.push(processedFile.cleanup);
+                    uploadBody = createReadStream(processedFile.outputPath);
+                    uploadContentType = processedFile.mimetype;
+                    uploadFileName = sanitizeFileName(processedFile.fileName);
+                } else {
+                    uploadBody = createReadStream(file.path);
+                    uploadContentType = file.mimetype;
+                    uploadFileName = sanitizeFileName(file.originalname);
+                }
 
                 const mediaId = uuidv4();
 
-                const key = `posts/${postId}/${mediaId}-${sanitizeFileName(processedFile.fileName)}`;
+                const key = `posts/${postId}/${mediaId}-${uploadFileName}`;
 
                 await r2.send(
                     new PutObjectCommand({
                         Bucket: bucketName,
                         Key: key,
-                        Body: processedFile.buffer,
-                        ContentType: processedFile.mimetype
+                        Body: uploadBody,
+                        ContentType: uploadContentType
                     })
                 );
 
@@ -129,6 +153,8 @@ router.post(
             res.status(500).json({
                 error: err?.message || "Post creation failed"
             });
+        } finally {
+            await Promise.allSettled(cleanupTasks.map((cleanup) => cleanup()));
         }
     }
 );
