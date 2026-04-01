@@ -13,6 +13,7 @@ export default function PostDetail() {
   const location = useLocation();
   const videoRefs = useRef({});
   const observerRef = useRef(null);
+  const gestureAxisRef = useRef(null);
 
   const [post, setPost] = useState(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -20,6 +21,9 @@ export default function PostDetail() {
   const [liking, setLiking] = useState(false);
   const [reposting, setReposting] = useState(false);
   const [commentOpen, setCommentOpen] = useState(Boolean(location.state?.openComments));
+  const [dragging, setDragging] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [touchStartY, setTouchStartY] = useState(0);
 
   const formatDate = (dateString) => {
     if (!dateString) return "";
@@ -124,6 +128,44 @@ export default function PostDetail() {
 
       return nextIndex;
     });
+  };
+
+  const handlePointerStart = (e) => {
+    const touch = e.touches ? e.touches[0] : e;
+    gestureAxisRef.current = null;
+    setDragging(true);
+    setDragStartX(touch.clientX);
+    setTouchStartY(touch.clientY);
+  };
+
+  const handlePointerMove = (e) => {
+    if (!dragging || !post?.media?.length) return;
+
+    const touch = e.touches ? e.touches[0] : e;
+    const dx = dragStartX - touch.clientX;
+    const dy = touch.clientY - touchStartY;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    if (!gestureAxisRef.current) {
+      if (absDx < 10 && absDy < 10) return;
+      gestureAxisRef.current = absDx > absDy ? "x" : "y";
+    }
+
+    if (gestureAxisRef.current === "y") {
+      setDragging(false);
+      return;
+    }
+
+    if (absDx > 80) {
+      moveSlide(dx > 0 ? 1 : -1);
+      setDragStartX(touch.clientX);
+    }
+  };
+
+  const handlePointerEnd = () => {
+    gestureAxisRef.current = null;
+    setDragging(false);
   };
 
   const toggleRepost = async () => {
@@ -282,6 +324,13 @@ export default function PostDetail() {
               <div
                 className="feed-carousel-track"
                 style={{ transform: `translateX(-${activeIndex * 100}%)` }}
+                onMouseDown={handlePointerStart}
+                onMouseMove={handlePointerMove}
+                onMouseUp={handlePointerEnd}
+                onMouseLeave={handlePointerEnd}
+                onTouchStart={handlePointerStart}
+                onTouchMove={handlePointerMove}
+                onTouchEnd={handlePointerEnd}
               >
                 {post.media.map((media, index) => (
                   <div className="feed-carousel-item" key={index}>

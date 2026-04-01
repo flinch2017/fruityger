@@ -135,6 +135,16 @@
   object-fit: cover;
 }
 
+.comment-identity-clickable {
+  cursor: pointer;
+  transition: transform 0.18s ease, filter 0.18s ease;
+}
+
+.comment-identity-clickable:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
 .comment-user-meta {
   display: flex;
   flex-direction: column;

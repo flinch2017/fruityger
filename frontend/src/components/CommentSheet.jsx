@@ -11,6 +11,7 @@ export default function CommentSheet({
   postAuthorId,
   onClose
 }) {
+  const navigate = useNavigate();
 
   const [comments, setComments] = useState([]);
   const [text, setText] = useState("");
@@ -39,11 +40,25 @@ export default function CommentSheet({
   };
 
   const closeMenu = () => setActiveMenu(null);
+  const openUserProfile = (username) => {
+    if (!username) return;
+    navigate(`/profile/${username}`);
+  };
 
   useEffect(() => {
-    const handleClick = () => setActiveMenu(null);
-    window.addEventListener("click", handleClick);
-    return () => window.removeEventListener("click", handleClick);
+    const handlePointerDown = (event) => {
+      if (!event.target.closest(".comment-menu-wrapper")) {
+        setActiveMenu(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+    };
   }, []);
 
 
@@ -452,7 +467,10 @@ const loadMoreReplies = (commentId) => {
 
                   <div className="comment-username">
 
-                    <div className="comment-avatar">
+                    <div
+                      className="comment-avatar comment-identity-clickable"
+                      onClick={() => openUserProfile(c.username)}
+                    >
                       {c.profile_pic ? (
                         <img
                           src={getSafeMediaUrl(c.profile_pic)}
@@ -468,7 +486,10 @@ const loadMoreReplies = (commentId) => {
                     </div>
 
                     <div className="comment-user-meta">
-                      <span className="comment-user-name">
+                      <span
+                        className="comment-user-name comment-identity-clickable"
+                        onClick={() => openUserProfile(c.username)}
+                      >
                         {c.username}
 
                         {c.user_id === postAuthorId && (
@@ -563,7 +584,10 @@ const loadMoreReplies = (commentId) => {
 
                             <div className="thread-author">
 
-                              <div className="comment-avatar small">
+                              <div
+                                className="comment-avatar small comment-identity-clickable"
+                                onClick={() => openUserProfile(r.username)}
+                              >
                                 {r.profile_pic ? (
                                   <img
                                     src={getSafeMediaUrl(r.profile_pic)}
@@ -578,7 +602,10 @@ const loadMoreReplies = (commentId) => {
                                 )}
                               </div>
 
-                              <span>
+                              <span
+                                className="comment-identity-clickable"
+                                onClick={() => openUserProfile(r.username)}
+                              >
                                 @{r.username}
 
                                 {r.user_id === postAuthorId && (
