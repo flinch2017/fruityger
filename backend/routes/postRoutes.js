@@ -33,6 +33,7 @@ router.post(
     authenticateToken,
     upload.array("media", 4),
     async (req, res) => {
+        let postId = null;
 
         try {
             await ensureHashtagSchema();
@@ -41,7 +42,7 @@ router.post(
             const files = req.files || [];
 
             /* ⭐ Insert post */
-            const postId = uuidv4();
+            postId = uuidv4();
 
             await pool.query(
                 `INSERT INTO posts (post_id, user_id, caption)
@@ -116,6 +117,15 @@ router.post(
 
         } catch (err) {
             console.error(err);
+
+            if (postId) {
+                try {
+                    await pool.query(`DELETE FROM posts WHERE post_id = $1`, [postId]);
+                } catch (cleanupError) {
+                    console.error("Failed to rollback post after upload error:", cleanupError);
+                }
+            }
+
             res.status(500).json({
                 error: err?.message || "Post creation failed"
             });

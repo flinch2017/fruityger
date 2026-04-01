@@ -98,17 +98,24 @@ export default function CreatePost() {
         body: formData,
       });
 
-      const data = await res.json();
+      const responseText = await res.text();
+      let data = {};
+
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        data = {};
+      }
 
       if (data.success) {
         navigate("/feed");
         return;
       }
 
-      showWarning(data.error || "Post creation failed.");
+      showWarning(data.error || responseText || "Post creation failed.");
     } catch (error) {
       console.error(error);
-      showWarning("Post creation failed.");
+      showWarning(error?.message || "Post creation failed.");
     } finally {
       setSubmitting(false);
     }
