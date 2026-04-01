@@ -23,7 +23,10 @@ export default function Header() {
   const profileRef = useRef(null);
   const searchRef = useRef(null);
 
-  const isCreatePage = location.pathname === "/create";
+  const hideMobileFab =
+    location.pathname === "/create" ||
+    location.pathname === "/messages" ||
+    location.pathname.startsWith("/chat/");
   const storedProfilePic = localStorage.getItem("profile_pic") || "";
   const profileUsername = currentUser?.username || localStorage.getItem("username") || "You";
   const profileHandle = `@${profileUsername}`;
@@ -557,7 +560,7 @@ export default function Header() {
         )}
       </header>
 
-      {!isCreatePage && (
+      {!hideMobileFab && (
         <button
           className="mobile-fab-create"
           onClick={() => navigate("/create")}

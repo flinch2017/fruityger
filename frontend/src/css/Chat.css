@@ -1013,13 +1013,13 @@
   }
 
   .message-wrapper.sent .message-options-wrapper .message-dropdown {
-    left: auto;
-    right: -6px;
+    left: 0;
+    right: auto;
   }
 
   .message-wrapper.received .message-options-wrapper .message-dropdown {
-    right: auto;
-    left: -6px;
+    right: 0;
+    left: auto;
   }
 
   .message-reaction-choice {
