@@ -6,6 +6,7 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { r2 } from "../utils/r2.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { ensureHashtagSchema, syncPostHashtags } from "../utils/hashtags.js";
+import { transcodeVideoToMp4 } from "../utils/videoProcessing.js";
 
 const router = express.Router();
 const sanitizeFileName = (value = "") =>
@@ -60,17 +61,25 @@ router.post(
             for (let i = 0; i < files.length; i++) {
 
                 const file = files[i];
+                const isVideo = file.mimetype.startsWith("video");
+                const processedFile = isVideo
+                    ? await transcodeVideoToMp4(file.buffer, file.originalname)
+                    : {
+                        buffer: file.buffer,
+                        mimetype: file.mimetype,
+                        fileName: sanitizeFileName(file.originalname),
+                    };
 
                 const mediaId = uuidv4();
 
-                const key = `posts/${postId}/${mediaId}-${sanitizeFileName(file.originalname)}`;
+                const key = `posts/${postId}/${mediaId}-${sanitizeFileName(processedFile.fileName)}`;
 
                 await r2.send(
                     new PutObjectCommand({
                         Bucket: bucketName,
                         Key: key,
-                        Body: file.buffer,
-                        ContentType: file.mimetype
+                        Body: processedFile.buffer,
+                        ContentType: processedFile.mimetype
                     })
                 );
 
@@ -80,7 +89,7 @@ router.post(
                     mediaId,
                     postId,
                     mediaUrl,
-                    file.mimetype.startsWith("video") ? "video" : "image",
+                    isVideo ? "video" : "image",
                     i
                 ]);
             }
