@@ -2,6 +2,17 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/EditProfile.css";
 
+const normalizeUsername = (value = "") =>
+  String(value)
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/-+/g, "")
+    .replace(/[^a-z0-9._]/g, "")
+    .replace(/_+/g, "_")
+    .replace(/\.+/g, ".")
+    .replace(/^[^a-z]+/, "")
+    .replace(/\.$/g, "");
+
 export default function EditProfile() {
   const [user, setUser] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -50,7 +61,11 @@ export default function EditProfile() {
   };
 
   const handleChange = (e) =>
-    setForm({ ...form, [e.target.name]: e.target.value });
+    setForm({
+      ...form,
+      [e.target.name]:
+        e.target.name === "username" ? normalizeUsername(e.target.value) : e.target.value,
+    });
 
   // 📸 Handle file selection
   const handleFileChange = (e) => {
@@ -201,8 +216,14 @@ export default function EditProfile() {
               name="username"
               value={form.username}
               onChange={handleChange}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck="false"
               required
             />
+            <span className="edit-profile-hint">
+              Lowercase only. Must start with a letter. Spaces become underscores. Cannot end with a period.
+            </span>
           </label>
 
           <label>

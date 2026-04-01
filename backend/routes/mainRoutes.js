@@ -12,6 +12,46 @@ let blockedUsersTableReadyPromise = null;
 let userProfileSchemaReadyPromise = null;
 let notificationPreferencesSchemaReadyPromise = null;
 
+const normalizeUsername = (value = "") =>
+  String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/-+/g, "")
+    .replace(/[^a-z0-9._]/g, "")
+    .replace(/_+/g, "_")
+    .replace(/\.+/g, ".")
+    .replace(/^[^a-z]+/, "")
+    .replace(/\.$/g, "");
+
+const getUsernameValidationMessage = (username) => {
+  if (!username) {
+    return "Username is required";
+  }
+
+  if (username.length < 3) {
+    return "Username must be at least 3 characters long";
+  }
+
+  if (username.length > 30) {
+    return "Username must be 30 characters or fewer";
+  }
+
+  if (!/^[a-z]/.test(username)) {
+    return "Username must start with a letter";
+  }
+
+  if (username.endsWith(".")) {
+    return "Username cannot end with a period";
+  }
+
+  if (!/^[a-z0-9._]+$/.test(username)) {
+    return "Username can only use lowercase letters, numbers, periods, and underscores";
+  }
+
+  return "";
+};
+
 async function ensureBlockedUsersTable() {
   if (!blockedUsersTableReadyPromise) {
     blockedUsersTableReadyPromise = (async () => {
@@ -592,6 +632,12 @@ router.post("/unblock-user", authenticateToken, async (req, res) => {
 
 router.put("/edit-profile", authenticateToken, async (req, res) => {
   const { username, profile_pic, profile_pic_key, bio } = req.body;
+  const normalizedUsername = normalizeUsername(username);
+  const usernameValidationMessage = getUsernameValidationMessage(normalizedUsername);
+
+  if (usernameValidationMessage) {
+    return res.status(400).json({ error: usernameValidationMessage });
+  }
 
   try {
 
@@ -627,7 +673,7 @@ router.put("/edit-profile", authenticateToken, async (req, res) => {
     `;
 
     const params = [
-      username,
+      normalizedUsername,
       nextProfilePic,
       nextProfilePicKey,
       typeof bio === "string" ? bio.trim().slice(0, 160) : null,
@@ -642,6 +688,9 @@ router.put("/edit-profile", authenticateToken, async (req, res) => {
     });
 
   } catch (err) {
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Username already exists" });
+    }
     console.error(err);
     res.status(500).json({ error: "Server error" });
   }
