@@ -92,7 +92,21 @@ router.get("/posts", authenticateToken, async (req, res) => {
         activity.reposted_at,
         author.username,
         author.profile_pic,
-        COALESCE(media_agg.media, '[]') AS media,
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'media_url', pm.media_url,
+                'media_type', pm.media_type,
+                'media_order', pm.media_order
+              )
+              ORDER BY pm.media_order ASC
+            )
+            FROM post_media pm
+            WHERE pm.post_id = activity.post_id
+          ),
+          '[]'
+        ) AS media,
         COUNT(DISTINCT l.like_id)::int AS like_count,
         COUNT(DISTINCT r.user_id)::int AS repost_count,
         EXISTS (
@@ -115,18 +129,6 @@ router.get("/posts", authenticateToken, async (req, res) => {
       FROM profile_activity activity
       JOIN users author
         ON author.id = activity.user_id
-      LEFT JOIN LATERAL (
-        SELECT json_agg(
-          json_build_object(
-            'media_url', pm.media_url,
-            'media_type', pm.media_type,
-            'media_order', pm.media_order
-          )
-          ORDER BY pm.media_order ASC
-        ) AS media
-        FROM post_media pm
-        WHERE pm.post_id = activity.post_id
-      ) media_agg ON TRUE
       LEFT JOIN likes l
         ON l.post_id = activity.post_id
       LEFT JOIN reposts r
@@ -211,7 +213,21 @@ router.get("/public-posts", async (req, res) => {
         activity.reposted_at,
         author.username,
         author.profile_pic,
-        COALESCE(media_agg.media, '[]') AS media,
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'media_url', pm.media_url,
+                'media_type', pm.media_type,
+                'media_order', pm.media_order
+              )
+              ORDER BY pm.media_order ASC
+            )
+            FROM post_media pm
+            WHERE pm.post_id = activity.post_id
+          ),
+          '[]'
+        ) AS media,
         COUNT(DISTINCT l.like_id)::int AS like_count,
         COUNT(DISTINCT r.user_id)::int AS repost_count,
         FALSE AS is_liked,
@@ -224,18 +240,6 @@ router.get("/public-posts", async (req, res) => {
       FROM profile_activity activity
       JOIN users author
         ON author.id = activity.user_id
-      LEFT JOIN LATERAL (
-        SELECT json_agg(
-          json_build_object(
-            'media_url', pm.media_url,
-            'media_type', pm.media_type,
-            'media_order', pm.media_order
-          )
-          ORDER BY pm.media_order ASC
-        ) AS media
-        FROM post_media pm
-        WHERE pm.post_id = activity.post_id
-      ) media_agg ON TRUE
       LEFT JOIN likes l
         ON l.post_id = activity.post_id
       LEFT JOIN reposts r

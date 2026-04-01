@@ -301,11 +301,11 @@ export default function Chat() {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
+      if (!e.target.closest(".message-options-wrapper")) {
         setOpenMenuId(null);
       }
 
-      if (headerMenuRef.current && !headerMenuRef.current.contains(e.target)) {
+      if (!e.target.closest(".chat-header-menu-wrap")) {
         setHeaderMenuOpen(false);
       }
     };

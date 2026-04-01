@@ -359,7 +359,7 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
         p.*,
         u.username,
         u.profile_pic,
-        COALESCE(media_agg.media, '[]') AS media,
+        COALESCE(( SELECT json_agg( json_build_object( 'media_url', pm.media_url, 'media_type', pm.media_type, 'media_order', pm.media_order ) ORDER BY pm.media_order ASC ) FROM post_media pm WHERE pm.post_id = p.post_id ), '[]') AS media,
         COUNT(DISTINCT l.like_id)::int AS like_count,
         COUNT(DISTINCT r.user_id)::int AS repost_count,
         EXISTS (
@@ -382,18 +382,6 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
       FROM posts p
       JOIN users u
         ON u.id = p.user_id
-        LEFT JOIN LATERAL (
-          SELECT json_agg(
-            json_build_object(
-              'media_url', pm.media_url,
-              'media_type', pm.media_type,
-              'media_order', pm.media_order
-            )
-            ORDER BY pm.media_order ASC
-          ) AS media
-          FROM post_media pm
-          WHERE pm.post_id = p.post_id
-        ) media_agg ON TRUE
         LEFT JOIN likes l
           ON l.post_id = p.post_id
         LEFT JOIN reposts r
@@ -437,7 +425,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
           WHEN latest_repost.reposter_id IS NOT NULL THEN 'repost'
           ELSE 'post'
         END AS feed_activity_type,
-        COALESCE(media_agg.media, '[]') AS media,
+        COALESCE(( SELECT json_agg( json_build_object( 'media_url', pm.media_url, 'media_type', pm.media_type, 'media_order', pm.media_order ) ORDER BY pm.media_order ASC ) FROM post_media pm WHERE pm.post_id = p.post_id ), '[]') AS media,
 
         COUNT(DISTINCT l.like_id)::int AS like_count,
         COUNT(DISTINCT all_reposts.user_id)::int AS repost_count,
@@ -464,18 +452,6 @@ router.get("/feed", authenticateToken, async (req, res) => {
       FROM posts p
       JOIN users u
         ON u.id = p.user_id
-      LEFT JOIN LATERAL (
-        SELECT json_agg(
-          json_build_object(
-            'media_url', pm.media_url,
-            'media_type', pm.media_type,
-            'media_order', pm.media_order
-          )
-          ORDER BY pm.media_order ASC
-        ) AS media
-        FROM post_media pm
-        WHERE pm.post_id = p.post_id
-      ) media_agg ON TRUE
       LEFT JOIN likes l
         ON l.post_id = p.post_id
       LEFT JOIN reposts all_reposts
@@ -672,3 +648,4 @@ router.put("/edit-profile", authenticateToken, async (req, res) => {
 });
 
 export default router;
+
