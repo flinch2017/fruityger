@@ -12,6 +12,8 @@ export default function CommentSheet({
   onClose
 }) {
   const navigate = useNavigate();
+  const historyMarkerRef = useRef(`comment-sheet-${postId}-${Date.now()}`);
+  const closeHandledRef = useRef(false);
 
   const [comments, setComments] = useState([]);
   const [text, setText] = useState("");
@@ -60,6 +62,44 @@ export default function CommentSheet({
       document.removeEventListener("touchstart", handlePointerDown);
     };
   }, []);
+
+  useEffect(() => {
+    const nextState = {
+      ...(window.history.state || {}),
+      __commentSheet: historyMarkerRef.current,
+    };
+
+    window.history.pushState(nextState, "");
+
+    const handlePopState = () => {
+      closeHandledRef.current = true;
+      onClose();
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [onClose]);
+
+  const requestClose = () => {
+    if (closeHandledRef.current) {
+      onClose();
+      return;
+    }
+
+    const currentState = window.history.state || {};
+
+    if (currentState.__commentSheet === historyMarkerRef.current) {
+      closeHandledRef.current = true;
+      window.history.back();
+      return;
+    }
+
+    closeHandledRef.current = true;
+    onClose();
+  };
 
 
 
@@ -406,14 +446,14 @@ const loadMoreReplies = (commentId) => {
   =============================== */
 
   return (
-    <div className="comment-overlay" onClick={onClose}>
+    <div className="comment-overlay" onClick={requestClose}>
 
       <div className="comment-sheet" onClick={e => e.stopPropagation()}>
         <AeroNotice notice={notice ? { ...notice, inline: true } : null} onClose={() => setNotice(null)} />
 
         <div className="comment-header">
           Comments
-          <div className="comment-close-btn" onClick={onClose}>✕</div>
+          <div className="comment-close-btn" onClick={requestClose}>✕</div>
         </div>
 
         <div className="comment-list" ref={listRef}>
