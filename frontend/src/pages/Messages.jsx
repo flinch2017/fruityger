@@ -18,6 +18,7 @@ export default function Messages() {
   const [deletingChats, setDeletingChats] = useState(false);
   const sidebarRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
+  const pollingIntervalRef = useRef(null);
 
   const selectedChatSet = useMemo(() => new Set(selectedChatIds), [selectedChatIds]);
 
@@ -157,6 +158,20 @@ export default function Messages() {
       supabase.removeChannel(channel);
     };
   }, [token, userId]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    pollingIntervalRef.current = setInterval(() => {
+      fetchChats();
+    }, 4000);
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [token]);
 
   const handleChatClick = (chatId) => {
     if (selectionMode) {

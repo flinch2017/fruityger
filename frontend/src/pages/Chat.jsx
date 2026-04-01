@@ -26,6 +26,7 @@ export default function Chat() {
 
   const messagesEndRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
+  const pollingIntervalRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -52,6 +53,43 @@ export default function Chat() {
     }
   };
 
+  const fetchChatSnapshot = async ({ showLoading = false } = {}) => {
+    if (!token) return null;
+
+    if (showLoading) {
+      setLoading(true);
+    }
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/${chatId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch chat");
+      }
+
+      const chat = data.chat;
+      const other = chat.user1.id === userId ? chat.user2 : chat.user1;
+
+      setOtherUser(other);
+      setMessages(data.messages || []);
+      setBlockedByMe(Boolean(chat.blocked_by_me));
+      setBlockedByThem(Boolean(chat.blocked_by_them));
+      dispatchMessagesRefresh();
+
+      return data;
+    } catch (err) {
+      console.error(err);
+      return null;
+    } finally {
+      if (showLoading) {
+        setLoading(false);
+      }
+    }
+  };
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -71,28 +109,8 @@ export default function Chat() {
     let channel;
 
     const initChat = async () => {
-      setLoading(true);
-
-      try {
-        const res = await fetch(`http://localhost:5000/api/messages/${chatId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        const data = await res.json();
-        const chat = data.chat;
-        const other = chat.user1.id === userId ? chat.user2 : chat.user1;
-
-        setOtherUser(other);
-        setMessages(data.messages || []);
-        setBlockedByMe(Boolean(chat.blocked_by_me));
-        setBlockedByThem(Boolean(chat.blocked_by_them));
-        dispatchMessagesRefresh();
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-        scrollToBottom();
-      }
+      await fetchChatSnapshot({ showLoading: true });
+      scrollToBottom();
 
       channel = supabase
         .channel(`chat-${chatId}`)
@@ -194,11 +212,18 @@ export default function Chat() {
           }
         )
         .subscribe();
+
+      pollingIntervalRef.current = setInterval(() => {
+        fetchChatSnapshot();
+      }, 2500);
     };
 
     initChat();
 
     return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
       if (refreshTimeoutRef.current) {
         clearTimeout(refreshTimeoutRef.current);
       }
