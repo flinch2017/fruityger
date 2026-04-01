@@ -6,6 +6,10 @@ import { promisify } from "util";
 import ffmpegPath from "ffmpeg-static";
 
 const execFileAsync = promisify(execFile);
+const FFMPEG_EXEC_OPTIONS = {
+  maxBuffer: 10 * 1024 * 1024,
+  windowsHide: true,
+};
 
 const sanitizeBaseName = (value = "") =>
   String(value)
@@ -30,6 +34,9 @@ export async function transcodeVideoToMp4(fileBuffer, originalName = "video") {
 
     try {
       await execFileAsync(ffmpegPath, [
+        "-hide_banner",
+        "-loglevel",
+        "error",
         "-y",
         "-i",
         inputPath,
@@ -43,8 +50,12 @@ export async function transcodeVideoToMp4(fileBuffer, originalName = "video") {
         "veryfast",
         "-crf",
         "28",
+        "-threads",
+        "1",
         "-pix_fmt",
         "yuv420p",
+        "-tag:v",
+        "avc1",
         "-c:a",
         "aac",
         "-b:a",
@@ -52,7 +63,7 @@ export async function transcodeVideoToMp4(fileBuffer, originalName = "video") {
         "-movflags",
         "+faststart",
         outputPath,
-      ]);
+      ], FFMPEG_EXEC_OPTIONS);
     } catch (error) {
       const stderr = error?.stderr ? String(error.stderr).trim() : "";
       const ffmpegMessage = stderr.split("\n").slice(-3).join(" ").trim();
@@ -84,6 +95,9 @@ export async function transcodeVideoFileToMp4(inputPath, originalName = "video")
   try {
     try {
       await execFileAsync(ffmpegPath, [
+        "-hide_banner",
+        "-loglevel",
+        "error",
         "-y",
         "-i",
         inputPath,
@@ -97,8 +111,12 @@ export async function transcodeVideoFileToMp4(inputPath, originalName = "video")
         "veryfast",
         "-crf",
         "28",
+        "-threads",
+        "1",
         "-pix_fmt",
         "yuv420p",
+        "-tag:v",
+        "avc1",
         "-c:a",
         "aac",
         "-b:a",
@@ -106,7 +124,7 @@ export async function transcodeVideoFileToMp4(inputPath, originalName = "video")
         "-movflags",
         "+faststart",
         outputPath,
-      ]);
+      ], FFMPEG_EXEC_OPTIONS);
     } catch (error) {
       const stderr = error?.stderr ? String(error.stderr).trim() : "";
       const ffmpegMessage = stderr.split("\n").slice(-3).join(" ").trim();
