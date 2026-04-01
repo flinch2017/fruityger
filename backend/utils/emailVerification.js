@@ -22,6 +22,18 @@ export const ensureEmailVerificationSchema = async () => {
   `);
 };
 
+export const ensurePasswordResetSchema = async () => {
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS password_reset_code TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS password_reset_expires_at TIMESTAMPTZ
+  `);
+};
+
 export const generateVerificationCode = () =>
   String(Math.floor(100000 + Math.random() * 900000));
 
@@ -130,6 +142,47 @@ export const sendEmailChangeConfirmationEmail = async ({
             </a>
           </div>
           <p style="margin:0;line-height:1.6">This link expires in ${VERIFICATION_WINDOW_HOURS} hours.</p>
+        </div>
+      </div>
+    `,
+  });
+};
+
+export const sendPasswordResetEmail = async ({
+  to,
+  username,
+  code,
+}) => {
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  if (!from) {
+    throw new Error("Email sender is not configured");
+  }
+
+  const transporter = getTransporter();
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: "Your Fruityger password reset code",
+    text: [
+      `Hi ${username || "there"},`,
+      "",
+      "We received a request to reset your Fruityger password.",
+      `Your 6-digit reset code is: ${code}`,
+      "",
+      `This code expires in ${VERIFICATION_WINDOW_HOURS} hours.`,
+      "",
+      "If you did not request this reset, you can ignore this email.",
+    ].join("\n"),
+    html: `
+      <div style="font-family:Segoe UI,sans-serif;background:#f3fcff;padding:24px;color:#13566f">
+        <div style="max-width:520px;margin:0 auto;background:rgba(255,255,255,0.96);border-radius:24px;padding:28px;border:1px solid rgba(255,255,255,0.9);box-shadow:0 18px 40px rgba(0,160,220,0.12)">
+          <h2 style="margin:0 0 12px;color:#0f84ab">Reset your Fruityger password</h2>
+          <p style="margin:0 0 18px;line-height:1.6">Hi ${username || "there"}, use this 6-digit code to continue resetting your password.</p>
+          <div style="margin:22px 0;padding:16px 18px;border-radius:18px;background:linear-gradient(160deg,#e8fbff,#c8f3ff);font-size:30px;font-weight:700;letter-spacing:10px;text-align:center;color:#0a6d90">
+            ${code}
+          </div>
+          <p style="margin:0;line-height:1.6">This code expires in ${VERIFICATION_WINDOW_HOURS} hours.</p>
         </div>
       </div>
     `,

@@ -7,9 +7,11 @@ import { authenticateTokenAllowUnverified } from "../middleware/auth.js";
 import {
   cleanupExpiredUnverifiedUsers,
   ensureEmailVerificationSchema,
+  ensurePasswordResetSchema,
   generateVerificationCode,
   getVerificationExpiry,
   sendEmailChangeConfirmationEmail,
+  sendPasswordResetEmail,
   sendVerificationEmail,
 } from "../utils/emailVerification.js";
 import { ensureUserOnboardingSchema } from "../utils/userOnboarding.js";
@@ -41,6 +43,31 @@ const ensureAccountChangeSchema = async () => {
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS email_change_expires_at TIMESTAMPTZ
   `);
+};
+
+const maskEmail = (email = "") => {
+  const normalized = String(email).trim().toLowerCase();
+  const [localPart, domainPart] = normalized.split("@");
+
+  if (!localPart || !domainPart) {
+    return normalized;
+  }
+
+  const domainSections = domainPart.split(".");
+  const domainName = domainSections.shift() || "";
+  const domainSuffix = domainSections.length ? `.${domainSections.join(".")}` : "";
+
+  const maskedLocal =
+    localPart.length <= 2
+      ? `${localPart[0] || ""}*`
+      : `${localPart.slice(0, 2)}${"*".repeat(Math.max(localPart.length - 2, 2))}`;
+
+  const maskedDomain =
+    domainName.length <= 1
+      ? domainName
+      : `${domainName[0]}${"*".repeat(Math.max(domainName.length - 1, 2))}`;
+
+  return `${maskedLocal}@${maskedDomain}${domainSuffix}`;
 };
 
 const verifyRecaptcha = async (recaptchaToken) => {
@@ -334,6 +361,222 @@ router.post("/login", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/forgot-password/search", async (req, res) => {
+  const { query } = req.body || {};
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+
+  await ensureEmailVerificationSchema();
+  await ensurePasswordResetSchema();
+  await ensureAccountChangeSchema();
+  await cleanupExpiredUnverifiedUsers();
+
+  if (normalizedQuery.length < 2) {
+    return res.json({ accounts: [] });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT id, username, email, profile_pic
+      FROM users
+      WHERE email_verified = TRUE
+        AND pending_email IS NULL
+        AND (
+          LOWER(username) LIKE $1
+          OR LOWER(email) LIKE $1
+        )
+      ORDER BY
+        CASE
+          WHEN LOWER(username) = $2 THEN 0
+          WHEN LOWER(email) = $2 THEN 1
+          WHEN LOWER(username) LIKE $3 THEN 2
+          ELSE 3
+        END,
+        username ASC
+      LIMIT 8
+      `,
+      [`%${normalizedQuery}%`, normalizedQuery, `${normalizedQuery}%`]
+    );
+
+    res.json({
+      accounts: rows.map((row) => ({
+        id: row.id,
+        username: row.username,
+        profile_pic: row.profile_pic,
+        masked_email: maskEmail(row.email),
+      })),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to search accounts" });
+  }
+});
+
+router.post("/forgot-password/send-code", async (req, res) => {
+  const { userId } = req.body || {};
+
+  await ensureEmailVerificationSchema();
+  await ensurePasswordResetSchema();
+  await ensureAccountChangeSchema();
+  await cleanupExpiredUnverifiedUsers();
+
+  if (!userId) {
+    return res.status(400).json({ error: "User is required" });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT id, username, email, pending_email, email_verified
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [userId]
+    );
+
+    const user = rows[0];
+    if (!user || !user.email_verified || user.pending_email) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+
+    const resetCode = generateVerificationCode();
+    const resetExpiry = getVerificationExpiry();
+
+    await pool.query(
+      `
+      UPDATE users
+      SET password_reset_code = $2,
+          password_reset_expires_at = $3
+      WHERE id = $1
+      `,
+      [user.id, resetCode, resetExpiry]
+    );
+
+    await sendPasswordResetEmail({
+      to: user.email,
+      username: user.username,
+      code: resetCode,
+    });
+
+    res.json({
+      message: "Reset code sent",
+      account: {
+        id: user.id,
+        username: user.username,
+        masked_email: maskEmail(user.email),
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error:
+        error.message === "Email service is not configured" ||
+        error.message === "Email sender is not configured"
+          ? "Password reset email is not configured on the server yet"
+          : "Failed to send reset code",
+    });
+  }
+});
+
+router.post("/forgot-password/verify-code", async (req, res) => {
+  const { userId, code } = req.body || {};
+
+  await ensureEmailVerificationSchema();
+  await ensurePasswordResetSchema();
+  await ensureAccountChangeSchema();
+  await cleanupExpiredUnverifiedUsers();
+
+  if (!userId || !/^\d{6}$/.test(String(code || ""))) {
+    return res.status(400).json({ error: "Please enter a valid 6-digit code" });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT id, password_reset_code, password_reset_expires_at, email_verified, pending_email
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [userId]
+    );
+
+    const user = rows[0];
+    if (!user || !user.email_verified || user.pending_email) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+
+    if (
+      !user.password_reset_expires_at ||
+      new Date(user.password_reset_expires_at) <= new Date()
+    ) {
+      return res.status(400).json({ error: "This reset code expired. Please request a new one." });
+    }
+
+    if (String(user.password_reset_code) !== String(code)) {
+      return res.status(400).json({ error: "That reset code is incorrect" });
+    }
+
+    await pool.query(
+      `
+      UPDATE users
+      SET password_reset_code = NULL,
+          password_reset_expires_at = NULL
+      WHERE id = $1
+      `,
+      [user.id]
+    );
+
+    res.json({
+      resetToken: signAccountChangeToken(user.id, "forgot-password"),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to verify reset code" });
+  }
+});
+
+router.post("/forgot-password/change-password", async (req, res) => {
+  const { resetToken, newPassword } = req.body || {};
+
+  const validationError = getPasswordValidationMessage(newPassword);
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  try {
+    const decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
+    if (decoded.purpose !== "forgot-password") {
+      return res.status(403).json({ error: "Reset session expired. Please start again." });
+    }
+
+    await ensurePasswordResetSchema();
+
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    await pool.query(
+      `
+      UPDATE users
+      SET password = $2,
+          password_reset_code = NULL,
+          password_reset_expires_at = NULL
+      WHERE id = $1
+      `,
+      [decoded.id, passwordHash]
+    );
+
+    res.json({ message: "Password updated successfully" });
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+      return res.status(403).json({ error: "Reset session expired. Please start again." });
+    }
+
+    console.error(error);
+    res.status(500).json({ error: "Failed to update password" });
   }
 });
 

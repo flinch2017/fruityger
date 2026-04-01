@@ -159,6 +159,10 @@ export default function Login() {
               {submitting ? "Logging in..." : "Log In"}
             </button>
 
+            <div className="login-aero-forgot">
+              <Link to="/forgot-password">Forgot password?</Link>
+            </div>
+
             <div className="login-aero-create">
               <Link to="/signup">Create an account</Link>
             </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { FaUser } from "react-icons/fa";
 import supabase from "../lib/supabaseClient";
 import "../css/Messages.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
@@ -16,6 +17,8 @@ export default function Messages() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedChatIds, setSelectedChatIds] = useState([]);
   const [deletingChats, setDeletingChats] = useState(false);
+  const [onlineCandidates, setOnlineCandidates] = useState([]);
+  const [onlineUsers, setOnlineUsers] = useState([]);
   const sidebarRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
   const pollingIntervalRef = useRef(null);
@@ -57,6 +60,25 @@ export default function Messages() {
     }
   };
 
+  const fetchOnlineCandidates = async () => {
+    if (!token) return;
+
+    try {
+      const res = await fetch("http://localhost:5000/api/messages/online-candidates", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load online candidates");
+      }
+
+      setOnlineCandidates(data.users || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const scheduleRealtimeRefresh = () => {
     if (refreshTimeoutRef.current) {
       clearTimeout(refreshTimeoutRef.current);
@@ -69,12 +91,14 @@ export default function Messages() {
 
   useEffect(() => {
     fetchChats();
+    fetchOnlineCandidates();
   }, [token]);
 
   useEffect(() => {
     const handleRefresh = (event) => {
       if (typeof event.detail?.unreadCount === "number") return;
       fetchChats({ silent: true });
+      fetchOnlineCandidates();
     };
 
     const handleFocus = () => fetchChats({ silent: true });
@@ -87,6 +111,18 @@ export default function Messages() {
       window.removeEventListener("fruityger:messages-refresh", handleRefresh);
     };
   }, [token]);
+
+  useEffect(() => {
+    const handlePresence = (event) => {
+      setOnlineUsers(event.detail?.users || []);
+    };
+
+    window.addEventListener("fruityger:online-presence", handlePresence);
+
+    return () => {
+      window.removeEventListener("fruityger:online-presence", handlePresence);
+    };
+  }, []);
 
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -212,6 +248,22 @@ export default function Messages() {
     }
   };
 
+  const onlineMap = useMemo(
+    () => new Map(onlineUsers.map((entry) => [String(entry.userId), entry])),
+    [onlineUsers]
+  );
+
+  const onlineVisibleUsers = useMemo(
+    () =>
+      onlineCandidates
+        .filter((user) => onlineMap.has(String(user.id)))
+        .map((user) => ({
+          ...user,
+          profile_pic: onlineMap.get(String(user.id))?.profile_pic || user.profile_pic,
+        })),
+    [onlineCandidates, onlineMap]
+  );
+
   const toggleSelectedChat = (chatId) => {
     setSelectedChatIds((prev) =>
       prev.includes(chatId)
@@ -329,6 +381,39 @@ export default function Messages() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
+
+        {onlineVisibleUsers.length > 0 && (
+          <div className="messages-online-strip">
+            <div className="messages-online-header">
+              <h3>Online now</h3>
+              <span>{onlineVisibleUsers.length} active</span>
+            </div>
+
+            <div className="messages-online-list">
+              {onlineVisibleUsers.map((user) => (
+                <button
+                  key={user.id}
+                  type="button"
+                  className="messages-online-item"
+                  onClick={() =>
+                    user.chat_id ? navigate(`/chat/${user.chat_id}`) : handleStartChat(user.id)
+                  }
+                >
+                  <span className="messages-online-avatar">
+                    {user.profile_pic ? (
+                      <img src={getSafeMediaUrl(user.profile_pic)} alt={user.username} />
+                    ) : (
+                      <FaUser />
+                    )}
+                    <span className="messages-online-dot"></span>
+                  </span>
+
+                  <span className="messages-online-name">{user.username}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {searchResults.length > 0 && (
           <div className="search-results">

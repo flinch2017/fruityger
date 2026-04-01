@@ -7,6 +7,9 @@ import VerifyCurrentPassword from "./pages/VerifyCurrentPassword";
 import ChangeEmail from "./pages/ChangeEmail";
 import ChangePassword from "./pages/ChangePassword";
 import ConfirmEmailChange from "./pages/ConfirmEmailChange";
+import ForgotPasswordSearch from "./pages/ForgotPasswordSearch";
+import ForgotPasswordVerify from "./pages/ForgotPasswordVerify";
+import ForgotPasswordChange from "./pages/ForgotPasswordChange";
 import Notifications from "./pages/Notifications";
 import Messages from "./pages/Messages";
 import Chat from "./pages/Chat";
@@ -131,6 +134,30 @@ function App() {
                 <VerifyEmail />
               </StandaloneLayout>
             </VerificationRoute>
+          }
+        />
+        <Route
+          path="/forgot-password"
+          element={
+            <StandaloneLayout>
+              <ForgotPasswordSearch />
+            </StandaloneLayout>
+          }
+        />
+        <Route
+          path="/forgot-password/verify"
+          element={
+            <StandaloneLayout>
+              <ForgotPasswordVerify />
+            </StandaloneLayout>
+          }
+        />
+        <Route
+          path="/forgot-password/change-password"
+          element={
+            <StandaloneLayout>
+              <ForgotPasswordChange />
+            </StandaloneLayout>
           }
         />
         <Route

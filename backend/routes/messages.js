@@ -5,6 +5,7 @@ import { authenticateToken } from "../middleware/auth.js";
 const router = express.Router();
 
 let deletedChatsTableReadyPromise = null;
+let blockedUsersTableReadyPromise = null;
 
 async function ensureDeletedChatsTable() {
   if (!deletedChatsTableReadyPromise) {
@@ -24,6 +25,26 @@ async function ensureDeletedChatsTable() {
   }
 
   await deletedChatsTableReadyPromise;
+}
+
+async function ensureBlockedUsersTable() {
+  if (!blockedUsersTableReadyPromise) {
+    blockedUsersTableReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS blocked_users (
+          blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          blocked_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (blocker_id, blocked_id)
+        )
+      `);
+    })().catch((error) => {
+      blockedUsersTableReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await blockedUsersTableReadyPromise;
 }
 
 router.get("/chats", authenticateToken, async (req, res) => {
@@ -286,6 +307,92 @@ router.get("/search-users", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to search users" });
+  }
+});
+
+router.get("/online-candidates", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    await ensureDeletedChatsTable();
+    await ensureBlockedUsersTable();
+
+    const { rows } = await pool.query(
+      `
+      WITH followed_people AS (
+        SELECT
+          u.id,
+          u.username,
+          u.profile_pic,
+          NULL::uuid AS chat_id,
+          FALSE AS has_chat
+        FROM follows f
+        JOIN users u
+          ON u.id = f.following_id
+        WHERE f.follower_id = $1
+      ),
+      chat_people AS (
+        SELECT DISTINCT ON (other_user.id)
+          other_user.id,
+          other_user.username,
+          other_user.profile_pic,
+          c.id AS chat_id,
+          TRUE AS has_chat,
+          c.last_message_at
+        FROM chats c
+        JOIN users other_user
+          ON other_user.id = CASE
+            WHEN c.user1_id = $1 THEN c.user2_id
+            ELSE c.user1_id
+          END
+        LEFT JOIN deleted_chats dc
+          ON dc.chat_id = c.id
+         AND dc.user_id = $1
+        WHERE (c.user1_id = $1 OR c.user2_id = $1)
+          AND (
+            dc.chat_id IS NULL
+            OR EXISTS (
+              SELECT 1
+              FROM messages visible_message
+              LEFT JOIN deleted_messages visible_dm
+                ON visible_dm.message_id = visible_message.id
+               AND visible_dm.user_id = $1
+              WHERE visible_message.chat_id = c.id
+                AND visible_dm.message_id IS NULL
+                AND visible_message.created_at > dc.deleted_at
+            )
+          )
+        ORDER BY other_user.id, c.last_message_at DESC NULLS LAST
+      ),
+      combined AS (
+        SELECT * FROM followed_people
+        UNION ALL
+        SELECT id, username, profile_pic, chat_id, has_chat FROM chat_people
+      )
+      SELECT DISTINCT ON (combined.id)
+        combined.id,
+        combined.username,
+        combined.profile_pic,
+        combined.chat_id,
+        combined.has_chat
+      FROM combined
+      WHERE combined.id <> $1
+        AND NOT EXISTS (
+          SELECT 1
+          FROM blocked_users bu
+          WHERE (bu.blocker_id = $1 AND bu.blocked_id = combined.id)
+             OR (bu.blocker_id = combined.id AND bu.blocked_id = $1)
+        )
+      ORDER BY combined.id, combined.has_chat DESC
+      `
+      ,
+      [userId]
+    );
+
+    res.json({ users: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load online candidates" });
   }
 });
 

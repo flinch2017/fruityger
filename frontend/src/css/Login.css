@@ -226,6 +226,12 @@ body.welcome .grecaptcha-badge {
   margin-top: 12px;
 }
 
+.login-aero-forgot {
+  text-align: center;
+  margin-top: -2px;
+}
+
+.login-aero-forgot a,
 .login-aero-create a {
   color: #0077aa;
   font-weight: 600;
@@ -234,6 +240,7 @@ body.welcome .grecaptcha-badge {
   transition: all 0.25s ease;
 }
 
+.login-aero-forgot a:hover,
 .login-aero-create a:hover {
   text-decoration: underline;
   color: #00bfff;
