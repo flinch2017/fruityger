@@ -1,9 +1,22 @@
-import { useEffect } from "react";
-import supabase from "../lib/supabaseClient";
-
-const CHANNEL_NAME = "fruityger-online";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 export default function OnlinePresenceSync() {
+  const location = useLocation();
+  const [authVersion, setAuthVersion] = useState(0);
+
+  useEffect(() => {
+    const handleAuthChanged = () => {
+      setAuthVersion((current) => current + 1);
+    };
+
+    window.addEventListener("fruityger:auth-changed", handleAuthChanged);
+
+    return () => {
+      window.removeEventListener("fruityger:auth-changed", handleAuthChanged);
+    };
+  }, []);
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     const userId = localStorage.getItem("userId");
@@ -12,72 +25,31 @@ export default function OnlinePresenceSync() {
       return undefined;
     }
 
-    const dispatchPresence = (channel) => {
-      const state = channel.presenceState();
-      const users = Object.values(state)
-        .flat()
-        .map((entry) => ({
-          userId: String(entry.userId || ""),
-          username: entry.username || "",
-          profile_pic: entry.profile_pic || "",
-        }))
-        .filter((entry) => entry.userId);
+    let heartbeatIntervalId = null;
 
-      window.dispatchEvent(
-        new CustomEvent("fruityger:online-presence", {
-          detail: { users },
-        })
-      );
+    const sendHeartbeat = async () => {
+      try {
+        await fetch("http://localhost:5000/api/messages/presence/heartbeat", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      } catch (error) {
+        console.error(error);
+      }
     };
 
-    const channel = supabase.channel(CHANNEL_NAME, {
-      config: {
-        presence: {
-          key: String(userId),
-        },
-      },
-    });
-
-    channel
-      .on("presence", { event: "sync" }, () => {
-        dispatchPresence(channel);
-      })
-      .subscribe(async (status) => {
-        if (status !== "SUBSCRIBED") return;
-
-        await channel.track({
-          userId: String(userId),
-          username: localStorage.getItem("username") || "",
-          profile_pic: localStorage.getItem("profile_pic") || "",
-          path: window.location.pathname,
-          at: new Date().toISOString(),
-        });
-
-        dispatchPresence(channel);
-      });
+    sendHeartbeat();
+    heartbeatIntervalId = window.setInterval(sendHeartbeat, 10000);
 
     const handleProfileUpdated = async () => {
-      await channel.track({
-        userId: String(userId),
-        username: localStorage.getItem("username") || "",
-        profile_pic: localStorage.getItem("profile_pic") || "",
-        path: window.location.pathname,
-        at: new Date().toISOString(),
-      });
-      dispatchPresence(channel);
+      await sendHeartbeat();
     };
 
     const handleVisibilityChange = async () => {
       if (document.visibilityState !== "visible") return;
-
-      await channel.track({
-        userId: String(userId),
-        username: localStorage.getItem("username") || "",
-        profile_pic: localStorage.getItem("profile_pic") || "",
-        path: window.location.pathname,
-        at: new Date().toISOString(),
-      });
-      dispatchPresence(channel);
+      await sendHeartbeat();
     };
 
     window.addEventListener("fruityger:profile-updated", handleProfileUpdated);
@@ -86,14 +58,11 @@ export default function OnlinePresenceSync() {
     return () => {
       window.removeEventListener("fruityger:profile-updated", handleProfileUpdated);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      supabase.removeChannel(channel);
-      window.dispatchEvent(
-        new CustomEvent("fruityger:online-presence", {
-          detail: { users: [] },
-        })
-      );
+      if (heartbeatIntervalId) {
+        window.clearInterval(heartbeatIntervalId);
+      }
     };
-  }, []);
+  }, [authVersion, location.pathname]);
 
   return null;
 }

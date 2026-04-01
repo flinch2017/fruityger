@@ -6,6 +6,7 @@ const router = express.Router();
 
 let deletedChatsTableReadyPromise = null;
 let blockedUsersTableReadyPromise = null;
+let activeUsersTableReadyPromise = null;
 
 async function ensureDeletedChatsTable() {
   if (!deletedChatsTableReadyPromise) {
@@ -45,6 +46,24 @@ async function ensureBlockedUsersTable() {
   }
 
   await blockedUsersTableReadyPromise;
+}
+
+async function ensureActiveUsersTable() {
+  if (!activeUsersTableReadyPromise) {
+    activeUsersTableReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS active_users (
+          user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+    })().catch((error) => {
+      activeUsersTableReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await activeUsersTableReadyPromise;
 }
 
 router.get("/chats", authenticateToken, async (req, res) => {
@@ -316,6 +335,7 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
   try {
     await ensureDeletedChatsTable();
     await ensureBlockedUsersTable();
+    await ensureActiveUsersTable();
 
     const { rows } = await pool.query(
       `
@@ -374,8 +394,14 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
         combined.username,
         combined.profile_pic,
         combined.chat_id,
-        combined.has_chat
+        combined.has_chat,
+        (
+          active_users.last_seen_at IS NOT NULL
+          AND active_users.last_seen_at >= NOW() - INTERVAL '3 minutes'
+        ) AS is_online
       FROM combined
+      LEFT JOIN active_users
+        ON active_users.user_id = combined.id
       WHERE combined.id <> $1
         AND NOT EXISTS (
           SELECT 1
@@ -393,6 +419,29 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to load online candidates" });
+  }
+});
+
+router.post("/presence/heartbeat", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    await ensureActiveUsersTable();
+
+    await pool.query(
+      `
+      INSERT INTO active_users (user_id, last_seen_at)
+      VALUES ($1, NOW())
+      ON CONFLICT (user_id)
+      DO UPDATE SET last_seen_at = NOW()
+      `,
+      [userId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update presence" });
   }
 });
 

@@ -7,6 +7,7 @@ export const clearAuthStorage = () => {
   localStorage.removeItem("interestsCompleted");
   localStorage.removeItem("pendingEmail");
   localStorage.removeItem("verificationEmail");
+  window.dispatchEvent(new CustomEvent("fruityger:auth-changed"));
 };
 
 export const persistAuthSession = (data) => {
@@ -45,6 +46,8 @@ export const persistAuthSession = (data) => {
   if (typeof data?.user?.interests_completed === "boolean") {
     localStorage.setItem("interestsCompleted", String(data.user.interests_completed));
   }
+
+  window.dispatchEvent(new CustomEvent("fruityger:auth-changed"));
 };
 
 export const fetchAuthSession = async () => {

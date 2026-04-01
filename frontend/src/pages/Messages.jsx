@@ -18,7 +18,7 @@ export default function Messages() {
   const [selectedChatIds, setSelectedChatIds] = useState([]);
   const [deletingChats, setDeletingChats] = useState(false);
   const [onlineCandidates, setOnlineCandidates] = useState([]);
-  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [onlineLoading, setOnlineLoading] = useState(true);
   const sidebarRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
   const pollingIntervalRef = useRef(null);
@@ -60,10 +60,13 @@ export default function Messages() {
     }
   };
 
-  const fetchOnlineCandidates = async () => {
+  const fetchOnlineCandidates = async ({ silent = false } = {}) => {
     if (!token) return;
 
     try {
+      if (!silent) {
+        setOnlineLoading(true);
+      }
       const res = await fetch("http://localhost:5000/api/messages/online-candidates", {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -76,6 +79,10 @@ export default function Messages() {
       setOnlineCandidates(data.users || []);
     } catch (err) {
       console.error(err);
+    } finally {
+      if (!silent) {
+        setOnlineLoading(false);
+      }
     }
   };
 
@@ -98,7 +105,7 @@ export default function Messages() {
     const handleRefresh = (event) => {
       if (typeof event.detail?.unreadCount === "number") return;
       fetchChats({ silent: true });
-      fetchOnlineCandidates();
+      fetchOnlineCandidates({ silent: true });
     };
 
     const handleFocus = () => fetchChats({ silent: true });
@@ -111,18 +118,6 @@ export default function Messages() {
       window.removeEventListener("fruityger:messages-refresh", handleRefresh);
     };
   }, [token]);
-
-  useEffect(() => {
-    const handlePresence = (event) => {
-      setOnlineUsers(event.detail?.users || []);
-    };
-
-    window.addEventListener("fruityger:online-presence", handlePresence);
-
-    return () => {
-      window.removeEventListener("fruityger:online-presence", handlePresence);
-    };
-  }, []);
 
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -168,6 +163,7 @@ export default function Messages() {
         { event: "*", schema: "public", table: "messages" },
         () => {
           scheduleRealtimeRefresh();
+          fetchOnlineCandidates({ silent: true });
         }
       )
       .on(
@@ -175,6 +171,7 @@ export default function Messages() {
         { event: "*", schema: "public", table: "chats" },
         () => {
           scheduleRealtimeRefresh();
+          fetchOnlineCandidates({ silent: true });
         }
       )
       .on(
@@ -206,7 +203,8 @@ export default function Messages() {
 
     pollingIntervalRef.current = setInterval(() => {
       fetchChats({ silent: true });
-    }, 4000);
+      fetchOnlineCandidates({ silent: true });
+    }, 2500);
 
     return () => {
       if (pollingIntervalRef.current) {
@@ -242,26 +240,26 @@ export default function Messages() {
         return;
       }
 
+      fetchOnlineCandidates({ silent: true });
       navigate(`/chat/${data.chatId}`);
     } catch (err) {
       console.error(err);
     }
   };
 
-  const onlineMap = useMemo(
-    () => new Map(onlineUsers.map((entry) => [String(entry.userId), entry])),
-    [onlineUsers]
-  );
-
   const onlineVisibleUsers = useMemo(
     () =>
-      onlineCandidates
-        .filter((user) => onlineMap.has(String(user.id)))
-        .map((user) => ({
-          ...user,
-          profile_pic: onlineMap.get(String(user.id))?.profile_pic || user.profile_pic,
-        })),
-    [onlineCandidates, onlineMap]
+      [...onlineCandidates].sort((a, b) => {
+        const aOnline = Boolean(a.is_online);
+        const bOnline = Boolean(b.is_online);
+
+        if (aOnline !== bOnline) {
+          return aOnline ? -1 : 1;
+        }
+
+        return String(a.username || "").localeCompare(String(b.username || ""));
+      }),
+    [onlineCandidates]
   );
 
   const toggleSelectedChat = (chatId) => {
@@ -382,13 +380,21 @@ export default function Messages() {
           onChange={(e) => setSearchQuery(e.target.value)}
         />
 
-        {onlineVisibleUsers.length > 0 && (
-          <div className="messages-online-strip">
-            <div className="messages-online-header">
-              <h3>Online now</h3>
-              <span>{onlineVisibleUsers.length} active</span>
-            </div>
+        <div className="messages-online-strip">
+          <div className="messages-online-header">
+            <h3>Active</h3>
+            <span>
+              {onlineVisibleUsers.some((user) => user.is_online)
+                ? `${onlineVisibleUsers.filter((user) => user.is_online).length} online`
+                : "Quick access"}
+            </span>
+          </div>
 
+          {onlineLoading ? (
+            <div className="messages-online-empty">
+              Loading active people...
+            </div>
+          ) : onlineVisibleUsers.length > 0 ? (
             <div className="messages-online-list">
               {onlineVisibleUsers.map((user) => (
                 <button
@@ -399,21 +405,25 @@ export default function Messages() {
                     user.chat_id ? navigate(`/chat/${user.chat_id}`) : handleStartChat(user.id)
                   }
                 >
-                  <span className="messages-online-avatar">
+                  <span className={`messages-online-avatar ${user.is_online ? "online" : "offline"}`}>
                     {user.profile_pic ? (
                       <img src={getSafeMediaUrl(user.profile_pic)} alt={user.username} />
                     ) : (
                       <FaUser />
                     )}
-                    <span className="messages-online-dot"></span>
                   </span>
+                  {user.is_online && <span className="messages-online-dot online"></span>}
 
                   <span className="messages-online-name">{user.username}</span>
                 </button>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="messages-online-empty">
+              No chat or follow contacts to show yet.
+            </div>
+          )}
+        </div>
 
         {searchResults.length > 0 && (
           <div className="search-results">
