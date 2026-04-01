@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import supabase from "../lib/supabaseClient";
 import "../css/Messages.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 
@@ -16,6 +17,7 @@ export default function Messages() {
   const [selectedChatIds, setSelectedChatIds] = useState([]);
   const [deletingChats, setDeletingChats] = useState(false);
   const sidebarRef = useRef(null);
+  const refreshTimeoutRef = useRef(null);
 
   const selectedChatSet = useMemo(() => new Set(selectedChatIds), [selectedChatIds]);
 
@@ -48,6 +50,16 @@ export default function Messages() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const scheduleRealtimeRefresh = () => {
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+    }
+
+    refreshTimeoutRef.current = setTimeout(() => {
+      fetchChats();
+    }, 120);
   };
 
   useEffect(() => {
@@ -102,6 +114,49 @@ export default function Messages() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!token || !userId) return;
+
+    const channel = supabase
+      .channel(`messages-sidebar-${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages" },
+        () => {
+          scheduleRealtimeRefresh();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chats" },
+        () => {
+          scheduleRealtimeRefresh();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "deleted_messages" },
+        () => {
+          scheduleRealtimeRefresh();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "deleted_chats" },
+        () => {
+          scheduleRealtimeRefresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+      supabase.removeChannel(channel);
+    };
+  }, [token, userId]);
 
   const handleChatClick = (chatId) => {
     if (selectionMode) {

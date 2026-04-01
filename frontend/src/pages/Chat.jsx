@@ -25,6 +25,7 @@ export default function Chat() {
   const [sending, setSending] = useState(false);
 
   const messagesEndRef = useRef(null);
+  const refreshTimeoutRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -139,12 +140,68 @@ export default function Chat() {
             );
           }
         )
+        .on(
+          "postgres_changes",
+          {
+            event: "DELETE",
+            schema: "public",
+            table: "messages",
+            filter: `chat_id=eq.${chatId}`,
+          },
+          (payload) => {
+            const deleted = payload.old;
+
+            setMessages((prev) =>
+              prev.filter((message) => String(message.id) !== String(deleted.id))
+            );
+
+            dispatchMessagesRefresh();
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "deleted_messages",
+          },
+          (payload) => {
+            const deletedMessageId = payload.new?.message_id;
+            if (!deletedMessageId) return;
+
+            setMessages((prev) =>
+              prev.filter((message) => String(message.id) !== String(deletedMessageId))
+            );
+            dispatchMessagesRefresh();
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "chats",
+            filter: `id=eq.${chatId}`,
+          },
+          () => {
+            if (refreshTimeoutRef.current) {
+              clearTimeout(refreshTimeoutRef.current);
+            }
+
+            refreshTimeoutRef.current = setTimeout(() => {
+              dispatchMessagesRefresh();
+            }, 100);
+          }
+        )
         .subscribe();
     };
 
     initChat();
 
     return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
       if (channel) supabase.removeChannel(channel);
     };
   }, [chatId, token, userId]);
