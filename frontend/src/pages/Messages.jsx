@@ -35,10 +35,12 @@ export default function Messages() {
     );
   };
 
-  const fetchChats = async () => {
+  const fetchChats = async ({ silent = false } = {}) => {
     if (!token) return;
 
-    setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const res = await fetch("http://localhost:5000/api/messages/chats", {
         headers: { Authorization: `Bearer ${token}` },
@@ -49,7 +51,9 @@ export default function Messages() {
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -59,7 +63,7 @@ export default function Messages() {
     }
 
     refreshTimeoutRef.current = setTimeout(() => {
-      fetchChats();
+      fetchChats({ silent: true });
     }, 120);
   };
 
@@ -70,14 +74,16 @@ export default function Messages() {
   useEffect(() => {
     const handleRefresh = (event) => {
       if (typeof event.detail?.unreadCount === "number") return;
-      fetchChats();
+      fetchChats({ silent: true });
     };
 
-    window.addEventListener("focus", fetchChats);
+    const handleFocus = () => fetchChats({ silent: true });
+
+    window.addEventListener("focus", handleFocus);
     window.addEventListener("fruityger:messages-refresh", handleRefresh);
 
     return () => {
-      window.removeEventListener("focus", fetchChats);
+      window.removeEventListener("focus", handleFocus);
       window.removeEventListener("fruityger:messages-refresh", handleRefresh);
     };
   }, [token]);
@@ -163,7 +169,7 @@ export default function Messages() {
     if (!token) return;
 
     pollingIntervalRef.current = setInterval(() => {
-      fetchChats();
+      fetchChats({ silent: true });
     }, 4000);
 
     return () => {
