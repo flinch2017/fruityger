@@ -124,7 +124,30 @@ export default function CreatePost() {
   return (
     <main className="create-post-page">
       <div className="create-post-card">
-        <h2 className="create-title">Create Post</h2>
+        <div className="create-post-header">
+          <button
+            type="button"
+            className="cancel-btn create-header-btn"
+            onClick={() => navigate("/feed")}
+            disabled={submitting}
+          >
+            Cancel
+          </button>
+
+          <h2 className="create-title">Create Post</h2>
+
+          <button
+            type="button"
+            className="submit-btn create-header-btn"
+            onClick={handlePost}
+            disabled={submitting}
+          >
+            <span className="submit-btn-content">
+              {submitting && <span className="submit-spinner" aria-hidden="true"></span>}
+              <span>{submitting ? "Posting..." : "Post"}</span>
+            </span>
+          </button>
+        </div>
 
         <textarea
           className="create-textarea"
@@ -182,28 +205,6 @@ export default function CreatePost() {
           </div>
         )}
 
-        <div className="create-actions">
-          <button
-            type="button"
-            className="cancel-btn"
-            onClick={() => navigate("/feed")}
-            disabled={submitting}
-          >
-            Cancel
-          </button>
-
-          <button
-            type="button"
-            className="submit-btn"
-            onClick={handlePost}
-            disabled={submitting}
-          >
-            <span className="submit-btn-content">
-              {submitting && <span className="submit-spinner" aria-hidden="true"></span>}
-              <span>{submitting ? "Posting..." : "Post"}</span>
-            </span>
-          </button>
-        </div>
       </div>
     </main>
   );

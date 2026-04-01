@@ -46,11 +46,18 @@
    TITLE
 ================================ */
 
+.create-post-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
 .create-title {
   text-align: center;
   color: #0077aa;
-
-  margin-bottom: 25px;
+  margin: 0;
 
   text-shadow: 0 0 10px rgba(0,200,255,0.4);
 }
@@ -89,17 +96,8 @@
    ACTION BUTTONS
 ================================ */
 
-.create-actions {
-  margin-top: 25px;
-
-  display: flex;
-  justify-content: space-between;
-  gap: 15px;
-}
-
 .cancel-btn,
 .submit-btn {
-  flex: 1;
   min-height: 52px;
   padding: 14px 18px;
 
@@ -113,6 +111,18 @@
   cursor: pointer;
 
   transition: transform 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
+}
+
+.create-header-btn {
+  min-width: 112px;
+}
+
+.create-post-header .cancel-btn {
+  justify-self: start;
+}
+
+.create-post-header .submit-btn {
+  justify-self: end;
 }
 
 /* Cancel */
@@ -187,6 +197,22 @@
   .create-post-card {
     padding: 20px;
     border-radius: 25px;
+  }
+
+  .create-post-header {
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+  }
+
+  .create-title {
+    font-size: 1.15rem;
+  }
+
+  .create-header-btn {
+    min-width: 84px;
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 14px;
   }
 
   .create-textarea {

@@ -19,7 +19,7 @@ export default function Welcome() {
             <p className="welcome-kicker">Daydream social</p>
             <h1>Fruityger</h1>
             <p className="welcome-description">
-              Drift into a glossy little internet!
+              Drift into a glossy little internet.
             </p>
 
             <div className="welcome-buttons">
