@@ -7,6 +7,7 @@ import VerifyCurrentPassword from "./pages/VerifyCurrentPassword";
 import ChangeEmail from "./pages/ChangeEmail";
 import ChangePassword from "./pages/ChangePassword";
 import ConfirmEmailChange from "./pages/ConfirmEmailChange";
+import DangerZone from "./pages/DangerZone";
 import ForgotPasswordSearch from "./pages/ForgotPasswordSearch";
 import ForgotPasswordVerify from "./pages/ForgotPasswordVerify";
 import ForgotPasswordChange from "./pages/ForgotPasswordChange";
@@ -251,6 +252,16 @@ function App() {
             <PrivateRoute>
               <MainLayout>
                 <ChangePassword />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/settings/danger"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <DangerZone />
               </MainLayout>
             </PrivateRoute>
           }

@@ -6,7 +6,7 @@ Your local `.env` files contain real credentials. Before a public deploy, rotate
 
 - `DATABASE_URL`
 - `JWT_SECRET`
-- `RECAPTCHA_SECRET`
+- `TURNSTILE_SECRET_KEY`
 - `SMTP_*`
 - `R2_*`
 - any Supabase keys if they were exposed beyond local use
@@ -26,7 +26,7 @@ Set these environment variables:
 - `DATABASE_URL`
 - `JWT_SECRET`
 - `JWT_EXPIRY`
-- `RECAPTCHA_SECRET`
+- `TURNSTILE_SECRET_KEY`
 - `FRONTEND_URL`
 - `ALLOWED_ORIGINS`
 - `SMTP_HOST`
@@ -58,7 +58,7 @@ Set these environment variables:
 - `VITE_API_BASE_URL=https://your-backend-domain.onrender.com`
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_RECAPTCHA_SITE_KEY`
+- `VITE_TURNSTILE_SITE_KEY`
 
 ## 4. Add SPA rewrite
 

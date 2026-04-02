@@ -21,7 +21,7 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
-      - key: RECAPTCHA_SECRET
+      - key: TURNSTILE_SECRET_KEY
         sync: false
       - key: SMTP_HOST
         sync: false
@@ -62,7 +62,7 @@ services:
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
-      - key: VITE_RECAPTCHA_SITE_KEY
+      - key: VITE_TURNSTILE_SITE_KEY
         sync: false
     routes:
       - type: rewrite

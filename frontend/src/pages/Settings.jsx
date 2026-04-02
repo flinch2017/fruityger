@@ -227,7 +227,11 @@ export default function Settings() {
           </div>
         </div>
 
-        <button type="button" className="settings-more-btn">
+        <button
+          type="button"
+          className="settings-more-btn"
+          onClick={() => navigate("/settings/danger")}
+        >
           More options
         </button>
       </section>

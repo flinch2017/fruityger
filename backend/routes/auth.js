@@ -15,6 +15,7 @@ import {
   sendVerificationEmail,
 } from "../utils/emailVerification.js";
 import { ensureUserOnboardingSchema } from "../utils/userOnboarding.js";
+import { deleteR2Object } from "../utils/r2Delete.js";
 
 const router = express.Router();
 const SALT_ROUNDS = 10;
@@ -45,6 +46,49 @@ const ensureAccountChangeSchema = async () => {
   `);
 };
 
+const ensureAccountStatusSchema = async () => {
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS deactivated_at TIMESTAMPTZ
+  `);
+};
+
+const quoteIdentifier = (value) => `"${String(value).replace(/"/g, '""')}"`;
+
+const cleanupUserDependencies = async (client, userId) => {
+  const { rows } = await client.query(
+    `
+    SELECT DISTINCT
+      ns.nspname AS schema_name,
+      cls.relname AS table_name,
+      att.attname AS column_name,
+      con.confdeltype
+    FROM pg_constraint con
+    JOIN pg_class cls ON cls.oid = con.conrelid
+    JOIN pg_namespace ns ON ns.oid = cls.relnamespace
+    JOIN unnest(con.conkey) WITH ORDINALITY AS cols(attnum, ordinality) ON TRUE
+    JOIN pg_attribute att
+      ON att.attrelid = con.conrelid
+     AND att.attnum = cols.attnum
+    WHERE con.contype = 'f'
+      AND con.confrelid = 'public.users'::regclass
+      AND cardinality(con.conkey) = 1
+      AND ns.nspname = 'public'
+      AND cls.relname <> 'users'
+      AND con.confdeltype IN ('a', 'r')
+    `
+  );
+
+  for (const dependency of rows) {
+    const tableName = `${quoteIdentifier(dependency.schema_name)}.${quoteIdentifier(
+      dependency.table_name
+    )}`;
+    const columnName = quoteIdentifier(dependency.column_name);
+
+    await client.query(`DELETE FROM ${tableName} WHERE ${columnName} = $1`, [userId]);
+  }
+};
+
 const maskEmail = (email = "") => {
   const normalized = String(email).trim().toLowerCase();
   const [localPart, domainPart] = normalized.split("@");
@@ -70,13 +114,37 @@ const maskEmail = (email = "") => {
   return `${maskedLocal}@${maskedDomain}${domainSuffix}`;
 };
 
-const verifyRecaptcha = async (recaptchaToken) => {
-  if (!recaptchaToken) {
+const verifyTurnstile = async (challengeToken, remoteIp) => {
+  if (!challengeToken) {
     return false;
   }
 
+  const secret =
+    process.env.TURNSTILE_SECRET_KEY ||
+    process.env.TURNSTILE_SECRET ||
+    process.env.RECAPTCHA_SECRET;
+
+  if (!secret) {
+    throw new Error("Missing Turnstile secret");
+  }
+
+  const payload = new URLSearchParams({
+    secret,
+    response: challengeToken,
+  });
+
+  if (remoteIp) {
+    payload.set("remoteip", remoteIp);
+  }
+
   const response = await axios.post(
-    `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET}&response=${recaptchaToken}`
+    "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+    payload.toString(),
+    {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    }
   );
 
   return Boolean(response.data?.success);
@@ -209,11 +277,21 @@ const sanitizeUser = (user) => ({
 });
 
 router.post("/signup", async (req, res) => {
-  const { username, email, password, birthDate, recaptchaToken, profile_pic } = req.body;
+  const {
+    username,
+    email,
+    password,
+    birthDate,
+    turnstileToken,
+    recaptchaToken,
+    profile_pic,
+  } = req.body;
+  const challengeToken = turnstileToken || recaptchaToken;
 
   await ensureEmailVerificationSchema();
   await ensureUserOnboardingSchema();
   await ensureAccountChangeSchema();
+  await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
 
   const normalizedUsername = normalizeUsername(username);
@@ -237,12 +315,12 @@ router.post("/signup", async (req, res) => {
   }
 
   try {
-    const isHuman = await verifyRecaptcha(recaptchaToken);
+    const isHuman = await verifyTurnstile(challengeToken, req.ip);
     if (!isHuman) {
-      return res.status(400).json({ error: "reCAPTCHA verification failed" });
+      return res.status(400).json({ error: "Turnstile verification failed" });
     }
   } catch (err) {
-    return res.status(500).json({ error: "reCAPTCHA request failed" });
+    return res.status(500).json({ error: "Turnstile request failed" });
   }
 
   const verificationCode = generateVerificationCode();
@@ -306,22 +384,24 @@ router.post("/signup", async (req, res) => {
 });
 
 router.post("/login", async (req, res) => {
-  const { email, password, recaptchaToken } = req.body;
+  const { email, password, turnstileToken, recaptchaToken } = req.body;
   const identifier = String(email || "").trim();
   const normalizedIdentifier = identifier.toLowerCase();
+  const challengeToken = turnstileToken || recaptchaToken;
 
   await ensureEmailVerificationSchema();
   await ensureUserOnboardingSchema();
   await ensureAccountChangeSchema();
+  await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
 
   try {
-    const isHuman = await verifyRecaptcha(recaptchaToken);
+    const isHuman = await verifyTurnstile(challengeToken, req.ip);
     if (!isHuman) {
-      return res.status(400).json({ error: "reCAPTCHA verification failed" });
+      return res.status(400).json({ error: "Turnstile verification failed" });
     }
   } catch (err) {
-    return res.status(500).json({ error: "reCAPTCHA request failed" });
+    return res.status(500).json({ error: "Turnstile request failed" });
   }
 
   try {
@@ -339,6 +419,10 @@ router.post("/login", async (req, res) => {
 
     if (!user) {
       return res.status(400).json({ error: "Invalid email or password" });
+    }
+
+    if (user.deactivated_at) {
+      return res.status(403).json({ error: "This account has been deactivated" });
     }
 
     if (!user.email_verified && user.email_verification_expires_at && new Date(user.email_verification_expires_at) <= new Date()) {
@@ -371,6 +455,7 @@ router.post("/forgot-password/search", async (req, res) => {
   await ensureEmailVerificationSchema();
   await ensurePasswordResetSchema();
   await ensureAccountChangeSchema();
+  await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
 
   if (normalizedQuery.length < 2) {
@@ -384,6 +469,7 @@ router.post("/forgot-password/search", async (req, res) => {
       FROM users
       WHERE email_verified = TRUE
         AND pending_email IS NULL
+        AND deactivated_at IS NULL
         AND (
           LOWER(username) LIKE $1
           OR LOWER(email) LIKE $1
@@ -421,6 +507,7 @@ router.post("/forgot-password/send-code", async (req, res) => {
   await ensureEmailVerificationSchema();
   await ensurePasswordResetSchema();
   await ensureAccountChangeSchema();
+  await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
 
   if (!userId) {
@@ -430,7 +517,7 @@ router.post("/forgot-password/send-code", async (req, res) => {
   try {
     const { rows } = await pool.query(
       `
-      SELECT id, username, email, pending_email, email_verified
+      SELECT id, username, email, pending_email, email_verified, deactivated_at
       FROM users
       WHERE id = $1
       LIMIT 1
@@ -439,7 +526,7 @@ router.post("/forgot-password/send-code", async (req, res) => {
     );
 
     const user = rows[0];
-    if (!user || !user.email_verified || user.pending_email) {
+    if (!user || !user.email_verified || user.pending_email || user.deactivated_at) {
       return res.status(404).json({ error: "Account not found" });
     }
 
@@ -488,6 +575,7 @@ router.post("/forgot-password/verify-code", async (req, res) => {
   await ensureEmailVerificationSchema();
   await ensurePasswordResetSchema();
   await ensureAccountChangeSchema();
+  await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
 
   if (!userId || !/^\d{6}$/.test(String(code || ""))) {
@@ -497,7 +585,7 @@ router.post("/forgot-password/verify-code", async (req, res) => {
   try {
     const { rows } = await pool.query(
       `
-      SELECT id, password_reset_code, password_reset_expires_at, email_verified, pending_email
+      SELECT id, password_reset_code, password_reset_expires_at, email_verified, pending_email, deactivated_at
       FROM users
       WHERE id = $1
       LIMIT 1
@@ -506,7 +594,7 @@ router.post("/forgot-password/verify-code", async (req, res) => {
     );
 
     const user = rows[0];
-    if (!user || !user.email_verified || user.pending_email) {
+    if (!user || !user.email_verified || user.pending_email || user.deactivated_at) {
       return res.status(404).json({ error: "Account not found" });
     }
 
@@ -555,6 +643,21 @@ router.post("/forgot-password/change-password", async (req, res) => {
     }
 
     await ensurePasswordResetSchema();
+    await ensureAccountStatusSchema();
+
+    const { rows } = await pool.query(
+      `
+      SELECT id, deactivated_at
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [decoded.id]
+    );
+
+    if (!rows[0] || rows[0].deactivated_at) {
+      return res.status(404).json({ error: "Account not found" });
+    }
 
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
@@ -584,11 +687,12 @@ router.get("/session", authenticateTokenAllowUnverified, async (req, res) => {
   await ensureEmailVerificationSchema();
   await ensureUserOnboardingSchema();
   await ensureAccountChangeSchema();
+  await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
 
   const { rows } = await pool.query(
     `
-    SELECT id, username, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, email_verification_expires_at, created_at
+    SELECT id, username, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, email_verification_expires_at, created_at, deactivated_at
     FROM users
     WHERE id = $1
     LIMIT 1
@@ -599,6 +703,10 @@ router.get("/session", authenticateTokenAllowUnverified, async (req, res) => {
   const user = rows[0];
   if (!user) {
     return res.status(401).json({ error: "User not found" });
+  }
+
+  if (user.deactivated_at) {
+    return res.status(403).json({ error: "Account deactivated" });
   }
 
   res.json({
@@ -614,6 +722,7 @@ router.post("/verify-email", authenticateTokenAllowUnverified, async (req, res) 
   await ensureEmailVerificationSchema();
   await ensureUserOnboardingSchema();
   await ensureAccountChangeSchema();
+  await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
 
   if (!code || !/^\d{6}$/.test(String(code))) {
@@ -676,6 +785,7 @@ router.post("/resend-verification", authenticateTokenAllowUnverified, async (req
   await ensureEmailVerificationSchema();
   await ensureUserOnboardingSchema();
   await ensureAccountChangeSchema();
+  await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
 
   const { rows } = await pool.query(
@@ -1009,6 +1119,86 @@ router.post("/cancel-email-change", authenticateTokenAllowUnverified, async (req
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to cancel email change" });
+  }
+});
+
+router.post("/deactivate-account", authenticateTokenAllowUnverified, async (req, res) => {
+  try {
+    await ensureAccountStatusSchema();
+    await ensureAccountChangeSchema();
+    await ensurePasswordResetSchema();
+
+    const result = await pool.query(
+      `
+      UPDATE users
+      SET deactivated_at = NOW(),
+          pending_email = NULL,
+          email_change_token = NULL,
+          email_change_expires_at = NULL,
+          password_reset_code = NULL,
+          password_reset_expires_at = NULL
+      WHERE id = $1
+        AND deactivated_at IS NULL
+      RETURNING id
+      `,
+      [req.user.id]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+
+    await pool
+      .query(`DELETE FROM newsletter_subscriptions WHERE user_id = $1`, [req.user.id])
+      .catch(() => null);
+    await pool
+      .query(`DELETE FROM push_notification_subscriptions WHERE user_id = $1`, [req.user.id])
+      .catch(() => null);
+    await pool.query(`DELETE FROM active_users WHERE user_id = $1`, [req.user.id]).catch(() => null);
+
+    res.json({ message: "Account deactivated" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to deactivate account" });
+  }
+});
+
+router.delete("/delete-account", authenticateTokenAllowUnverified, async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureAccountStatusSchema();
+
+    await client.query("BEGIN");
+    await cleanupUserDependencies(client, req.user.id);
+
+    const result = await client.query(
+      `
+      DELETE FROM users
+      WHERE id = $1
+      RETURNING profile_pic_key
+      `,
+      [req.user.id]
+    );
+
+    if (!result.rows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Account not found" });
+    }
+
+    await client.query("COMMIT");
+
+    if (result.rows[0].profile_pic_key) {
+      await deleteR2Object(result.rows[0].profile_pic_key).catch(() => null);
+    }
+
+    res.json({ message: "Account deleted" });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => null);
+    console.error(error);
+    res.status(500).json({ error: "Failed to delete account" });
+  } finally {
+    client.release();
   }
 });
 

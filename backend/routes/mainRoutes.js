@@ -11,6 +11,7 @@ const router = express.Router();
 let blockedUsersTableReadyPromise = null;
 let userProfileSchemaReadyPromise = null;
 let notificationPreferencesSchemaReadyPromise = null;
+let accountStatusSchemaReadyPromise = null;
 
 const normalizeUsername = (value = "") =>
   String(value)
@@ -114,6 +115,22 @@ async function ensureNotificationPreferencesSchema() {
   await notificationPreferencesSchemaReadyPromise;
 }
 
+async function ensureAccountStatusSchema() {
+  if (!accountStatusSchemaReadyPromise) {
+    accountStatusSchemaReadyPromise = (async () => {
+      await pool.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS deactivated_at TIMESTAMPTZ
+      `);
+    })().catch((error) => {
+      accountStatusSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await accountStatusSchemaReadyPromise;
+}
+
 
 
 router.get("/user/:username", authenticateToken, async (req, res) => {
@@ -121,12 +138,14 @@ router.get("/user/:username", authenticateToken, async (req, res) => {
     await ensureBlockedUsersTable();
     await ensureUserOnboardingSchema();
     await ensureUserProfileSchema();
+    await ensureAccountStatusSchema();
     const { username } = req.params;
 
     const { rows } = await pool.query(
       `SELECT id, username, email, profile_pic, bio, interests, interests_completed, created_at
        FROM users
-       WHERE username = $1`,
+       WHERE username = $1
+         AND deactivated_at IS NULL`,
       [username]
     );
 
@@ -177,10 +196,12 @@ router.get("/me", authenticateToken, async (req, res) => {
     await ensureBlockedUsersTable();
     await ensureUserOnboardingSchema();
     await ensureUserProfileSchema();
+    await ensureAccountStatusSchema();
     const { rows } = await pool.query(
       `SELECT id, username, email, profile_pic, profile_pic_key, bio, interests, interests_completed, created_at
        FROM users
-       WHERE id = $1`,
+       WHERE id = $1
+         AND deactivated_at IS NULL`,
       [req.user.id]
     );
 
@@ -210,6 +231,7 @@ router.get("/me", authenticateToken, async (req, res) => {
 router.get("/public/user/:username", async (req, res) => {
   try {
     await ensureUserProfileSchema();
+    await ensureAccountStatusSchema();
     const { username } = req.params;
 
     const { rows } = await pool.query(
@@ -217,6 +239,7 @@ router.get("/public/user/:username", async (req, res) => {
       SELECT id, username, profile_pic, bio, created_at
       FROM users
       WHERE username = $1
+        AND deactivated_at IS NULL
       LIMIT 1
       `,
       [username]

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import ReCAPTCHA from "react-google-recaptcha";
 import "../css/Signup.css";
 import { persistAuthSession } from "../utils/authSession";
+import TurnstileWidget from "../components/TurnstileWidget";
 
 const getAgeFromBirthDate = (birthDate) => {
   if (!birthDate) return null;
@@ -113,7 +113,8 @@ export default function Signup() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const captchaRef = useRef(null);
   const birthDateRef = useRef(null);
-  const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+  const siteKey =
+    import.meta.env.VITE_TURNSTILE_SITE_KEY || import.meta.env.VITE_RECAPTCHA_SITE_KEY;
   const passwordChecklist = getPasswordChecklist(form.password);
   const passwordStrength = getPasswordStrength(form.password);
   const confirmMatches =
@@ -187,18 +188,18 @@ export default function Signup() {
     }
 
     if (!siteKey || !captchaRef.current) {
-      setCustomMessage("error", "reCAPTCHA is not configured properly.");
+      setCustomMessage("error", "Turnstile is not configured properly.");
       return;
     }
 
     setSubmitting(true);
 
     try {
-      const recaptchaToken = await captchaRef.current.executeAsync();
+      const turnstileToken = await captchaRef.current.executeAsync();
       captchaRef.current.reset();
 
-      if (!recaptchaToken) {
-        setCustomMessage("error", "Please verify that you are not a robot.");
+      if (!turnstileToken) {
+        setCustomMessage("error", "Please complete the security check.");
         return;
       }
 
@@ -210,7 +211,7 @@ export default function Signup() {
           email: form.email,
           password: form.password,
           birthDate: form.birthDate,
-          recaptchaToken,
+          turnstileToken,
         }),
       });
 
@@ -384,12 +385,9 @@ export default function Signup() {
                 : "Use 8+ characters with uppercase, lowercase, a number, and a special character."}
             </p>
 
-            <ReCAPTCHA
+            <TurnstileWidget
               ref={captchaRef}
-              sitekey={siteKey}
-              size="invisible"
-              badge="inline"
-              theme="light"
+              siteKey={siteKey}
             />
 
             <button type="submit" className="signup-aero-btn" disabled={submitting}>

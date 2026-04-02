@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import ReCAPTCHA from "react-google-recaptcha";
 import "../css/Login.css";
 import { persistAuthSession } from "../utils/authSession";
+import TurnstileWidget from "../components/TurnstileWidget";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -12,7 +12,8 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
   const captchaRef = useRef(null);
-  const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+  const siteKey =
+    import.meta.env.VITE_TURNSTILE_SITE_KEY || import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
   useEffect(() => {
     document.body.classList.add("welcome");
@@ -37,25 +38,25 @@ export default function Login() {
     }
 
     if (!siteKey || !captchaRef.current) {
-      setCustomMessage("error", "reCAPTCHA is not configured properly.");
+      setCustomMessage("error", "Turnstile is not configured properly.");
       return;
     }
 
     setSubmitting(true);
 
     try {
-      const recaptchaToken = await captchaRef.current.executeAsync();
+      const turnstileToken = await captchaRef.current.executeAsync();
       captchaRef.current.reset();
 
-      if (!recaptchaToken) {
-        setCustomMessage("error", "Please verify that you are not a robot.");
+      if (!turnstileToken) {
+        setCustomMessage("error", "Please complete the security check.");
         return;
       }
 
       const response = await fetch("http://localhost:5000/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, recaptchaToken }),
+        body: JSON.stringify({ email, password, turnstileToken }),
       });
 
       const data = await response.json();
@@ -147,12 +148,9 @@ export default function Login() {
               </button>
             </div>
 
-            <ReCAPTCHA
+            <TurnstileWidget
               ref={captchaRef}
-              sitekey={siteKey}
-              size="invisible"
-              badge="inline"
-              theme="light"
+              siteKey={siteKey}
             />
 
             <button type="submit" className="login-aero-btn" disabled={submitting}>

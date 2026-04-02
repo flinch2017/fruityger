@@ -20,15 +20,8 @@
   box-sizing: border-box;
 }
 
-body.welcome .grecaptcha-badge {
-  bottom: 10px !important;
-}
-
-.login-aero-form .grecaptcha-badge {
-  position: static !important;
-  margin: -2px auto 4px;
-  transform: scale(0.98);
-  transform-origin: center;
+.turnstile-widget {
+  display: none;
 }
 
 
