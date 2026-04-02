@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import authRoutes from "./routes/auth.js";
+import mobileRoutes from "./routes/mobile.js";
 import mainRoutes from "./routes/mainRoutes.js"
 import uploadRoutes from "./routes/upload.js";
 import postRoutes from "./routes/postRoutes.js";
@@ -50,6 +51,7 @@ app.use(express.json());
 
 // Auth routes
 app.use("/api/auth", authRoutes);
+app.use("/mobile", mobileRoutes);
 app.use("/api/main", mainRoutes);
 app.use("/api/main", uploadRoutes);
 app.use("/api/posts", postRoutes);

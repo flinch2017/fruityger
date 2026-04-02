@@ -6,6 +6,7 @@ Your local `.env` files contain real credentials. Before a public deploy, rotate
 
 - `DATABASE_URL`
 - `JWT_SECRET`
+- `TURNSTILE_SITE_KEY`
 - `TURNSTILE_SECRET_KEY`
 - `SMTP_*`
 - `R2_*`
@@ -26,6 +27,7 @@ Set these environment variables:
 - `DATABASE_URL`
 - `JWT_SECRET`
 - `JWT_EXPIRY`
+- `TURNSTILE_SITE_KEY`
 - `TURNSTILE_SECRET_KEY`
 - `FRONTEND_URL`
 - `ALLOWED_ORIGINS`
