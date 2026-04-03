@@ -16,6 +16,8 @@ const AUTH_STORAGE_KEYS = new Set([
   "pendingEmail",
   "verificationEmail",
 ]);
+const TAB_ID_STORAGE_KEY = "__fruityger_tab_id__";
+const TAB_NAME_PREFIX = "fruityger-tab:";
 
 const normalizeBaseUrl = (value) => String(value || "").trim().replace(/\/+$/, "");
 const configuredApiBaseUrl = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL);
@@ -68,13 +70,51 @@ if (typeof window !== "undefined" && window.localStorage && window.sessionStorag
   const nativeSessionGetItem = window.sessionStorage.getItem.bind(window.sessionStorage);
   const nativeSessionSetItem = window.sessionStorage.setItem.bind(window.sessionStorage);
   const nativeSessionRemoveItem = window.sessionStorage.removeItem.bind(window.sessionStorage);
+  const createTabId = () =>
+    `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const readTabIdFromWindowName = () =>
+    String(window.name || "").startsWith(TAB_NAME_PREFIX)
+      ? String(window.name).slice(TAB_NAME_PREFIX.length)
+      : "";
+
+  let tabId =
+    nativeSessionGetItem(TAB_ID_STORAGE_KEY) ||
+    readTabIdFromWindowName() ||
+    createTabId();
+
+  nativeSessionSetItem(TAB_ID_STORAGE_KEY, tabId);
+  window.name = `${TAB_NAME_PREFIX}${tabId}`;
+
+  const getScopedAuthKey = (key) => `__fruityger_auth__${tabId}__${String(key)}`;
+  const readScopedAuthValue = (key) => {
+    const scopedKey = getScopedAuthKey(key);
+    const scopedLocalValue = nativeLocalGetItem(scopedKey);
+    const sessionValue = nativeSessionGetItem(String(key));
+    const legacyLocalValue = nativeLocalGetItem(String(key));
+
+    if (scopedLocalValue != null) {
+      return scopedLocalValue;
+    }
+
+    if (sessionValue != null) {
+      nativeLocalSetItem(scopedKey, sessionValue);
+      return sessionValue;
+    }
+
+    if (legacyLocalValue != null) {
+      nativeLocalSetItem(scopedKey, legacyLocalValue);
+      return legacyLocalValue;
+    }
+
+    return null;
+  };
 
   for (const key of AUTH_STORAGE_KEYS) {
-    const sessionValue = nativeSessionGetItem(key);
+    const scopedValue = readScopedAuthValue(key);
     const localValue = nativeLocalGetItem(key);
 
-    if (sessionValue == null && localValue != null) {
-      nativeSessionSetItem(key, localValue);
+    if (scopedValue != null) {
+      nativeSessionSetItem(key, scopedValue);
     }
 
     if (localValue != null) {
@@ -84,7 +124,7 @@ if (typeof window !== "undefined" && window.localStorage && window.sessionStorag
 
   window.localStorage.getItem = (key) => {
     if (AUTH_STORAGE_KEYS.has(String(key))) {
-      return nativeSessionGetItem(String(key));
+      return readScopedAuthValue(String(key));
     }
 
     return nativeLocalGetItem(key);
@@ -92,7 +132,9 @@ if (typeof window !== "undefined" && window.localStorage && window.sessionStorag
 
   window.localStorage.setItem = (key, value) => {
     if (AUTH_STORAGE_KEYS.has(String(key))) {
-      nativeSessionSetItem(String(key), String(value));
+      const normalizedValue = String(value);
+      nativeSessionSetItem(String(key), normalizedValue);
+      nativeLocalSetItem(getScopedAuthKey(String(key)), normalizedValue);
       nativeLocalRemoveItem(String(key));
       return;
     }
@@ -103,6 +145,7 @@ if (typeof window !== "undefined" && window.localStorage && window.sessionStorag
   window.localStorage.removeItem = (key) => {
     if (AUTH_STORAGE_KEYS.has(String(key))) {
       nativeSessionRemoveItem(String(key));
+      nativeLocalRemoveItem(getScopedAuthKey(String(key)));
       nativeLocalRemoveItem(String(key));
       return;
     }
