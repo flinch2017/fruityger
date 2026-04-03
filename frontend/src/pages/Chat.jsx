@@ -61,6 +61,7 @@ export default function Chat() {
   const previousMessagesLengthRef = useRef(0);
   const channelRef = useRef(null);
   const presenceChannelRef = useRef(null);
+  const inboxChannelRef = useRef(null);
   const typingStopTimeoutRef = useRef(null);
   const typingIndicatorTimeoutRef = useRef(null);
   const attachmentInputRef = useRef(null);
@@ -80,6 +81,44 @@ export default function Chat() {
 
   const dispatchMessagesRefresh = () => {
     window.dispatchEvent(new CustomEvent("fruityger:messages-refresh"));
+  };
+
+  const broadcastInboxSync = async (reason = "refresh") => {
+    if (!inboxChannelRef.current) return;
+
+    try {
+      await inboxChannelRef.current.send({
+        type: "broadcast",
+        event: "inbox-sync",
+        payload: {
+          chatId,
+          actorUserId: userId,
+          reason,
+          at: Date.now(),
+        },
+      });
+    } catch (error) {
+      console.error("Failed to broadcast inbox sync:", error);
+    }
+  };
+
+  const broadcastChatSync = async (reason = "refresh") => {
+    if (!channelRef.current) return;
+
+    try {
+      await channelRef.current.send({
+        type: "broadcast",
+        event: "message-sync",
+        payload: {
+          chatId,
+          actorUserId: userId,
+          reason,
+          at: Date.now(),
+        },
+      });
+    } catch (error) {
+      console.error("Failed to broadcast chat sync:", error);
+    }
   };
 
   const syncPresenceState = (channel) => {
@@ -284,6 +323,18 @@ export default function Chat() {
             }, 1800);
           }
         })
+        .on("broadcast", { event: "message-sync" }, async ({ payload }) => {
+          if (!payload) return;
+          if (String(payload.chatId) !== String(chatId)) return;
+
+          await fetchChatSnapshot();
+
+          if (String(payload.actorUserId) !== String(userId)) {
+            await markChatRead();
+          } else {
+            dispatchMessagesRefresh();
+          }
+        })
         .on(
           "postgres_changes",
           {
@@ -402,6 +453,18 @@ export default function Chat() {
       if (channel) supabase.removeChannel(channel);
     };
   }, [chatId, token, userId]);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+
+    const channel = supabase.channel("fruityger-messages-live").subscribe();
+    inboxChannelRef.current = channel;
+
+    return () => {
+      inboxChannelRef.current = null;
+      supabase.removeChannel(channel);
+    };
+  }, [userId]);
 
   useEffect(() => {
     const updateKeyboardOffset = () => {
@@ -548,6 +611,8 @@ export default function Chat() {
       setReplyingTo(null);
       scrollToBottom("smooth");
       dispatchMessagesRefresh();
+      await broadcastChatSync("sent-message");
+      await broadcastInboxSync("sent-message");
     } catch (err) {
       console.error(err);
       setNotice({ type: "error", message: err.message || "Failed to send message." });
@@ -591,6 +656,8 @@ export default function Chat() {
       }
       setOpenMenuId(null);
       dispatchMessagesRefresh();
+      await broadcastChatSync("deleted-message");
+      await broadcastInboxSync("deleted-message");
     } catch (err) {
       console.error(err);
       setNotice({ type: "error", message: "Failed to delete message." });
@@ -636,6 +703,7 @@ export default function Chat() {
 
       setReactionTargetMessage(null);
       dispatchMessagesRefresh();
+      await broadcastChatSync("reacted-message");
     } catch (error) {
       console.error(error);
       setNotice({ type: "error", message: "Failed to update reaction." });
@@ -713,6 +781,7 @@ export default function Chat() {
           : prev
       );
       dispatchMessagesRefresh();
+      await broadcastChatSync("removed-reaction");
     } catch (error) {
       console.error(error);
       setNotice({ type: "error", message: "Failed to remove reaction." });
@@ -738,6 +807,7 @@ export default function Chat() {
 
       setHeaderMenuOpen(false);
       dispatchMessagesRefresh();
+      await broadcastInboxSync("deleted-chat");
       navigate("/messages");
     } catch (err) {
       console.error(err);

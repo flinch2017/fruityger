@@ -22,6 +22,7 @@ export default function Messages() {
   const [onlineUserIds, setOnlineUserIds] = useState([]);
   const sidebarRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
+  const inboxChannelRef = useRef(null);
 
   const syncPresenceState = (channel) => {
     const nextOnlineIds = new Set();
@@ -109,6 +110,25 @@ export default function Messages() {
     refreshTimeoutRef.current = setTimeout(() => {
       fetchChats({ silent: true });
     }, 120);
+  };
+
+  const broadcastInboxSync = async (reason = "refresh", extra = {}) => {
+    if (!inboxChannelRef.current) return;
+
+    try {
+      await inboxChannelRef.current.send({
+        type: "broadcast",
+        event: "inbox-sync",
+        payload: {
+          actorUserId: userId,
+          reason,
+          at: Date.now(),
+          ...extra,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to broadcast inbox sync:", error);
+    }
   };
 
   useEffect(() => {
@@ -216,6 +236,33 @@ export default function Messages() {
     if (!userId) return undefined;
 
     const channel = supabase
+      .channel("fruityger-messages-live")
+      .on("broadcast", { event: "inbox-sync" }, ({ payload }) => {
+        if (!payload) return;
+        scheduleRealtimeRefresh();
+
+        if (
+          payload.reason === "created-chat" ||
+          payload.reason === "deleted-chat" ||
+          payload.reason === "membership-changed"
+        ) {
+          fetchOnlineCandidates({ silent: true });
+        }
+      })
+      .subscribe();
+
+    inboxChannelRef.current = channel;
+
+    return () => {
+      inboxChannelRef.current = null;
+      supabase.removeChannel(channel);
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+
+    const channel = supabase
       .channel("fruityger-online")
       .on("presence", { event: "sync" }, () => {
         syncPresenceState(channel);
@@ -261,6 +308,7 @@ export default function Messages() {
       }
 
       fetchOnlineCandidates({ silent: true });
+      await broadcastInboxSync("created-chat", { chatId: data.chatId });
       navigate(`/chat/${data.chatId}`);
     } catch (err) {
       console.error(err);
@@ -330,6 +378,7 @@ export default function Messages() {
       });
 
       exitSelectionMode();
+      await broadcastInboxSync("deleted-chat", { chatIds: selectedChatIds });
     } catch (err) {
       console.error(err);
     } finally {
