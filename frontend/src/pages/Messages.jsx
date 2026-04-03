@@ -273,7 +273,11 @@ export default function Messages() {
       .on("presence", { event: "leave" }, () => {
         syncPresenceState(channel);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          syncPresenceState(channel);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);

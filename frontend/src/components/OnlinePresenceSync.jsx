@@ -6,6 +6,10 @@ export default function OnlinePresenceSync() {
   const location = useLocation();
   const [authVersion, setAuthVersion] = useState(0);
   const channelRef = useRef(null);
+  const trackIntervalRef = useRef(null);
+  const tabIdRef = useRef(
+    `fruityger-tab-${Math.random().toString(36).slice(2)}-${Date.now()}`
+  );
 
   useEffect(() => {
     const handleAuthChanged = () => {
@@ -40,6 +44,7 @@ export default function OnlinePresenceSync() {
           username,
           profile_pic: profilePic || null,
           path: location.pathname,
+          tab_id: tabIdRef.current,
           last_seen_at: new Date().toISOString(),
         });
       } catch (error) {
@@ -73,6 +78,10 @@ export default function OnlinePresenceSync() {
       }
     });
 
+    trackIntervalRef.current = window.setInterval(() => {
+      trackPresence().catch(() => null);
+    }, 30000);
+
     const handleProfileUpdated = async () => {
       await trackPresence();
     };
@@ -99,6 +108,10 @@ export default function OnlinePresenceSync() {
       window.removeEventListener("fruityger:profile-updated", handleProfileUpdated);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (trackIntervalRef.current) {
+        window.clearInterval(trackIntervalRef.current);
+        trackIntervalRef.current = null;
+      }
       untrackPresence().catch(() => null);
       supabase.removeChannel(channel);
       channelRef.current = null;
