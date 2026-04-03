@@ -6,6 +6,17 @@ import OnlinePresenceSync from "./components/OnlinePresenceSync";
 import "./css/index.css";
 import { applyTheme, getStoredTheme } from "./utils/theme";
 
+const AUTH_STORAGE_KEYS = new Set([
+  "token",
+  "userId",
+  "username",
+  "profile_pic",
+  "emailVerified",
+  "interestsCompleted",
+  "pendingEmail",
+  "verificationEmail",
+]);
+
 const normalizeBaseUrl = (value) => String(value || "").trim().replace(/\/+$/, "");
 const configuredApiBaseUrl = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
@@ -47,6 +58,56 @@ if (typeof window !== "undefined" && typeof window.fetch === "function") {
     }
 
     return nativeFetch(input, init);
+  };
+}
+
+if (typeof window !== "undefined" && window.localStorage && window.sessionStorage) {
+  const nativeLocalGetItem = window.localStorage.getItem.bind(window.localStorage);
+  const nativeLocalSetItem = window.localStorage.setItem.bind(window.localStorage);
+  const nativeLocalRemoveItem = window.localStorage.removeItem.bind(window.localStorage);
+  const nativeSessionGetItem = window.sessionStorage.getItem.bind(window.sessionStorage);
+  const nativeSessionSetItem = window.sessionStorage.setItem.bind(window.sessionStorage);
+  const nativeSessionRemoveItem = window.sessionStorage.removeItem.bind(window.sessionStorage);
+
+  for (const key of AUTH_STORAGE_KEYS) {
+    const sessionValue = nativeSessionGetItem(key);
+    const localValue = nativeLocalGetItem(key);
+
+    if (sessionValue == null && localValue != null) {
+      nativeSessionSetItem(key, localValue);
+    }
+
+    if (localValue != null) {
+      nativeLocalRemoveItem(key);
+    }
+  }
+
+  window.localStorage.getItem = (key) => {
+    if (AUTH_STORAGE_KEYS.has(String(key))) {
+      return nativeSessionGetItem(String(key));
+    }
+
+    return nativeLocalGetItem(key);
+  };
+
+  window.localStorage.setItem = (key, value) => {
+    if (AUTH_STORAGE_KEYS.has(String(key))) {
+      nativeSessionSetItem(String(key), String(value));
+      nativeLocalRemoveItem(String(key));
+      return;
+    }
+
+    nativeLocalSetItem(key, value);
+  };
+
+  window.localStorage.removeItem = (key) => {
+    if (AUTH_STORAGE_KEYS.has(String(key))) {
+      nativeSessionRemoveItem(String(key));
+      nativeLocalRemoveItem(String(key));
+      return;
+    }
+
+    nativeLocalRemoveItem(key);
   };
 }
 
