@@ -71,6 +71,11 @@ if (typeof window !== "undefined" && window.localStorage && window.sessionStorag
   const nativeSessionGetItem = window.sessionStorage.getItem.bind(window.sessionStorage);
   const nativeSessionSetItem = window.sessionStorage.setItem.bind(window.sessionStorage);
   const nativeSessionRemoveItem = window.sessionStorage.removeItem.bind(window.sessionStorage);
+  const userAgent = String(window.navigator?.userAgent || "");
+  const isIPhoneWebKit =
+    /iPhone|iPad|iPod/i.test(userAgent) ||
+    (/Macintosh/i.test(userAgent) && Number(window.navigator?.maxTouchPoints || 0) > 1);
+  const shouldUseSharedAuthStorage = isIPhoneWebKit;
   const createTabId = () =>
     `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const readTabIdFromHistoryState = () => {
@@ -108,6 +113,22 @@ if (typeof window !== "undefined" && window.localStorage && window.sessionStorag
 
   const getScopedAuthKey = (key) => `__fruityger_auth__${tabId}__${String(key)}`;
   const readScopedAuthValue = (key) => {
+    if (shouldUseSharedAuthStorage) {
+      const sharedLocalValue = nativeLocalGetItem(String(key));
+      const sessionValue = nativeSessionGetItem(String(key));
+
+      if (sharedLocalValue != null) {
+        return sharedLocalValue;
+      }
+
+      if (sessionValue != null) {
+        nativeLocalSetItem(String(key), sessionValue);
+        return sessionValue;
+      }
+
+      return null;
+    }
+
     const scopedKey = getScopedAuthKey(key);
     const scopedLocalValue = nativeLocalGetItem(scopedKey);
     const sessionValue = nativeSessionGetItem(String(key));
@@ -138,7 +159,7 @@ if (typeof window !== "undefined" && window.localStorage && window.sessionStorag
       nativeSessionSetItem(key, scopedValue);
     }
 
-    if (localValue != null) {
+    if (localValue != null && !shouldUseSharedAuthStorage) {
       nativeLocalRemoveItem(key);
     }
   }
@@ -155,8 +176,12 @@ if (typeof window !== "undefined" && window.localStorage && window.sessionStorag
     if (AUTH_STORAGE_KEYS.has(String(key))) {
       const normalizedValue = String(value);
       nativeSessionSetItem(String(key), normalizedValue);
-      nativeLocalSetItem(getScopedAuthKey(String(key)), normalizedValue);
-      nativeLocalRemoveItem(String(key));
+      if (shouldUseSharedAuthStorage) {
+        nativeLocalSetItem(String(key), normalizedValue);
+      } else {
+        nativeLocalSetItem(getScopedAuthKey(String(key)), normalizedValue);
+        nativeLocalRemoveItem(String(key));
+      }
       return;
     }
 
@@ -166,7 +191,11 @@ if (typeof window !== "undefined" && window.localStorage && window.sessionStorag
   window.localStorage.removeItem = (key) => {
     if (AUTH_STORAGE_KEYS.has(String(key))) {
       nativeSessionRemoveItem(String(key));
-      nativeLocalRemoveItem(getScopedAuthKey(String(key)));
+      if (shouldUseSharedAuthStorage) {
+        nativeLocalRemoveItem(String(key));
+      } else {
+        nativeLocalRemoveItem(getScopedAuthKey(String(key)));
+      }
       nativeLocalRemoveItem(String(key));
       return;
     }
