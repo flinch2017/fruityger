@@ -18,6 +18,7 @@ const AUTH_STORAGE_KEYS = new Set([
 ]);
 const TAB_ID_STORAGE_KEY = "__fruityger_tab_id__";
 const TAB_NAME_PREFIX = "fruityger-tab:";
+const TAB_HISTORY_STATE_KEY = "__fruityger_tab_id__";
 
 const normalizeBaseUrl = (value) => String(value || "").trim().replace(/\/+$/, "");
 const configuredApiBaseUrl = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL);
@@ -72,6 +73,13 @@ if (typeof window !== "undefined" && window.localStorage && window.sessionStorag
   const nativeSessionRemoveItem = window.sessionStorage.removeItem.bind(window.sessionStorage);
   const createTabId = () =>
     `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const readTabIdFromHistoryState = () => {
+    try {
+      return String(window.history.state?.[TAB_HISTORY_STATE_KEY] || "").trim();
+    } catch {
+      return "";
+    }
+  };
   const readTabIdFromWindowName = () =>
     String(window.name || "").startsWith(TAB_NAME_PREFIX)
       ? String(window.name).slice(TAB_NAME_PREFIX.length)
@@ -79,11 +87,24 @@ if (typeof window !== "undefined" && window.localStorage && window.sessionStorag
 
   let tabId =
     nativeSessionGetItem(TAB_ID_STORAGE_KEY) ||
+    readTabIdFromHistoryState() ||
     readTabIdFromWindowName() ||
     createTabId();
 
   nativeSessionSetItem(TAB_ID_STORAGE_KEY, tabId);
   window.name = `${TAB_NAME_PREFIX}${tabId}`;
+  try {
+    window.history.replaceState(
+      {
+        ...(window.history.state || {}),
+        [TAB_HISTORY_STATE_KEY]: tabId,
+      },
+      "",
+      window.location.href
+    );
+  } catch {
+    // Ignore history-state write failures.
+  }
 
   const getScopedAuthKey = (key) => `__fruityger_auth__${tabId}__${String(key)}`;
   const readScopedAuthValue = (key) => {
