@@ -18,6 +18,7 @@ import notificationRoutes from "./routes/notifications.js";
 import repostRoutes from "./routes/reposts.js";
 import { cleanupExpiredUnverifiedUsers, ensureEmailVerificationSchema } from "./utils/emailVerification.js";
 import { backfillPostHashtags, ensureHashtagSchema } from "./utils/hashtags.js";
+import { ensurePerformanceIndexes } from "./utils/performanceIndexes.js";
 
 
 
@@ -82,6 +83,10 @@ ensureHashtagSchema()
   .catch((err) => {
     console.error("Hashtag bootstrap failed:", err);
   });
+
+ensurePerformanceIndexes().catch((err) => {
+  console.error("Performance index bootstrap failed:", err);
+});
 
 setInterval(() => {
   cleanupExpiredUnverifiedUsers().catch((err) => {
