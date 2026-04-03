@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import supabase from "../lib/supabaseClient";
 
 export default function OnlinePresenceSync() {
   const location = useLocation();
   const [authVersion, setAuthVersion] = useState(0);
+  const channelRef = useRef(null);
 
   useEffect(() => {
     const handleAuthChanged = () => {
@@ -20,47 +22,86 @@ export default function OnlinePresenceSync() {
   useEffect(() => {
     const token = localStorage.getItem("token");
     const userId = localStorage.getItem("userId");
+    const username = localStorage.getItem("username");
+    const profilePic = localStorage.getItem("profile_pic");
 
     if (!token || !userId) {
       return undefined;
     }
 
-    let heartbeatIntervalId = null;
+    const trackPresence = async () => {
+      if (!channelRef.current || document.visibilityState === "hidden") {
+        return;
+      }
 
-    const sendHeartbeat = async () => {
       try {
-        await fetch("http://localhost:5000/api/messages/presence/heartbeat", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+        await channelRef.current.track({
+          user_id: userId,
+          username,
+          profile_pic: profilePic || null,
+          path: location.pathname,
+          last_seen_at: new Date().toISOString(),
         });
       } catch (error) {
         console.error(error);
       }
     };
 
-    sendHeartbeat();
-    heartbeatIntervalId = window.setInterval(sendHeartbeat, 10000);
+    const untrackPresence = async () => {
+      if (!channelRef.current) return;
+
+      try {
+        await channelRef.current.untrack();
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    const channel = supabase.channel("fruityger-online", {
+      config: {
+        presence: {
+          key: String(userId),
+        },
+      },
+    });
+
+    channelRef.current = channel;
+
+    channel.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await trackPresence();
+      }
+    });
 
     const handleProfileUpdated = async () => {
-      await sendHeartbeat();
+      await trackPresence();
     };
 
     const handleVisibilityChange = async () => {
-      if (document.visibilityState !== "visible") return;
-      await sendHeartbeat();
+      if (document.visibilityState === "visible") {
+        await trackPresence();
+        return;
+      }
+
+      await untrackPresence();
+    };
+
+    const handleBeforeUnload = () => {
+      if (!channelRef.current) return;
+      channelRef.current.untrack().catch(() => null);
     };
 
     window.addEventListener("fruityger:profile-updated", handleProfileUpdated);
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
       window.removeEventListener("fruityger:profile-updated", handleProfileUpdated);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      if (heartbeatIntervalId) {
-        window.clearInterval(heartbeatIntervalId);
-      }
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      untrackPresence().catch(() => null);
+      supabase.removeChannel(channel);
+      channelRef.current = null;
     };
   }, [authVersion, location.pathname]);
 

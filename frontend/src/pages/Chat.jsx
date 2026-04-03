@@ -52,15 +52,15 @@ export default function Chat() {
   const [reactionViewer, setReactionViewer] = useState(null);
   const [reactionViewerLoading, setReactionViewerLoading] = useState(false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const [onlineUserIds, setOnlineUserIds] = useState([]);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
-  const pollingIntervalRef = useRef(null);
-  const presenceIntervalRef = useRef(null);
   const shouldStickToBottomRef = useRef(true);
   const previousMessagesLengthRef = useRef(0);
   const channelRef = useRef(null);
+  const presenceChannelRef = useRef(null);
   const typingStopTimeoutRef = useRef(null);
   const typingIndicatorTimeoutRef = useRef(null);
   const attachmentInputRef = useRef(null);
@@ -80,6 +80,21 @@ export default function Chat() {
 
   const dispatchMessagesRefresh = () => {
     window.dispatchEvent(new CustomEvent("fruityger:messages-refresh"));
+  };
+
+  const syncPresenceState = (channel) => {
+    const nextOnlineIds = new Set();
+    const state = channel.presenceState();
+
+    Object.values(state).forEach((entries = []) => {
+      entries.forEach((entry) => {
+        if (entry?.user_id) {
+          nextOnlineIds.add(String(entry.user_id));
+        }
+      });
+    });
+
+    setOnlineUserIds(Array.from(nextOnlineIds));
   };
 
   const getReplyAuthorLabel = (message) => {
@@ -178,27 +193,6 @@ export default function Chat() {
     }
   };
 
-  const fetchOtherUserPresence = async (targetUserId) => {
-    if (!token || !targetUserId) return;
-
-    try {
-      const res = await fetch(`http://localhost:5000/api/messages/presence/${targetUserId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to load presence");
-      }
-
-      setOtherUserOnline(Boolean(data.is_online));
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
   const fetchChatSnapshot = async ({ showLoading = false } = {}) => {
     if (!token) return null;
 
@@ -220,7 +214,6 @@ export default function Chat() {
       const other = chat.user1.id === userId ? chat.user2 : chat.user1;
 
       setOtherUser(other);
-      fetchOtherUserPresence(other.id);
       setMessages(data.messages || []);
       setBlockedByMe(Boolean(chat.blocked_by_me));
       setBlockedByThem(Boolean(chat.blocked_by_them));
@@ -391,21 +384,11 @@ export default function Chat() {
         .subscribe();
 
       channelRef.current = channel;
-
-      pollingIntervalRef.current = setInterval(() => {
-        fetchChatSnapshot();
-      }, 2500);
     };
 
     initChat();
 
     return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-      if (presenceIntervalRef.current) {
-        clearInterval(presenceIntervalRef.current);
-      }
       if (refreshTimeoutRef.current) {
         clearTimeout(refreshTimeoutRef.current);
       }
@@ -456,6 +439,30 @@ export default function Chat() {
   }, [chatId]);
 
   useEffect(() => {
+    if (!userId) return undefined;
+
+    const channel = supabase
+      .channel("fruityger-online")
+      .on("presence", { event: "sync" }, () => {
+        syncPresenceState(channel);
+      })
+      .on("presence", { event: "join" }, () => {
+        syncPresenceState(channel);
+      })
+      .on("presence", { event: "leave" }, () => {
+        syncPresenceState(channel);
+      })
+      .subscribe();
+
+    presenceChannelRef.current = channel;
+
+    return () => {
+      presenceChannelRef.current = null;
+      supabase.removeChannel(channel);
+    };
+  }, [userId]);
+
+  useEffect(() => {
     if (!channelRef.current) return undefined;
 
     const hasText = input.trim().length > 0;
@@ -486,20 +493,13 @@ export default function Chat() {
   }, [input]);
 
   useEffect(() => {
-    if (!otherUser?.id || !token) return;
+    if (!otherUser?.id) {
+      setOtherUserOnline(false);
+      return;
+    }
 
-    fetchOtherUserPresence(otherUser.id);
-
-    presenceIntervalRef.current = setInterval(() => {
-      fetchOtherUserPresence(otherUser.id);
-    }, 2500);
-
-    return () => {
-      if (presenceIntervalRef.current) {
-        clearInterval(presenceIntervalRef.current);
-      }
-    };
-  }, [otherUser?.id, token]);
+    setOtherUserOnline(onlineUserIds.includes(String(otherUser.id)));
+  }, [otherUser?.id, onlineUserIds]);
 
   const sendMessage = async () => {
     if ((!input.trim() && !selectedAttachment) || blockedByMe || blockedByThem || sending) {

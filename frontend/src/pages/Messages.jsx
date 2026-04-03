@@ -19,9 +19,24 @@ export default function Messages() {
   const [deletingChats, setDeletingChats] = useState(false);
   const [onlineCandidates, setOnlineCandidates] = useState([]);
   const [onlineLoading, setOnlineLoading] = useState(true);
+  const [onlineUserIds, setOnlineUserIds] = useState([]);
   const sidebarRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
-  const pollingIntervalRef = useRef(null);
+
+  const syncPresenceState = (channel) => {
+    const nextOnlineIds = new Set();
+    const state = channel.presenceState();
+
+    Object.values(state).forEach((entries = []) => {
+      entries.forEach((entry) => {
+        if (entry?.user_id) {
+          nextOnlineIds.add(String(entry.user_id));
+        }
+      });
+    });
+
+    setOnlineUserIds(Array.from(nextOnlineIds));
+  };
 
   const selectedChatSet = useMemo(() => new Set(selectedChatIds), [selectedChatIds]);
 
@@ -163,7 +178,6 @@ export default function Messages() {
         { event: "*", schema: "public", table: "messages" },
         () => {
           scheduleRealtimeRefresh();
-          fetchOnlineCandidates({ silent: true });
         }
       )
       .on(
@@ -199,19 +213,25 @@ export default function Messages() {
   }, [token, userId]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!userId) return undefined;
 
-    pollingIntervalRef.current = setInterval(() => {
-      fetchChats({ silent: true });
-      fetchOnlineCandidates({ silent: true });
-    }, 2500);
+    const channel = supabase
+      .channel("fruityger-online")
+      .on("presence", { event: "sync" }, () => {
+        syncPresenceState(channel);
+      })
+      .on("presence", { event: "join" }, () => {
+        syncPresenceState(channel);
+      })
+      .on("presence", { event: "leave" }, () => {
+        syncPresenceState(channel);
+      })
+      .subscribe();
 
     return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
+      supabase.removeChannel(channel);
     };
-  }, [token]);
+  }, [userId]);
 
   const handleChatClick = (chatId) => {
     if (selectionMode) {
@@ -249,17 +269,22 @@ export default function Messages() {
 
   const onlineVisibleUsers = useMemo(
     () =>
-      [...onlineCandidates].sort((a, b) => {
-        const aOnline = Boolean(a.is_online);
-        const bOnline = Boolean(b.is_online);
+      onlineCandidates
+        .map((user) => ({
+          ...user,
+          is_online: onlineUserIds.includes(String(user.id)),
+        }))
+        .sort((a, b) => {
+          const aOnline = Boolean(a.is_online);
+          const bOnline = Boolean(b.is_online);
 
-        if (aOnline !== bOnline) {
-          return aOnline ? -1 : 1;
-        }
+          if (aOnline !== bOnline) {
+            return aOnline ? -1 : 1;
+          }
 
-        return String(a.username || "").localeCompare(String(b.username || ""));
-      }),
-    [onlineCandidates]
+          return String(a.username || "").localeCompare(String(b.username || ""));
+        }),
+    [onlineCandidates, onlineUserIds]
   );
 
   const toggleSelectedChat = (chatId) => {
