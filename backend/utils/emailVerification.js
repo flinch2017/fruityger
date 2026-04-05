@@ -6,6 +6,41 @@ const VERIFICATION_WINDOW_HOURS = 24;
 let cachedTransporter = null;
 let cachedTransporterPromise = null;
 
+export const getFriendlyEmailErrorMessage = (error) => {
+  const message = String(error?.message || "").trim();
+  const code = String(error?.code || "").trim().toUpperCase();
+  const responseCode = Number(error?.responseCode || 0);
+
+  if (
+    message === "Email service is not configured" ||
+    message === "Email sender is not configured"
+  ) {
+    return "Email delivery is not configured on the server yet.";
+  }
+
+  if (message === "Email service timed out" || code === "ETIMEDOUT") {
+    return "Email service timed out. Please try again in a moment.";
+  }
+
+  if (code === "EAUTH" || responseCode === 535) {
+    return "Email login failed. Please check the SMTP username or app password.";
+  }
+
+  if (code === "ESOCKET" || code === "ECONNECTION" || responseCode === 421) {
+    return "Email server connection failed. Please check the SMTP host, port, and TLS settings.";
+  }
+
+  if (responseCode === 550 || responseCode === 553) {
+    return "Email server rejected the sender or recipient address.";
+  }
+
+  if (responseCode === 534) {
+    return "Email provider blocked the sign-in attempt. For Gmail, use an App Password.";
+  }
+
+  return message || "Email delivery failed.";
+};
+
 export const ensureEmailVerificationSchema = async () => {
   await pool.query(`
     ALTER TABLE users

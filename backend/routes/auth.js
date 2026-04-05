@@ -10,6 +10,7 @@ import {
   ensurePasswordResetSchema,
   generateVerificationCode,
   getVerificationExpiry,
+  getFriendlyEmailErrorMessage,
   sendEmailChangeConfirmationEmail,
   sendPasswordResetEmail,
   sendVerificationEmail,
@@ -360,13 +361,7 @@ router.post("/signup", async (req, res) => {
     } catch (mailError) {
       await pool.query(`DELETE FROM users WHERE id = $1`, [user.id]);
       return res.status(500).json({
-        error:
-          mailError.message === "Email service is not configured" ||
-          mailError.message === "Email sender is not configured"
-            ? "Email verification is not configured on the server yet"
-            : mailError.message === "Email service timed out"
-              ? "Email service timed out. Please try again in a moment."
-            : "Failed to send verification email",
+        error: getFriendlyEmailErrorMessage(mailError),
       });
     }
 
@@ -562,13 +557,7 @@ router.post("/forgot-password/send-code", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({
-      error:
-        error.message === "Email service is not configured" ||
-        error.message === "Email sender is not configured"
-          ? "Password reset email is not configured on the server yet"
-          : error.message === "Email service timed out"
-            ? "Email service timed out. Please try again in a moment."
-          : "Failed to send reset code",
+      error: getFriendlyEmailErrorMessage(error),
     });
   }
 });
@@ -831,15 +820,9 @@ router.post("/resend-verification", authenticateTokenAllowUnverified, async (req
       code: verificationCode,
     });
   } catch (mailError) {
-    return res.status(500).json({
-      error:
-        mailError.message === "Email service is not configured" ||
-        mailError.message === "Email sender is not configured"
-          ? "Email verification is not configured on the server yet"
-          : mailError.message === "Email service timed out"
-            ? "Email service timed out. Please try again in a moment."
-          : "Failed to send verification email",
-    });
+      return res.status(500).json({
+        error: getFriendlyEmailErrorMessage(mailError),
+      });
   }
 
   res.json({ message: "Verification code sent" });
@@ -971,10 +954,7 @@ router.post("/request-email-change", authenticateTokenAllowUnverified, async (re
 
     console.error(error);
     res.status(500).json({
-      error:
-        error.message === "Email service timed out"
-          ? "Email service timed out. Please try again in a moment."
-          : "Failed to start email change",
+      error: getFriendlyEmailErrorMessage(error),
     });
   }
 });
