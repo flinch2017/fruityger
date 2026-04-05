@@ -24,7 +24,38 @@ const ACCOUNT_CHANGE_TOKEN_MINUTES = 15;
 const ACCOUNT_DELETION_RECOVERY_DAYS = 30;
 const normalizeBaseUrl = (value = "") => String(value).trim().replace(/\/+$/, "");
 
+const getMobileAppBaseUrl = () =>
+  normalizeBaseUrl(
+    process.env.MOBILE_APP_URL ||
+      process.env.APP_DEEP_LINK_URL ||
+      process.env.REACT_NATIVE_APP_URL ||
+      ""
+  );
+
+const isMobileClientRequest = (req) => {
+  const explicitClient =
+    req?.get?.("x-fruityger-client") ||
+    req?.get?.("x-client-platform") ||
+    req?.body?.client ||
+    req?.body?.platform ||
+    "";
+
+  if (/mobile|native|react-native|ios|android/i.test(String(explicitClient))) {
+    return true;
+  }
+
+  const userAgent = String(req?.get?.("user-agent") || "");
+  const hasBrowserOrigin = Boolean(req?.get?.("origin"));
+
+  return /reactnative|expo|okhttp/i.test(userAgent) && !hasBrowserOrigin;
+};
+
 const getFrontendBaseUrl = (req) => {
+  const mobileAppUrl = getMobileAppBaseUrl();
+  if (mobileAppUrl && isMobileClientRequest(req)) {
+    return mobileAppUrl;
+  }
+
   const configuredUrl = normalizeBaseUrl(
     process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS?.split(",")[0] || ""
   );
