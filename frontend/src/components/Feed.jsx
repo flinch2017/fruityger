@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import CommentSheet from "./CommentSheet";
 import "../css/Feed.css";
@@ -8,6 +8,7 @@ import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function Feed() {
   const navigate = useNavigate();
+  const location = useLocation();
   const loaderRef = useRef(null);
   const videoRefs = useRef({});
   const observerRef = useRef(null);
@@ -44,6 +45,10 @@ export default function Feed() {
 
   const LIMIT = 5;
   const currentUserId = localStorage.getItem("userId");
+  const feedMode = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("mode") === "following" ? "following" : "discover";
+  }, [location.search]);
 
   const mergeUniquePosts = (existingPosts, incomingPosts) => {
     const seen = new Set();
@@ -116,7 +121,7 @@ export default function Feed() {
 
     try {
       const res = await fetch(
-        `http://localhost:5000/api/main/feed?limit=${LIMIT}&offset=${currentOffset}`,
+        `http://localhost:5000/api/main/feed?limit=${LIMIT}&offset=${currentOffset}&mode=${feedMode}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -173,7 +178,7 @@ export default function Feed() {
     setOffset(0);
     setHasMore(true);
     fetchPosts({ initial: true });
-  }, []);
+  }, [feedMode]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -657,8 +662,9 @@ export default function Feed() {
             <div className="feed-empty-text">
               <h3>It&apos;s a little quiet here</h3>
               <p>
-                Your feed is still empty. Follow more fruity people or come back
-                soon for fresh posts drifting in.
+                {feedMode === "following"
+                  ? "Follow more fruity people and their posts will start drifting in here."
+                  : "Your discover feed is still empty right now. Come back soon for fresh posts drifting in."}
               </p>
             </div>
           </div>

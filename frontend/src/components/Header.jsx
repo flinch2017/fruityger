@@ -1,5 +1,18 @@
-import { useNavigate, useLocation } from "react-router-dom";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  FaBell,
+  FaCog,
+  FaCompass,
+  FaEnvelope,
+  FaHome,
+  FaPlus,
+  FaSearch,
+  FaSignOutAlt,
+  FaUser,
+  FaUsers,
+  FaChevronDown,
+} from "react-icons/fa";
 import "../css/Header.css";
 import { clearAuthStorage } from "../utils/authSession";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
@@ -18,15 +31,21 @@ export default function Header() {
   });
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [feedMenuOpen, setFeedMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const profileRef = useRef(null);
   const searchRef = useRef(null);
+  const feedMenuRef = useRef(null);
 
   const hideMobileFab =
     location.pathname === "/create" ||
     location.pathname === "/messages" ||
     location.pathname.startsWith("/chat/");
+  const feedMode = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("mode") === "following" ? "following" : "discover";
+  }, [location.search]);
   const storedProfilePic = localStorage.getItem("profile_pic") || "";
   const profileUsername = currentUser?.username || localStorage.getItem("username") || "You";
   const profileHandle = `@${profileUsername}`;
@@ -45,6 +64,12 @@ export default function Header() {
 
   const toggleDropdown = () => setDropdownOpen((prev) => !prev);
 
+  const updateFeedMode = (mode) => {
+    const nextMode = mode === "following" ? "following" : "discover";
+    navigate(`/feed?mode=${nextMode}`);
+    setFeedMenuOpen(false);
+  };
+
   const handleFeedNav = () => {
     if (location.pathname === "/feed") {
       window.dispatchEvent(new CustomEvent("fruityger:feed-refresh"));
@@ -52,7 +77,7 @@ export default function Header() {
       return;
     }
 
-    navigate("/feed");
+    navigate(`/feed?mode=${feedMode}`);
   };
 
   useEffect(() => {
@@ -187,6 +212,10 @@ export default function Header() {
         setMobileSearchOpen(false);
         setSearchFocused(false);
       }
+
+      if (feedMenuRef.current && !feedMenuRef.current.contains(e.target)) {
+        setFeedMenuOpen(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -250,6 +279,7 @@ export default function Header() {
   useEffect(() => {
     setSearchFocused(false);
     setMobileSearchOpen(false);
+    setFeedMenuOpen(false);
   }, [location.pathname, location.search]);
 
   const hasSuggestions =
@@ -294,16 +324,16 @@ export default function Header() {
         className="search-suggestion-item search-suggestion-primary"
         onClick={() => submitSearch(searchQuery)}
       >
-        <span className="search-suggestion-icon">🔎</span>
+        <span className="search-suggestion-icon">
+          <FaSearch />
+        </span>
         <span className="search-suggestion-copy">
           <strong>Search for "{searchQuery.trim()}"</strong>
           <span>See all matching profiles, posts, and hashtags</span>
         </span>
       </button>
 
-      {searchLoading && (
-        <div className="search-suggestion-state">Finding matches...</div>
-      )}
+      {searchLoading && <div className="search-suggestion-state">Finding matches...</div>}
 
       {!searchLoading && searchSuggestions.users.length > 0 && (
         <div className="search-suggestion-group">
@@ -324,7 +354,7 @@ export default function Header() {
                 {user.profile_pic ? (
                   <img src={getSafeMediaUrl(user.profile_pic)} alt={user.username} />
                 ) : (
-                  "👤"
+                  <FaUser />
                 )}
               </span>
               <span className="search-suggestion-copy">
@@ -376,7 +406,9 @@ export default function Header() {
                 setMobileSearchOpen(false);
               }}
             >
-              <span className="search-suggestion-icon">✦</span>
+              <span className="search-suggestion-icon">
+                <FaCompass />
+              </span>
               <span className="search-suggestion-copy">
                 <strong>{post.username}</strong>
                 <span>{post.caption ? post.caption.slice(0, 56) : "Open post"}</span>
@@ -391,12 +423,61 @@ export default function Header() {
   return (
     <>
       <header className="top-header">
-        <div
-          className="logo fruityger-font"
-          onClick={handleFeedNav}
-          style={{ cursor: "pointer" }}
-        >
-          Fruityger
+        <div className="header-brand-cluster">
+          <div
+            className="logo fruityger-font"
+            onClick={handleFeedNav}
+            style={{ cursor: "pointer" }}
+          >
+            Fruityger
+          </div>
+
+          <div className="feed-mode-switch" ref={feedMenuRef}>
+            <div className="feed-mode-tabs" aria-label="Feed view">
+              <button
+                type="button"
+                className={`feed-mode-tab ${feedMode === "discover" ? "active" : ""}`}
+                onClick={() => updateFeedMode("discover")}
+              >
+                Discover
+              </button>
+              <button
+                type="button"
+                className={`feed-mode-tab ${feedMode === "following" ? "active" : ""}`}
+                onClick={() => updateFeedMode("following")}
+              >
+                Following
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className="feed-mode-mobile-toggle"
+              onClick={() => setFeedMenuOpen((prev) => !prev)}
+            >
+              <span>{feedMode === "following" ? "Following" : "Discover"}</span>
+              <FaChevronDown className={feedMenuOpen ? "open" : ""} />
+            </button>
+
+            {feedMenuOpen && (
+              <div className="feed-mode-mobile-menu">
+                <button
+                  type="button"
+                  className={`feed-mode-mobile-item ${feedMode === "discover" ? "active" : ""}`}
+                  onClick={() => updateFeedMode("discover")}
+                >
+                  Discover
+                </button>
+                <button
+                  type="button"
+                  className={`feed-mode-mobile-item ${feedMode === "following" ? "active" : ""}`}
+                  onClick={() => updateFeedMode("following")}
+                >
+                  Following
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="search-shell" ref={searchRef}>
@@ -421,25 +502,28 @@ export default function Header() {
               onClick={() => navigate("/create")}
               title="Create Post"
             >
-              ➕
+              <FaPlus />
             </button>
 
-            <button className={`nav-button ${location.pathname === "/feed" ? "active" : ""}`} onClick={handleFeedNav}>
-              🏠
+            <button
+              className={`nav-button ${location.pathname === "/feed" ? "active" : ""}`}
+              onClick={handleFeedNav}
+            >
+              <FaHome />
             </button>
 
             <button
               className="nav-button mobile-search-btn"
               onClick={() => setMobileSearchOpen((prev) => !prev)}
             >
-              🔍
+              <FaSearch />
             </button>
 
             <button
               className={`nav-button nav-button-bell ${location.pathname === "/notifications" ? "active" : ""}`}
               onClick={() => navigate("/notifications")}
             >
-              🔔
+              <FaBell />
               {notificationUnreadCount > 0 && (
                 <span className="nav-badge">
                   {notificationUnreadCount > 9 ? "9+" : notificationUnreadCount}
@@ -451,7 +535,7 @@ export default function Header() {
               className={`nav-button nav-button-message ${location.pathname === "/messages" ? "active" : ""}`}
               onClick={() => navigate("/messages")}
             >
-              ✉️
+              <FaEnvelope />
               {messageUnreadCount > 0 && (
                 <span className="nav-badge">
                   {messageUnreadCount > 9 ? "9+" : messageUnreadCount}
@@ -473,7 +557,7 @@ export default function Header() {
                     }}
                   />
                 ) : (
-                  "👤"
+                  <FaUser />
                 )}
               </div>
 
@@ -484,7 +568,7 @@ export default function Header() {
                       {mergedProfilePic ? (
                         <img src={getSafeMediaUrl(mergedProfilePic)} alt="Avatar" />
                       ) : (
-                        "👤"
+                        <FaUser />
                       )}
                     </div>
                     <div className="profile-dropdown-copy">
@@ -503,7 +587,9 @@ export default function Header() {
                       setDropdownOpen(false);
                     }}
                   >
-                    <span className="profile-dropdown-icon">👤</span>
+                    <span className="profile-dropdown-icon">
+                      <FaUser />
+                    </span>
                     <span>Profile</span>
                   </button>
 
@@ -514,7 +600,9 @@ export default function Header() {
                       setDropdownOpen(false);
                     }}
                   >
-                    <span className="profile-dropdown-icon">⚙️</span>
+                    <span className="profile-dropdown-icon">
+                      <FaCog />
+                    </span>
                     <span>Settings</span>
                   </button>
 
@@ -526,7 +614,9 @@ export default function Header() {
                       navigate("/login");
                     }}
                   >
-                    <span className="profile-dropdown-icon">⏻</span>
+                    <span className="profile-dropdown-icon">
+                      <FaSignOutAlt />
+                    </span>
                     <span>Logout</span>
                   </button>
                 </div>
@@ -561,14 +651,10 @@ export default function Header() {
       </header>
 
       {!hideMobileFab && (
-        <button
-          className="mobile-fab-create"
-          onClick={() => navigate("/create")}
-        >
-          ➕
+        <button className="mobile-fab-create" onClick={() => navigate("/create")}>
+          <FaPlus />
         </button>
       )}
     </>
   );
 }
-

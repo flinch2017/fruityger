@@ -537,6 +537,21 @@ router.get("/feed", authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const limit = parseInt(req.query.limit, 10) || 5;
     const offset = parseInt(req.query.offset, 10) || 0;
+    const mode = req.query.mode === "following" ? "following" : "discover";
+    const feedScopeClause =
+      mode === "following"
+        ? `
+          (
+            p.user_id = $1
+            OR p.user_id IN (
+              SELECT following_id
+              FROM follows
+              WHERE follower_id = $1
+            )
+            OR latest_repost.reposter_id IS NOT NULL
+          )
+        `
+        : `TRUE`;
 
     const { rows } = await pool.query(
       `
@@ -654,15 +669,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
           LIMIT 1
         ) latest
       ) latest_repost ON TRUE
-      WHERE (
-          p.user_id = $1
-          OR p.user_id IN (
-            SELECT following_id
-            FROM follows
-            WHERE follower_id = $1
-          )
-          OR latest_repost.reposter_id IS NOT NULL
-        )
+      WHERE ${feedScopeClause}
         AND NOT EXISTS (
           SELECT 1
           FROM blocked_users bu
@@ -680,7 +687,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
       [userId, limit, offset]
     );
 
-    res.json({ posts: rows });
+    res.json({ posts: rows, mode });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
