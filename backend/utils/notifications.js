@@ -148,6 +148,8 @@ export async function sendPushToUser(recipientId, payload = {}) {
       body: JSON.stringify({
         to: expoPushToken,
         sound: "default",
+        channelId: "default",
+        priority: "high",
         title: payload.title || "Fruityger",
         body: payload.body || "You have a new notification.",
         data: payload.data || {},
@@ -155,6 +157,17 @@ export async function sendPushToUser(recipientId, payload = {}) {
     });
 
     const result = await response.json().catch(() => null);
+    if (!response.ok) {
+      console.error("Expo push request failed:", response.status, result);
+      return null;
+    }
+
+    const ticket = Array.isArray(result?.data) ? result.data[0] : result?.data;
+    if (ticket?.status === "error") {
+      console.error("Expo push ticket rejected:", ticket.details?.error || ticket.message || ticket);
+      return null;
+    }
+
     return result;
   } catch (error) {
     console.error("Push notification send failed:", error);
