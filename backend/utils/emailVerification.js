@@ -4,6 +4,7 @@ import pool from "../db.js";
 const VERIFICATION_WINDOW_HOURS = 24;
 
 let cachedTransporter = null;
+let cachedTransporterPromise = null;
 
 export const ensureEmailVerificationSchema = async () => {
   await pool.query(`
@@ -37,34 +38,75 @@ export const ensurePasswordResetSchema = async () => {
 export const generateVerificationCode = () =>
   String(Math.floor(100000 + Math.random() * 900000));
 
-const getTransporter = () => {
-  if (cachedTransporter) {
-    return cachedTransporter;
-  }
-
-  const {
-    SMTP_HOST,
-    SMTP_PORT,
-    SMTP_USER,
-    SMTP_PASS,
-    SMTP_SECURE,
-  } = process.env;
+const createTransporter = () => {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_SECURE } = process.env;
 
   if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS) {
     throw new Error("Email service is not configured");
   }
 
-  cachedTransporter = nodemailer.createTransport({
+  return nodemailer.createTransport({
     host: SMTP_HOST,
     port: Number(SMTP_PORT),
     secure: SMTP_SECURE === "true" || Number(SMTP_PORT) === 465,
+    requireTLS: Number(SMTP_PORT) === 587,
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 50,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
     auth: {
       user: SMTP_USER,
       pass: SMTP_PASS,
     },
   });
+};
 
-  return cachedTransporter;
+const getTransporter = async () => {
+  if (cachedTransporter) {
+    return cachedTransporter;
+  }
+
+  if (!cachedTransporterPromise) {
+    cachedTransporterPromise = (async () => {
+      const transporter = createTransporter();
+
+      try {
+        await transporter.verify();
+      } catch (error) {
+        transporter.close();
+        throw error;
+      }
+
+      cachedTransporter = transporter;
+      return transporter;
+    })().catch((error) => {
+      cachedTransporterPromise = null;
+      cachedTransporter = null;
+      throw error;
+    });
+  }
+
+  return cachedTransporterPromise;
+};
+
+const sendMailWithTimeout = async (mailOptions) => {
+  const transporter = await getTransporter();
+
+  try {
+    await Promise.race([
+      transporter.sendMail(mailOptions),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Email service timed out")), 20000);
+      }),
+    ]);
+  } catch (error) {
+    cachedTransporterPromise = null;
+    cachedTransporter = null;
+    transporter.close();
+    throw error;
+  }
 };
 
 export const sendVerificationEmail = async ({ to, username, code }) => {
@@ -73,9 +115,7 @@ export const sendVerificationEmail = async ({ to, username, code }) => {
     throw new Error("Email sender is not configured");
   }
 
-  const transporter = getTransporter();
-
-  await transporter.sendMail({
+  await sendMailWithTimeout({
     from,
     to,
     subject: "Verify your Fruityger account",
@@ -114,9 +154,7 @@ export const sendEmailChangeConfirmationEmail = async ({
     throw new Error("Email sender is not configured");
   }
 
-  const transporter = getTransporter();
-
-  await transporter.sendMail({
+  await sendMailWithTimeout({
     from,
     to,
     subject: "Confirm your new Fruityger email",
@@ -158,9 +196,7 @@ export const sendPasswordResetEmail = async ({
     throw new Error("Email sender is not configured");
   }
 
-  const transporter = getTransporter();
-
-  await transporter.sendMail({
+  await sendMailWithTimeout({
     from,
     to,
     subject: "Your Fruityger password reset code",

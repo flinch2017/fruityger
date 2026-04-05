@@ -364,6 +364,8 @@ router.post("/signup", async (req, res) => {
           mailError.message === "Email service is not configured" ||
           mailError.message === "Email sender is not configured"
             ? "Email verification is not configured on the server yet"
+            : mailError.message === "Email service timed out"
+              ? "Email service timed out. Please try again in a moment."
             : "Failed to send verification email",
       });
     }
@@ -564,6 +566,8 @@ router.post("/forgot-password/send-code", async (req, res) => {
         error.message === "Email service is not configured" ||
         error.message === "Email sender is not configured"
           ? "Password reset email is not configured on the server yet"
+          : error.message === "Email service timed out"
+            ? "Email service timed out. Please try again in a moment."
           : "Failed to send reset code",
     });
   }
@@ -832,6 +836,8 @@ router.post("/resend-verification", authenticateTokenAllowUnverified, async (req
         mailError.message === "Email service is not configured" ||
         mailError.message === "Email sender is not configured"
           ? "Email verification is not configured on the server yet"
+          : mailError.message === "Email service timed out"
+            ? "Email service timed out. Please try again in a moment."
           : "Failed to send verification email",
     });
   }
@@ -964,7 +970,12 @@ router.post("/request-email-change", authenticateTokenAllowUnverified, async (re
     }
 
     console.error(error);
-    res.status(500).json({ error: "Failed to start email change" });
+    res.status(500).json({
+      error:
+        error.message === "Email service timed out"
+          ? "Email service timed out. Please try again in a moment."
+          : "Failed to start email change",
+    });
   }
 });
 

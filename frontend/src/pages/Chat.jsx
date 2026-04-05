@@ -67,16 +67,14 @@ export default function Chat() {
   const attachmentInputRef = useRef(null);
 
   const scrollToBottom = (behavior = "smooth") => {
-    messagesEndRef.current?.scrollIntoView({ behavior });
+    messagesContainerRef.current?.scrollTo({ top: 0, behavior });
   };
 
   const updateStickiness = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    const distanceFromBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight;
-    shouldStickToBottomRef.current = distanceFromBottom < 120;
+    shouldStickToBottomRef.current = container.scrollTop < 120;
   };
 
   const dispatchMessagesRefresh = () => {
@@ -253,7 +251,7 @@ export default function Chat() {
       const other = chat.user1.id === userId ? chat.user2 : chat.user1;
 
       setOtherUser(other);
-      setMessages(data.messages || []);
+      setMessages([...(data.messages || [])].reverse());
       setBlockedByMe(Boolean(chat.blocked_by_me));
       setBlockedByThem(Boolean(chat.blocked_by_them));
       dispatchMessagesRefresh();
@@ -604,7 +602,7 @@ export default function Chat() {
           return prev;
         }
 
-        return [...prev, data];
+        return [data, ...prev];
       });
 
       setInput("");
@@ -1060,7 +1058,7 @@ export default function Chat() {
         ) : (
           messages.map((msg, index) => {
             const isMine = String(msg.sender_id) === String(userId);
-            const isLastMessage = index === messages.length - 1;
+            const isLastMessage = index === 0;
             const bubbleClass = `message-bubble ${
               isMine && isLastMessage ? "new-message" : ""
             }`;
