@@ -590,6 +590,7 @@ router.post("/send", authenticateToken, async (req, res) => {
       await sendPushToUser(receiverId, {
         title: senderResult.rows[0]?.username || "New message",
         body: storedContent,
+        categoryId: "messageReply",
         data: {
           type: "message",
           chatId,

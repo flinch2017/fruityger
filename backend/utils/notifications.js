@@ -149,6 +149,7 @@ export async function sendPushToUser(recipientId, payload = {}) {
         to: expoPushToken,
         sound: "default",
         channelId: "default",
+        categoryId: payload.categoryId || undefined,
         priority: "high",
         title: payload.title || "Fruityger",
         body: payload.body || "You have a new notification.",
