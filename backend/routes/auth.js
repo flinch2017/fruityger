@@ -1076,13 +1076,8 @@ router.post("/request-email-change", authenticateTokenAllowUnverified, async (re
       return res.status(400).json({ error: "You already have a pending email change" });
     }
 
-    const emailChangeToken = jwt.sign(
-      { id: req.user.id, newEmail: normalizedEmail, purpose: "confirm-email-change" },
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" }
-    );
+    const emailChangeToken = generateVerificationCode();
     const emailChangeExpiry = getVerificationExpiry();
-    const confirmUrl = `${getFrontendBaseUrl(req)}/confirm-email-change?token=${encodeURIComponent(emailChangeToken)}`;
 
     await pool.query(
       `
@@ -1098,11 +1093,11 @@ router.post("/request-email-change", authenticateTokenAllowUnverified, async (re
     await sendEmailChangeConfirmationEmail({
       to: normalizedEmail,
       username: user.username,
-      confirmUrl,
+      code: emailChangeToken,
     });
 
     res.json({
-      message: "Confirmation email sent to your new address",
+      message: "Confirmation code sent to your new address",
     });
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError || error.message === "Missing verification token" || error.message === "Invalid verification token") {
@@ -1202,6 +1197,87 @@ router.post("/confirm-email-change", async (req, res) => {
       return res.status(400).json({ error: "This confirmation link is invalid or expired" });
     }
 
+    console.error(error);
+    res.status(500).json({ error: "Failed to confirm email change" });
+  }
+});
+
+router.post("/confirm-email-change-code", authenticateTokenAllowUnverified, async (req, res) => {
+  const { code } = req.body || {};
+
+  if (!/^\d{6}$/.test(String(code || ""))) {
+    return res.status(400).json({ error: "Please enter a valid 6-digit code" });
+  }
+
+  try {
+    await ensureAccountChangeSchema();
+
+    const { rows } = await pool.query(
+      `
+      SELECT id, username, email, profile_pic, birth_date, email_verified, interests, interests_completed, pending_email, email_change_token, email_change_expires_at, created_at
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [req.user.id]
+    );
+
+    const user = rows[0];
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (
+      !user.pending_email ||
+      String(user.email_change_token || "") !== String(code) ||
+      !user.email_change_expires_at ||
+      new Date(user.email_change_expires_at) <= new Date()
+    ) {
+      return res.status(400).json({ error: "This confirmation code is invalid or expired" });
+    }
+
+    const duplicateEmail = await pool.query(
+      `
+      SELECT id
+      FROM users
+      WHERE LOWER(email) = LOWER($1)
+        AND id <> $2
+      LIMIT 1
+      `,
+      [user.pending_email, user.id]
+    );
+
+    if (duplicateEmail.rows.length > 0) {
+      return res.status(400).json({ error: "That email is already in use" });
+    }
+
+    const updateResult = await pool.query(
+      `
+      UPDATE users
+      SET email = pending_email,
+          pending_email = NULL,
+          email_change_token = NULL,
+          email_change_expires_at = NULL
+      WHERE id = $1
+      RETURNING id, username, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, created_at
+      `,
+      [user.id]
+    );
+
+    await pool.query(
+      `
+      UPDATE newsletter_subscriptions
+      SET email = $2
+      WHERE user_id = $1
+      `,
+      [user.id, updateResult.rows[0].email]
+    ).catch(() => null);
+
+    res.json({
+      user: sanitizeUser(updateResult.rows[0]),
+      message: "Email updated successfully",
+    });
+  } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to confirm email change" });
   }

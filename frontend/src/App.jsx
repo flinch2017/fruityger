@@ -247,6 +247,16 @@ function App() {
           }
         />
         <Route
+          path="/settings/confirm-email-change"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <ConfirmEmailChange />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
           path="/settings/change-password"
           element={
             <PrivateRoute>

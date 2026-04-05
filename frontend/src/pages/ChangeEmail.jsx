@@ -60,7 +60,7 @@ export default function ChangeEmail() {
       }
 
       persistAuthSession({ user: { pending_email: email } });
-      navigate("/settings", { replace: true });
+      navigate("/settings/confirm-email-change", { replace: true });
     } catch (error) {
       console.error(error);
       setFeedback({ type: "error", message: "Couldn't start email change." });
@@ -94,7 +94,7 @@ export default function ChangeEmail() {
           />
 
           <button type="submit" className="settings-flow-primary" disabled={submitting}>
-            {submitting ? "Sending..." : "Send confirmation email"}
+            {submitting ? "Sending..." : "Send confirmation code"}
           </button>
         </form>
       </div>

@@ -93,6 +93,14 @@
     0 0 16px rgba(0, 212, 255, 0.34);
 }
 
+.settings-flow-code {
+  text-align: center;
+  letter-spacing: 0.34em;
+  font-size: 1.15rem;
+  font-weight: 700;
+  padding-left: 24px;
+}
+
 .settings-flow-primary {
   margin-top: 10px;
   border: none;

@@ -300,7 +300,7 @@ export const sendVerificationEmail = async ({ to, username, code }) => {
 export const sendEmailChangeConfirmationEmail = async ({
   to,
   username,
-  confirmUrl,
+  code,
 }) => {
   const from = getConfiguredFromAddress();
   if (!from) {
@@ -315,10 +315,9 @@ export const sendEmailChangeConfirmationEmail = async ({
       `Hi ${username || "there"},`,
       "",
       "We received a request to change the email on your Fruityger account.",
-      "Click the link below to confirm your new email address:",
-      confirmUrl,
+      `Your 6-digit confirmation code is: ${code}`,
       "",
-      `This link expires in ${VERIFICATION_WINDOW_HOURS} hours.`,
+      `This code expires in ${VERIFICATION_WINDOW_HOURS} hours.`,
       "",
       "If you did not request this change, you can ignore this email.",
     ].join("\n"),
@@ -326,13 +325,11 @@ export const sendEmailChangeConfirmationEmail = async ({
       <div style="font-family:Segoe UI,sans-serif;background:#f3fcff;padding:24px;color:#13566f">
         <div style="max-width:520px;margin:0 auto;background:rgba(255,255,255,0.96);border-radius:24px;padding:28px;border:1px solid rgba(255,255,255,0.9);box-shadow:0 18px 40px rgba(0,160,220,0.12)">
           <h2 style="margin:0 0 12px;color:#0f84ab">Confirm your new Fruityger email</h2>
-          <p style="margin:0 0 18px;line-height:1.6">Hi ${username || "there"}, click the button below to finish changing the email on your account.</p>
-          <div style="margin:24px 0;text-align:center">
-            <a href="${confirmUrl}" style="display:inline-block;padding:14px 22px;border-radius:999px;background:linear-gradient(145deg,#00e0ff,#00bfff,#4facfe);color:#ffffff;text-decoration:none;font-weight:700;box-shadow:0 10px 22px rgba(0,160,220,0.24)">
-              Confirm new email
-            </a>
+          <p style="margin:0 0 18px;line-height:1.6">Hi ${username || "there"}, use this 6-digit code to finish changing the email on your account.</p>
+          <div style="margin:22px 0;padding:16px 18px;border-radius:18px;background:linear-gradient(160deg,#e8fbff,#c8f3ff);font-size:30px;font-weight:700;letter-spacing:10px;text-align:center;color:#0a6d90">
+            ${code}
           </div>
-          <p style="margin:0;line-height:1.6">This link expires in ${VERIFICATION_WINDOW_HOURS} hours.</p>
+          <p style="margin:0;line-height:1.6">This code expires in ${VERIFICATION_WINDOW_HOURS} hours.</p>
         </div>
       </div>
     `,
