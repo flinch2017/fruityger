@@ -80,17 +80,29 @@ const createTransporter = () => {
     throw new Error("Email service is not configured");
   }
 
+  const normalizedHost = String(SMTP_HOST || "").trim().toLowerCase();
+  const port = Number(SMTP_PORT);
+  const secure = SMTP_SECURE === "true" || port === 465;
+  const isGmailHost = normalizedHost === "smtp.gmail.com";
+
   return nodemailer.createTransport({
+    ...(isGmailHost ? { service: "gmail" } : {}),
     host: SMTP_HOST,
-    port: Number(SMTP_PORT),
-    secure: SMTP_SECURE === "true" || Number(SMTP_PORT) === 465,
-    requireTLS: Number(SMTP_PORT) === 587,
+    port,
+    secure,
+    requireTLS: !secure,
     pool: true,
     maxConnections: 3,
     maxMessages: 50,
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 20000,
+    family: 4,
+    tls: {
+      servername: SMTP_HOST,
+      minVersion: "TLSv1.2",
+      rejectUnauthorized: true,
+    },
     auth: {
       user: SMTP_USER,
       pass: SMTP_PASS,
