@@ -6,6 +6,7 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import { r2 } from "../utils/r2.js";
+import { sendPushToUser } from "../utils/notifications.js";
 
 const router = express.Router();
 
@@ -567,16 +568,36 @@ router.post("/send", authenticateToken, async (req, res) => {
 
     const lastMessagePreview = storedContent;
 
-    await pool.query(
-      `
-      UPDATE chats
-      SET last_message = $1, last_message_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-      `,
-      [lastMessagePreview, chatId]
-    );
+      await pool.query(
+        `
+        UPDATE chats
+        SET last_message = $1, last_message_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+        `,
+        [lastMessagePreview, chatId]
+      );
 
-    const enrichedMessage = await fetchMessageForUser(message.rows[0].id, senderId);
+      const senderResult = await pool.query(
+        `
+        SELECT username
+        FROM users
+        WHERE id = $1
+        LIMIT 1
+        `,
+        [senderId]
+      );
+
+      await sendPushToUser(receiverId, {
+        title: senderResult.rows[0]?.username || "New message",
+        body: storedContent,
+        data: {
+          type: "message",
+          chatId,
+          senderId,
+        },
+      });
+
+      const enrichedMessage = await fetchMessageForUser(message.rows[0].id, senderId);
 
     res.json(enrichedMessage || message.rows[0]);
   } catch (err) {

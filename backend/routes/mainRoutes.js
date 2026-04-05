@@ -5,6 +5,7 @@ import { authenticateToken } from "../middleware/auth.js";
 import { deleteR2Object } from "../utils/r2Delete.js";
 import { ensureUserOnboardingSchema, normalizeInterests } from "../utils/userOnboarding.js";
 import { ensureRepostSchema } from "../utils/reposts.js";
+import { ensurePushNotificationSubscriptionsTable } from "../utils/notifications.js";
 
 const router = express.Router();
 
@@ -103,8 +104,26 @@ async function ensureNotificationPreferencesSchema() {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS push_notification_subscriptions (
           user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-          subscribed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          expo_push_token TEXT UNIQUE,
+          platform TEXT,
+          subscribed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
+      `);
+
+      await pool.query(`
+        ALTER TABLE push_notification_subscriptions
+        ADD COLUMN IF NOT EXISTS expo_push_token TEXT
+      `);
+
+      await pool.query(`
+        ALTER TABLE push_notification_subscriptions
+        ADD COLUMN IF NOT EXISTS platform TEXT
+      `);
+
+      await pool.query(`
+        ALTER TABLE push_notification_subscriptions
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       `);
     })().catch((error) => {
       notificationPreferencesSchemaReadyPromise = null;
@@ -410,6 +429,68 @@ router.put("/settings/notifications", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update notification settings" });
+  }
+});
+
+router.post("/settings/push-token", authenticateToken, async (req, res) => {
+  const expoPushToken = String(req.body?.expoPushToken || "").trim();
+  const platform = String(req.body?.platform || "").trim().toLowerCase();
+
+  if (!expoPushToken) {
+    return res.status(400).json({ error: "expoPushToken is required" });
+  }
+
+  try {
+    await ensureNotificationPreferencesSchema();
+    await ensurePushNotificationSubscriptionsTable();
+
+    await pool.query(
+      `
+      DELETE FROM push_notification_subscriptions
+      WHERE expo_push_token = $2
+        AND user_id <> $1
+      `,
+      [req.user.id, expoPushToken]
+    );
+
+    await pool.query(
+      `
+      INSERT INTO push_notification_subscriptions (user_id, expo_push_token, platform, subscribed_at, updated_at)
+      VALUES ($1, $2, $3, NOW(), NOW())
+      ON CONFLICT (user_id)
+      DO UPDATE SET
+        expo_push_token = EXCLUDED.expo_push_token,
+        platform = EXCLUDED.platform,
+        subscribed_at = NOW(),
+        updated_at = NOW()
+      `,
+      [req.user.id, expoPushToken, platform || null]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to register push token" });
+  }
+});
+
+router.delete("/settings/push-token", authenticateToken, async (req, res) => {
+  try {
+    await ensureNotificationPreferencesSchema();
+    await ensurePushNotificationSubscriptionsTable();
+
+    await pool.query(
+      `
+      DELETE FROM push_notification_subscriptions
+      WHERE user_id = $1
+      `,
+      [req.user.id]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to unregister push token" });
   }
 });
 
