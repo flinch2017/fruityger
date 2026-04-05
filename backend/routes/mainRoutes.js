@@ -145,7 +145,8 @@ router.get("/user/:username", authenticateToken, async (req, res) => {
       `SELECT id, username, email, profile_pic, bio, interests, interests_completed, created_at
        FROM users
        WHERE username = $1
-         AND deactivated_at IS NULL`,
+         AND deactivated_at IS NULL
+         AND deleted_at IS NULL`,
       [username]
     );
 
@@ -201,7 +202,8 @@ router.get("/me", authenticateToken, async (req, res) => {
       `SELECT id, username, email, profile_pic, profile_pic_key, bio, interests, interests_completed, created_at
        FROM users
        WHERE id = $1
-         AND deactivated_at IS NULL`,
+         AND deactivated_at IS NULL
+         AND deleted_at IS NULL`,
       [req.user.id]
     );
 
@@ -240,6 +242,7 @@ router.get("/public/user/:username", async (req, res) => {
       FROM users
       WHERE username = $1
         AND deactivated_at IS NULL
+        AND deleted_at IS NULL
       LIMIT 1
       `,
       [username]
@@ -455,6 +458,8 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
       FROM posts p
       JOIN users u
         ON u.id = p.user_id
+       AND u.deactivated_at IS NULL
+       AND u.deleted_at IS NULL
         LEFT JOIN LATERAL (
           WITH eligible_reposts AS (
             SELECT
@@ -465,6 +470,8 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
             FROM reposts r
             JOIN users ru
               ON ru.id = r.user_id
+             AND ru.deactivated_at IS NULL
+             AND ru.deleted_at IS NULL
             WHERE r.post_id = p.post_id
               AND (
                 r.user_id = $1
@@ -581,6 +588,8 @@ router.get("/feed", authenticateToken, async (req, res) => {
       FROM posts p
       JOIN users u
         ON u.id = p.user_id
+       AND u.deactivated_at IS NULL
+       AND u.deleted_at IS NULL
       LEFT JOIN LATERAL (
         WITH eligible_reposts AS (
           SELECT
@@ -591,6 +600,8 @@ router.get("/feed", authenticateToken, async (req, res) => {
           FROM reposts r
           JOIN users ru
             ON ru.id = r.user_id
+           AND ru.deactivated_at IS NULL
+           AND ru.deleted_at IS NULL
           WHERE r.post_id = p.post_id
             AND (
               r.user_id = $1

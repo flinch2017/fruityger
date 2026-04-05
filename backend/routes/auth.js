@@ -21,6 +21,7 @@ import { deleteR2Object } from "../utils/r2Delete.js";
 const router = express.Router();
 const SALT_ROUNDS = 10;
 const ACCOUNT_CHANGE_TOKEN_MINUTES = 15;
+const ACCOUNT_DELETION_RECOVERY_DAYS = 30;
 const getFrontendBaseUrl = () =>
   String(
     process.env.FRONTEND_URL ||
@@ -51,6 +52,16 @@ const ensureAccountStatusSchema = async () => {
   await pool.query(`
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS deactivated_at TIMESTAMPTZ
+  `);
+
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ
+  `);
+
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS deletion_recovery_expires_at TIMESTAMPTZ
   `);
 };
 
@@ -87,6 +98,64 @@ const cleanupUserDependencies = async (client, userId) => {
     const columnName = quoteIdentifier(dependency.column_name);
 
     await client.query(`DELETE FROM ${tableName} WHERE ${columnName} = $1`, [userId]);
+  }
+};
+
+const getDeletionRecoveryExpiry = () => {
+  const value = new Date();
+  value.setDate(value.getDate() + ACCOUNT_DELETION_RECOVERY_DAYS);
+  return value;
+};
+
+const reactivateUserAccount = async (userId) => {
+  const { rows } = await pool.query(
+    `
+    UPDATE users
+    SET deactivated_at = NULL,
+        deleted_at = NULL,
+        deletion_recovery_expires_at = NULL
+    WHERE id = $1
+    RETURNING id, username, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, created_at
+    `,
+    [userId]
+  );
+
+  return rows[0] || null;
+};
+
+const cleanupExpiredDeletedUsers = async () => {
+  await ensureAccountStatusSchema();
+
+  const client = await pool.connect();
+
+  try {
+    const { rows } = await client.query(
+      `
+      SELECT id, profile_pic_key
+      FROM users
+      WHERE deleted_at IS NOT NULL
+        AND deletion_recovery_expires_at IS NOT NULL
+        AND deletion_recovery_expires_at <= NOW()
+      `
+    );
+
+    for (const row of rows) {
+      await client.query("BEGIN");
+      try {
+        await cleanupUserDependencies(client, row.id);
+        await client.query(`DELETE FROM users WHERE id = $1`, [row.id]);
+        await client.query("COMMIT");
+
+        if (row.profile_pic_key) {
+          await deleteR2Object(row.profile_pic_key).catch(() => null);
+        }
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => null);
+        throw error;
+      }
+    }
+  } finally {
+    client.release();
   }
 };
 
@@ -294,6 +363,7 @@ router.post("/signup", async (req, res) => {
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
+  await cleanupExpiredDeletedUsers();
 
   const normalizedUsername = normalizeUsername(username);
   const usernameValidationMessage = getUsernameValidationMessage(normalizedUsername);
@@ -391,6 +461,7 @@ router.post("/login", async (req, res) => {
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
+  await cleanupExpiredDeletedUsers();
 
   try {
     const isHuman = await verifyTurnstile(challengeToken, req.ip);
@@ -418,10 +489,6 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Invalid email or password" });
     }
 
-    if (user.deactivated_at) {
-      return res.status(403).json({ error: "This account has been deactivated" });
-    }
-
     if (!user.email_verified && user.email_verification_expires_at && new Date(user.email_verification_expires_at) <= new Date()) {
       await cleanupExpiredUnverifiedUsers();
       return res.status(400).json({ error: "This verification window expired. Please sign up again." });
@@ -432,12 +499,34 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Invalid email or password" });
     }
 
-    const token = signToken(user.id);
+    let sessionUser = user;
+
+    if (
+      user.deleted_at &&
+      user.deletion_recovery_expires_at &&
+      new Date(user.deletion_recovery_expires_at) > new Date()
+    ) {
+      const restoredUser = await reactivateUserAccount(user.id);
+      if (!restoredUser) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      sessionUser = restoredUser;
+    } else if (user.deleted_at) {
+      return res.status(403).json({ error: "This account can no longer be recovered" });
+    } else if (user.deactivated_at) {
+      const reactivatedUser = await reactivateUserAccount(user.id);
+      if (!reactivatedUser) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      sessionUser = reactivatedUser;
+    }
+
+    const token = signToken(sessionUser.id);
 
     res.json({
-      user: sanitizeUser(user),
+      user: sanitizeUser(sessionUser),
       token,
-      requiresVerification: !user.email_verified,
+      requiresVerification: !sessionUser.email_verified,
     });
   } catch (err) {
     console.error(err);
@@ -454,6 +543,7 @@ router.post("/forgot-password/search", async (req, res) => {
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
+  await cleanupExpiredDeletedUsers();
 
   if (normalizedQuery.length < 2) {
     return res.json({ accounts: [] });
@@ -467,6 +557,7 @@ router.post("/forgot-password/search", async (req, res) => {
       WHERE email_verified = TRUE
         AND pending_email IS NULL
         AND deactivated_at IS NULL
+        AND deleted_at IS NULL
         AND (
           LOWER(username) LIKE $1
           OR LOWER(email) LIKE $1
@@ -506,6 +597,7 @@ router.post("/forgot-password/send-code", async (req, res) => {
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
+  await cleanupExpiredDeletedUsers();
 
   if (!userId) {
     return res.status(400).json({ error: "User is required" });
@@ -514,7 +606,7 @@ router.post("/forgot-password/send-code", async (req, res) => {
   try {
     const { rows } = await pool.query(
       `
-      SELECT id, username, email, pending_email, email_verified, deactivated_at
+      SELECT id, username, email, pending_email, email_verified, deactivated_at, deleted_at
       FROM users
       WHERE id = $1
       LIMIT 1
@@ -523,7 +615,7 @@ router.post("/forgot-password/send-code", async (req, res) => {
     );
 
     const user = rows[0];
-    if (!user || !user.email_verified || user.pending_email || user.deactivated_at) {
+    if (!user || !user.email_verified || user.pending_email || user.deactivated_at || user.deleted_at) {
       return res.status(404).json({ error: "Account not found" });
     }
 
@@ -570,6 +662,7 @@ router.post("/forgot-password/verify-code", async (req, res) => {
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
+  await cleanupExpiredDeletedUsers();
 
   if (!userId || !/^\d{6}$/.test(String(code || ""))) {
     return res.status(400).json({ error: "Please enter a valid 6-digit code" });
@@ -578,7 +671,7 @@ router.post("/forgot-password/verify-code", async (req, res) => {
   try {
     const { rows } = await pool.query(
       `
-      SELECT id, password_reset_code, password_reset_expires_at, email_verified, pending_email, deactivated_at
+      SELECT id, password_reset_code, password_reset_expires_at, email_verified, pending_email, deactivated_at, deleted_at
       FROM users
       WHERE id = $1
       LIMIT 1
@@ -587,7 +680,7 @@ router.post("/forgot-password/verify-code", async (req, res) => {
     );
 
     const user = rows[0];
-    if (!user || !user.email_verified || user.pending_email || user.deactivated_at) {
+    if (!user || !user.email_verified || user.pending_email || user.deactivated_at || user.deleted_at) {
       return res.status(404).json({ error: "Account not found" });
     }
 
@@ -640,7 +733,7 @@ router.post("/forgot-password/change-password", async (req, res) => {
 
     const { rows } = await pool.query(
       `
-      SELECT id, deactivated_at
+      SELECT id, deactivated_at, deleted_at
       FROM users
       WHERE id = $1
       LIMIT 1
@@ -648,7 +741,7 @@ router.post("/forgot-password/change-password", async (req, res) => {
       [decoded.id]
     );
 
-    if (!rows[0] || rows[0].deactivated_at) {
+    if (!rows[0] || rows[0].deactivated_at || rows[0].deleted_at) {
       return res.status(404).json({ error: "Account not found" });
     }
 
@@ -682,10 +775,11 @@ router.get("/session", authenticateTokenAllowUnverified, async (req, res) => {
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
+  await cleanupExpiredDeletedUsers();
 
   const { rows } = await pool.query(
     `
-    SELECT id, username, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, email_verification_expires_at, created_at, deactivated_at
+    SELECT id, username, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, email_verification_expires_at, created_at, deactivated_at, deleted_at
     FROM users
     WHERE id = $1
     LIMIT 1
@@ -698,8 +792,8 @@ router.get("/session", authenticateTokenAllowUnverified, async (req, res) => {
     return res.status(401).json({ error: "User not found" });
   }
 
-  if (user.deactivated_at) {
-    return res.status(403).json({ error: "Account deactivated" });
+  if (user.deactivated_at || user.deleted_at) {
+    return res.status(403).json({ error: "Account unavailable" });
   }
 
   res.json({
@@ -717,6 +811,7 @@ router.post("/verify-email", authenticateTokenAllowUnverified, async (req, res) 
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
+  await cleanupExpiredDeletedUsers();
 
   if (!code || !/^\d{6}$/.test(String(code))) {
     return res.status(400).json({ error: "Please enter a valid 6-digit code" });
@@ -780,6 +875,7 @@ router.post("/resend-verification", authenticateTokenAllowUnverified, async (req
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
+  await cleanupExpiredDeletedUsers();
 
   const { rows } = await pool.query(
     `
@@ -835,7 +931,14 @@ router.post("/verify-current-password", authenticateTokenAllowUnverified, async 
     return res.status(400).json({ error: "Current password is required" });
   }
 
-  if (!["email-change", "password-change"].includes(purpose)) {
+  if (
+    ![
+      "email-change",
+      "password-change",
+      "account-deactivate",
+      "account-delete",
+    ].includes(purpose)
+  ) {
     return res.status(400).json({ error: "Invalid verification purpose" });
   }
 
@@ -1114,10 +1217,14 @@ router.post("/cancel-email-change", authenticateTokenAllowUnverified, async (req
 });
 
 router.post("/deactivate-account", authenticateTokenAllowUnverified, async (req, res) => {
+  const { approvalToken } = req.body || {};
+
   try {
     await ensureAccountStatusSchema();
     await ensureAccountChangeSchema();
     await ensurePasswordResetSchema();
+    await cleanupExpiredDeletedUsers();
+    verifyAccountChangeToken(approvalToken, req.user.id, "account-deactivate");
 
     const result = await pool.query(
       `
@@ -1129,7 +1236,7 @@ router.post("/deactivate-account", authenticateTokenAllowUnverified, async (req,
           password_reset_code = NULL,
           password_reset_expires_at = NULL
       WHERE id = $1
-        AND deactivated_at IS NULL
+        AND deleted_at IS NULL
       RETURNING id
       `,
       [req.user.id]
@@ -1147,49 +1254,80 @@ router.post("/deactivate-account", authenticateTokenAllowUnverified, async (req,
       .catch(() => null);
     await pool.query(`DELETE FROM active_users WHERE user_id = $1`, [req.user.id]).catch(() => null);
 
-    res.json({ message: "Account deactivated" });
+    res.json({ message: "Account deactivated. Log in again anytime to reactivate it." });
   } catch (error) {
+    if (
+      error instanceof jwt.JsonWebTokenError ||
+      error instanceof jwt.TokenExpiredError ||
+      error.message === "Missing verification token" ||
+      error.message === "Invalid verification token"
+    ) {
+      return res
+        .status(403)
+        .json({ error: "Password confirmation expired. Please verify again." });
+    }
+
     console.error(error);
     res.status(500).json({ error: "Failed to deactivate account" });
   }
 });
 
 router.delete("/delete-account", authenticateTokenAllowUnverified, async (req, res) => {
-  const client = await pool.connect();
+  const { approvalToken } = req.body || {};
 
   try {
     await ensureAccountStatusSchema();
+    await ensureAccountChangeSchema();
+    await ensurePasswordResetSchema();
+    await cleanupExpiredDeletedUsers();
+    verifyAccountChangeToken(approvalToken, req.user.id, "account-delete");
 
-    await client.query("BEGIN");
-    await cleanupUserDependencies(client, req.user.id);
-
-    const result = await client.query(
+    const result = await pool.query(
       `
-      DELETE FROM users
+      UPDATE users
+      SET deleted_at = NOW(),
+          deletion_recovery_expires_at = $2,
+          deactivated_at = NOW(),
+          pending_email = NULL,
+          email_change_token = NULL,
+          email_change_expires_at = NULL,
+          password_reset_code = NULL,
+          password_reset_expires_at = NULL
       WHERE id = $1
-      RETURNING profile_pic_key
+        AND deleted_at IS NULL
+      RETURNING id
       `,
-      [req.user.id]
+      [req.user.id, getDeletionRecoveryExpiry()]
     );
 
     if (!result.rows[0]) {
-      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Account not found" });
     }
 
-    await client.query("COMMIT");
+    await pool
+      .query(`DELETE FROM newsletter_subscriptions WHERE user_id = $1`, [req.user.id])
+      .catch(() => null);
+    await pool
+      .query(`DELETE FROM push_notification_subscriptions WHERE user_id = $1`, [req.user.id])
+      .catch(() => null);
+    await pool.query(`DELETE FROM active_users WHERE user_id = $1`, [req.user.id]).catch(() => null);
 
-    if (result.rows[0].profile_pic_key) {
-      await deleteR2Object(result.rows[0].profile_pic_key).catch(() => null);
+    res.json({ message: "Account deleted. You can recover it by logging in again within 30 days." });
+  } catch (error) {
+
+    if (
+      error instanceof jwt.JsonWebTokenError ||
+      error instanceof jwt.TokenExpiredError ||
+      error.message === "Missing verification token" ||
+      error.message === "Invalid verification token"
+    ) {
+      return res
+        .status(403)
+        .json({ error: "Password confirmation expired. Please verify again." });
     }
 
-    res.json({ message: "Account deleted" });
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => null);
     console.error(error);
     res.status(500).json({ error: "Failed to delete account" });
-  } finally {
-    client.release();
   }
 });
 

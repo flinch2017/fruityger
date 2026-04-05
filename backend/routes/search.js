@@ -77,6 +77,8 @@ router.get("/hashtags/:tag", authenticateToken, async (req, res) => {
         ON p.post_id = ph.post_id
       JOIN users u
         ON u.id = p.user_id
+       AND u.deactivated_at IS NULL
+       AND u.deleted_at IS NULL
       LEFT JOIN LATERAL (
         SELECT pm.media_url, pm.media_type
         FROM post_media pm
@@ -209,6 +211,8 @@ router.get("/", authenticateToken, async (req, res) => {
       FROM users u
       WHERE u.username ILIKE $1
         AND u.id <> $2
+        AND u.deactivated_at IS NULL
+        AND u.deleted_at IS NULL
         AND NOT EXISTS (
           SELECT 1
           FROM blocked_users bu
@@ -288,6 +292,8 @@ router.get("/", authenticateToken, async (req, res) => {
       FROM posts p
       JOIN users u
         ON p.user_id = u.id
+       AND u.deactivated_at IS NULL
+       AND u.deleted_at IS NULL
       LEFT JOIN LATERAL (
         WITH eligible_reposts AS (
           SELECT
@@ -298,6 +304,8 @@ router.get("/", authenticateToken, async (req, res) => {
           FROM reposts r
           JOIN users ru
             ON ru.id = r.user_id
+           AND ru.deactivated_at IS NULL
+           AND ru.deleted_at IS NULL
           WHERE r.post_id = p.post_id
             AND (
               r.user_id = $2

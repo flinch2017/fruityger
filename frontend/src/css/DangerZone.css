@@ -110,6 +110,7 @@
 
 .danger-card-copy,
 .danger-confirm,
+.danger-secondary-btn,
 .danger-action-btn {
   position: relative;
   z-index: 1;
@@ -168,26 +169,41 @@
     0 0 16px rgba(255, 159, 198, 0.3);
 }
 
+.danger-secondary-btn,
 .danger-action-btn {
   border: none;
   border-radius: 999px;
   min-height: 48px;
   padding: 14px 20px;
-  color: #fff;
   font-size: 0.96rem;
   font-weight: 700;
-  cursor: pointer;
   transition: transform 0.22s ease, box-shadow 0.22s ease, opacity 0.22s ease;
 }
 
+.danger-secondary-btn {
+  color: #9f5573;
+  cursor: pointer;
+  background: linear-gradient(145deg, rgba(255,255,255,0.94), rgba(255,236,243,0.84));
+  box-shadow:
+    0 10px 22px rgba(255, 153, 195, 0.18),
+    inset 0 0 14px rgba(255,255,255,0.48);
+}
+
+.danger-secondary-btn:hover:not(:disabled),
 .danger-action-btn:hover:not(:disabled) {
   transform: translateY(-2px);
 }
 
+.danger-secondary-btn:disabled,
 .danger-action-btn:disabled {
   cursor: not-allowed;
   opacity: 0.6;
   transform: none;
+}
+
+.danger-action-btn {
+  color: #fff;
+  cursor: pointer;
 }
 
 .danger-action-warn {

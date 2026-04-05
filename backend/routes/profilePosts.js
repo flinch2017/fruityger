@@ -16,7 +16,7 @@ router.get("/posts", authenticateToken, async (req, res) => {
 
     if (username) {
       const userResult = await pool.query(
-        "SELECT id FROM users WHERE username = $1 LIMIT 1",
+        "SELECT id FROM users WHERE username = $1 AND deactivated_at IS NULL AND deleted_at IS NULL LIMIT 1",
         [username]
       );
 
@@ -129,6 +129,8 @@ router.get("/posts", authenticateToken, async (req, res) => {
       FROM profile_activity activity
       JOIN users author
         ON author.id = activity.user_id
+       AND author.deactivated_at IS NULL
+       AND author.deleted_at IS NULL
       LEFT JOIN likes l
         ON l.post_id = activity.post_id
       LEFT JOIN reposts r
@@ -165,7 +167,7 @@ router.get("/public-posts", async (req, res) => {
     }
 
     const userResult = await pool.query(
-      "SELECT id FROM users WHERE username = $1 LIMIT 1",
+      "SELECT id FROM users WHERE username = $1 AND deactivated_at IS NULL AND deleted_at IS NULL LIMIT 1",
       [username]
     );
 
@@ -240,6 +242,8 @@ router.get("/public-posts", async (req, res) => {
       FROM profile_activity activity
       JOIN users author
         ON author.id = activity.user_id
+       AND author.deactivated_at IS NULL
+       AND author.deleted_at IS NULL
       LEFT JOIN likes l
         ON l.post_id = activity.post_id
       LEFT JOIN reposts r

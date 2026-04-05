@@ -15,7 +15,7 @@ router.post("/toggle", authenticateToken, async (req, res) => {
 
   try {
     const userRes = await pool.query(
-      "SELECT id FROM users WHERE username = $1",
+      "SELECT id FROM users WHERE username = $1 AND deactivated_at IS NULL AND deleted_at IS NULL",
       [username]
     );
 
@@ -71,7 +71,7 @@ router.get("/status", authenticateToken, async (req, res) => {
 
   try {
     const userRes = await pool.query(
-      "SELECT id FROM users WHERE username = $1",
+      "SELECT id FROM users WHERE username = $1 AND deactivated_at IS NULL AND deleted_at IS NULL",
       [username]
     );
 
@@ -107,7 +107,7 @@ router.get("/list", authenticateToken, async (req, res) => {
 
   try {
     const userRes = await pool.query(
-      "SELECT id, username FROM users WHERE username = $1",
+      "SELECT id, username FROM users WHERE username = $1 AND deactivated_at IS NULL AND deleted_at IS NULL",
       [username]
     );
 
@@ -132,6 +132,8 @@ router.get("/list", authenticateToken, async (req, res) => {
         FROM follows f
         JOIN users u
           ON u.id = f.follower_id
+         AND u.deactivated_at IS NULL
+         AND u.deleted_at IS NULL
         WHERE f.following_id = $1
         ORDER BY f.created_at DESC, u.username ASC
       `
@@ -149,6 +151,8 @@ router.get("/list", authenticateToken, async (req, res) => {
         FROM follows f
         JOIN users u
           ON u.id = f.following_id
+         AND u.deactivated_at IS NULL
+         AND u.deleted_at IS NULL
         WHERE f.follower_id = $1
         ORDER BY f.created_at DESC, u.username ASC
       `;
