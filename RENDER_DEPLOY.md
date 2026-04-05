@@ -8,6 +8,8 @@ Your local `.env` files contain real credentials. Before a public deploy, rotate
 - `JWT_SECRET`
 - `TURNSTILE_SITE_KEY`
 - `TURNSTILE_SECRET_KEY`
+- `RESEND_API_KEY`
+- `RESEND_FROM`
 - `SMTP_*`
 - `R2_*`
 - any Supabase keys if they were exposed beyond local use
@@ -29,6 +31,8 @@ Set these environment variables:
 - `JWT_EXPIRY`
 - `TURNSTILE_SITE_KEY`
 - `TURNSTILE_SECRET_KEY`
+- `RESEND_API_KEY`
+- `RESEND_FROM`
 - `FRONTEND_URL`
 - `ALLOWED_ORIGINS`
 - `SMTP_HOST`

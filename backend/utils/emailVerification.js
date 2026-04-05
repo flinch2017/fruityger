@@ -6,10 +6,37 @@ const VERIFICATION_WINDOW_HOURS = 24;
 let cachedTransporter = null;
 let cachedTransporterPromise = null;
 
+const getConfiguredFromAddress = () =>
+  process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || "";
+
+const getResendApiKey = () =>
+  String(process.env.RESEND_API_KEY || "").trim();
+
 export const getFriendlyEmailErrorMessage = (error) => {
   const message = String(error?.message || "").trim();
   const code = String(error?.code || "").trim().toUpperCase();
   const responseCode = Number(error?.responseCode || 0);
+  const status = Number(error?.status || error?.response?.status || 0);
+
+  if (message === "Resend is not configured") {
+    return "Email delivery is not configured on the server yet.";
+  }
+
+  if (message === "Resend sender is not configured") {
+    return "Resend sender is not configured yet.";
+  }
+
+  if (status === 401 || status === 403) {
+    return "Resend rejected the API key. Please check your Resend configuration.";
+  }
+
+  if (status === 422) {
+    return "Resend rejected the email request. Please check the sender domain and recipient details.";
+  }
+
+  if (status >= 500 && status < 600) {
+    return "Resend is temporarily unavailable. Please try again in a moment.";
+  }
 
   if (
     message === "Email service is not configured" ||
@@ -110,6 +137,36 @@ const createTransporter = () => {
   });
 };
 
+const sendWithResend = async ({ from, to, subject, text, html }) => {
+  const apiKey = getResendApiKey();
+
+  if (!apiKey) {
+    throw new Error("Resend is not configured");
+  }
+
+  if (!from) {
+    throw new Error("Resend sender is not configured");
+  }
+
+  await axios.post(
+    "https://api.resend.com/emails",
+    {
+      from,
+      to: Array.isArray(to) ? to : [to],
+      subject,
+      text,
+      html,
+    },
+    {
+      timeout: 20000,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+};
+
 const getTransporter = async () => {
   if (cachedTransporter) {
     return cachedTransporter;
@@ -139,6 +196,11 @@ const getTransporter = async () => {
 };
 
 const sendMailWithTimeout = async (mailOptions) => {
+  if (getResendApiKey()) {
+    await sendWithResend(mailOptions);
+    return;
+  }
+
   const transporter = await getTransporter();
 
   try {
@@ -157,7 +219,7 @@ const sendMailWithTimeout = async (mailOptions) => {
 };
 
 export const sendVerificationEmail = async ({ to, username, code }) => {
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const from = getConfiguredFromAddress();
   if (!from) {
     throw new Error("Email sender is not configured");
   }
@@ -196,7 +258,7 @@ export const sendEmailChangeConfirmationEmail = async ({
   username,
   confirmUrl,
 }) => {
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const from = getConfiguredFromAddress();
   if (!from) {
     throw new Error("Email sender is not configured");
   }
@@ -238,7 +300,7 @@ export const sendPasswordResetEmail = async ({
   username,
   code,
 }) => {
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const from = getConfiguredFromAddress();
   if (!from) {
     throw new Error("Email sender is not configured");
   }
