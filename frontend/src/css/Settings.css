@@ -126,6 +126,13 @@
   gap: 6px;
 }
 
+.settings-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
 .settings-row-label,
 .settings-toggle-text {
   color: #0e7697;
@@ -163,6 +170,14 @@
   box-shadow:
     0 10px 22px rgba(0, 183, 255, 0.28),
     inset 0 0 14px rgba(255,255,255,0.28);
+}
+
+.settings-row-btn-secondary {
+  color: #0f7394;
+  background: linear-gradient(145deg, rgba(255,255,255,0.96), rgba(216,247,255,0.86));
+  box-shadow:
+    0 10px 22px rgba(0, 183, 255, 0.16),
+    inset 0 0 14px rgba(255,255,255,0.4);
 }
 
 .settings-row-btn:hover,
@@ -278,6 +293,12 @@
   .settings-toggle-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .settings-row-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .settings-row-btn,

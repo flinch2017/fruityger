@@ -198,17 +198,33 @@ export default function Settings() {
               )}
             </div>
 
-            <button
-              type="button"
-              className="settings-row-btn"
-              onClick={() =>
-                pendingEmail
-                  ? handleCancelPendingEmailChange()
-                  : navigate("/settings/verify-current-password?action=email")
-              }
-            >
-              {pendingEmail ? "Cancel changes" : "Change"}
-            </button>
+            {pendingEmail ? (
+              <div className="settings-row-actions">
+                <button
+                  type="button"
+                  className="settings-row-btn"
+                  onClick={() => navigate("/settings/confirm-email-change")}
+                >
+                  Enter code
+                </button>
+
+                <button
+                  type="button"
+                  className="settings-row-btn settings-row-btn-secondary"
+                  onClick={handleCancelPendingEmailChange}
+                >
+                  Cancel changes
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="settings-row-btn"
+                onClick={() => navigate("/settings/verify-current-password?action=email")}
+              >
+                Change
+              </button>
+            )}
           </div>
 
           <div className="settings-row">
