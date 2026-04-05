@@ -8,10 +8,35 @@ let cachedTransporter = null;
 let cachedTransporterPromise = null;
 
 const getConfiguredFromAddress = () =>
-  process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || "";
+  process.env.MJ_FROM_EMAIL ||
+  process.env.MJ_FROM ||
+  process.env.RESEND_FROM ||
+  process.env.SMTP_FROM ||
+  process.env.SMTP_USER ||
+  "";
 
-const getResendApiKey = () =>
-  String(process.env.RESEND_API_KEY || "").trim();
+const getMailjetApiKey = () =>
+  String(process.env.MJ_APIKEY_PUBLIC || process.env.MAILJET_API_KEY || "").trim();
+
+const getMailjetSecretKey = () =>
+  String(process.env.MJ_APIKEY_PRIVATE || process.env.MAILJET_SECRET_KEY || "").trim();
+
+const parseFromAddress = (value = "") => {
+  const trimmed = String(value || "").trim();
+  const match = trimmed.match(/^(.*)<([^>]+)>$/);
+
+  if (match) {
+    return {
+      name: match[1].trim().replace(/^"|"$/g, ""),
+      email: match[2].trim(),
+    };
+  }
+
+  return {
+    name: "",
+    email: trimmed,
+  };
+};
 
 export const getFriendlyEmailErrorMessage = (error) => {
   const message = String(error?.message || "").trim();
@@ -19,24 +44,24 @@ export const getFriendlyEmailErrorMessage = (error) => {
   const responseCode = Number(error?.responseCode || 0);
   const status = Number(error?.status || error?.response?.status || 0);
 
-  if (message === "Resend is not configured") {
+  if (message === "Mailjet is not configured") {
     return "Email delivery is not configured on the server yet.";
   }
 
-  if (message === "Resend sender is not configured") {
-    return "Resend sender is not configured yet.";
+  if (message === "Mailjet sender is not configured") {
+    return "Mailjet sender is not configured yet.";
   }
 
   if (status === 401 || status === 403) {
-    return "Resend rejected the API key. Please check your Resend configuration.";
+    return "Mailjet rejected the API credentials. Please check your Mailjet configuration.";
   }
 
   if (status === 422) {
-    return "Resend rejected the email request. Please check the sender domain and recipient details.";
+    return "Mailjet rejected the email request. Please check the sender setup and recipient details.";
   }
 
   if (status >= 500 && status < 600) {
-    return "Resend is temporarily unavailable. Please try again in a moment.";
+    return "Mailjet is temporarily unavailable. Please try again in a moment.";
   }
 
   if (
@@ -138,30 +163,48 @@ const createTransporter = () => {
   });
 };
 
-const sendWithResend = async ({ from, to, subject, text, html }) => {
-  const apiKey = getResendApiKey();
+const sendWithMailjet = async ({ from, to, subject, text, html }) => {
+  const apiKey = getMailjetApiKey();
+  const secretKey = getMailjetSecretKey();
 
-  if (!apiKey) {
-    throw new Error("Resend is not configured");
+  if (!apiKey || !secretKey) {
+    throw new Error("Mailjet is not configured");
   }
 
   if (!from) {
-    throw new Error("Resend sender is not configured");
+    throw new Error("Mailjet sender is not configured");
+  }
+
+  const parsedFrom = parseFromAddress(from);
+  if (!parsedFrom.email) {
+    throw new Error("Mailjet sender is not configured");
   }
 
   await axios.post(
-    "https://api.resend.com/emails",
+    "https://api.mailjet.com/v3.1/send",
     {
-      from,
-      to: Array.isArray(to) ? to : [to],
-      subject,
-      text,
-      html,
+      Messages: [
+        {
+          From: {
+            Email: parsedFrom.email,
+            ...(parsedFrom.name ? { Name: parsedFrom.name } : {}),
+          },
+          To: (Array.isArray(to) ? to : [to]).map((email) => ({
+            Email: String(email).trim(),
+          })),
+          Subject: subject,
+          TextPart: text,
+          HTMLPart: html,
+        },
+      ],
     },
     {
       timeout: 20000,
+      auth: {
+        username: apiKey,
+        password: secretKey,
+      },
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
     }
@@ -197,8 +240,8 @@ const getTransporter = async () => {
 };
 
 const sendMailWithTimeout = async (mailOptions) => {
-  if (getResendApiKey()) {
-    await sendWithResend(mailOptions);
+  if (getMailjetApiKey() && getMailjetSecretKey()) {
+    await sendWithMailjet(mailOptions);
     return;
   }
 

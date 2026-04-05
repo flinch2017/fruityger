@@ -25,9 +25,11 @@ services:
         sync: false
       - key: TURNSTILE_SECRET_KEY
         sync: false
-      - key: RESEND_API_KEY
+      - key: MJ_APIKEY_PUBLIC
         sync: false
-      - key: RESEND_FROM
+      - key: MJ_APIKEY_PRIVATE
+        sync: false
+      - key: MJ_FROM_EMAIL
         sync: false
       - key: SMTP_HOST
         sync: false
