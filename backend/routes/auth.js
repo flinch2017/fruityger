@@ -22,14 +22,37 @@ const router = express.Router();
 const SALT_ROUNDS = 10;
 const ACCOUNT_CHANGE_TOKEN_MINUTES = 15;
 const ACCOUNT_DELETION_RECOVERY_DAYS = 30;
-const getFrontendBaseUrl = () =>
-  String(
-    process.env.FRONTEND_URL ||
-      process.env.ALLOWED_ORIGINS?.split(",")[0] ||
-      "http://localhost:5173"
-  )
-    .trim()
-    .replace(/\/+$/, "");
+const normalizeBaseUrl = (value = "") => String(value).trim().replace(/\/+$/, "");
+
+const getFrontendBaseUrl = (req) => {
+  const configuredUrl = normalizeBaseUrl(
+    process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS?.split(",")[0] || ""
+  );
+
+  if (configuredUrl && !/localhost|127\.0\.0\.1/i.test(configuredUrl)) {
+    return configuredUrl;
+  }
+
+  const requestOrigin = normalizeBaseUrl(req?.get?.("origin") || "");
+  if (requestOrigin) {
+    return requestOrigin;
+  }
+
+  const referer = normalizeBaseUrl(req?.get?.("referer") || "");
+  if (referer) {
+    try {
+      return new URL(referer).origin;
+    } catch {
+      return referer;
+    }
+  }
+
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+
+  return "http://localhost:5173";
+};
 
 const ensureAccountChangeSchema = async () => {
   await pool.query(`
@@ -1028,7 +1051,7 @@ router.post("/request-email-change", authenticateTokenAllowUnverified, async (re
       { expiresIn: "24h" }
     );
     const emailChangeExpiry = getVerificationExpiry();
-    const confirmUrl = `${getFrontendBaseUrl()}/confirm-email-change?token=${encodeURIComponent(emailChangeToken)}`;
+    const confirmUrl = `${getFrontendBaseUrl(req)}/confirm-email-change?token=${encodeURIComponent(emailChangeToken)}`;
 
     await pool.query(
       `
