@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import axios from "axios";
 import pool from "../db.js";
 
 const VERIFICATION_WINDOW_HOURS = 24;
