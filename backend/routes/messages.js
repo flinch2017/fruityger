@@ -19,6 +19,7 @@ let messageReactionsSchemaReadyPromise = null;
 let messageAttachmentsSchemaReadyPromise = null;
 let chatGroupsSchemaReadyPromise = null;
 let groupChatSchemaReadyPromise = null;
+let deletedGroupChatsTableReadyPromise = null;
 
 const CHAT_ATTACHMENT_MAX_SIZE = 5 * 1024 * 1024;
 const allowedDocumentExtensions = new Set([".pdf", ".docx"]);
@@ -57,9 +58,35 @@ const uploadAttachment = multer({
   },
 });
 
+const uploadGroupImage = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: CHAT_ATTACHMENT_MAX_SIZE,
+    files: 1,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (String(file.mimetype || "").toLowerCase().startsWith("image/")) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error("Only image files are allowed"));
+  },
+});
+
 const parseChatAttachment = (req, res) =>
   new Promise((resolve, reject) => {
     uploadAttachment.single("attachment")(req, res, (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+
+const parseGroupImage = (req, res) =>
+  new Promise((resolve, reject) => {
+    uploadGroupImage.single("image")(req, res, (error) => {
       if (error) {
         reject(error);
         return;
@@ -323,6 +350,7 @@ async function ensureGroupChatSchema() {
         CREATE TABLE IF NOT EXISTS group_chats (
           id UUID PRIMARY KEY,
           group_name TEXT NOT NULL,
+          group_image TEXT,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           admin_user_ids UUID[] NOT NULL DEFAULT ARRAY[]::uuid[]
@@ -370,6 +398,26 @@ async function ensureGroupChatSchema() {
   }
 
   await groupChatSchemaReadyPromise;
+}
+
+async function ensureDeletedGroupChatsTable() {
+  if (!deletedGroupChatsTableReadyPromise) {
+    deletedGroupChatsTableReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS deleted_group_chats (
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          group_chat_id UUID NOT NULL REFERENCES group_chats(id) ON DELETE CASCADE,
+          deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (user_id, group_chat_id)
+        )
+      `);
+    })().catch((error) => {
+      deletedGroupChatsTableReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await deletedGroupChatsTableReadyPromise;
 }
 
 async function fetchChatMembers(chatId) {
@@ -1463,15 +1511,18 @@ router.get("/groups/chats", authenticateToken, async (req, res) => {
 
   try {
     await ensureGroupChatSchema();
+    await ensureDeletedGroupChatsTable();
 
     const { rows } = await pool.query(
       `
       SELECT
         gc.id,
         gc.group_name,
+        gc.group_image,
         gc.created_at,
         gc.created_by,
         gcm.last_read_at,
+        dgc.deleted_at,
         gm.id AS last_message_id,
         gm.content AS last_message,
         gm.attachment_type AS last_message_attachment_type,
@@ -1493,10 +1544,16 @@ router.get("/groups/chats", authenticateToken, async (req, res) => {
       JOIN group_chat_members gcm
         ON gcm.group_chat_id = gc.id
        AND gcm.user_id = $1
+      LEFT JOIN deleted_group_chats dgc
+        ON dgc.group_chat_id = gc.id
+       AND dgc.user_id = $1
       LEFT JOIN LATERAL (
         SELECT gm.*
         FROM group_messages gm
         WHERE gm.group_chat_id = gc.id
+          AND (
+            dgc.deleted_at IS NULL OR gm.created_at > dgc.deleted_at
+          )
         ORDER BY gm.created_at DESC
         LIMIT 1
       ) gm ON true
@@ -1516,6 +1573,15 @@ router.get("/groups/chats", authenticateToken, async (req, res) => {
           ON u.id = members.user_id
         WHERE members.group_chat_id = gc.id
       ) member_summary ON true
+      WHERE (
+        dgc.group_chat_id IS NULL
+        OR EXISTS (
+          SELECT 1
+          FROM group_messages visible_message
+          WHERE visible_message.group_chat_id = gc.id
+            AND visible_message.created_at > dgc.deleted_at
+        )
+      )
       ORDER BY gm.created_at DESC NULLS LAST, gc.created_at DESC
       `,
       [userId]
@@ -1525,6 +1591,7 @@ router.get("/groups/chats", authenticateToken, async (req, res) => {
       rows.map((chat) => ({
         id: chat.id,
         group_name: chat.group_name,
+        group_image: chat.group_image,
         created_at: chat.created_at,
         created_by: chat.created_by,
         last_message: chat.last_message,
@@ -1640,6 +1707,7 @@ router.get("/groups/chats/:groupChatId", authenticateToken, async (req, res) => 
       SELECT
         gc.id,
         gc.group_name,
+        gc.group_image,
         gc.created_at,
         gc.created_by,
         gc.admin_user_ids,
@@ -1706,6 +1774,7 @@ router.get("/groups/chats/:groupChatId", authenticateToken, async (req, res) => 
       groupChat: {
         id: groupChat.id,
         group_name: groupChat.group_name,
+        group_image: groupChat.group_image,
         created_at: groupChat.created_at,
         created_by: groupChat.created_by,
         admin_user_ids: groupChat.admin_user_ids || [],
@@ -1889,6 +1958,275 @@ router.post("/groups/chats/:groupChatId/read", authenticateToken, async (req, re
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to mark group chat as read" });
+  }
+});
+
+router.patch("/groups/chats/:groupChatId/name", authenticateToken, async (req, res) => {
+  const { groupChatId } = req.params;
+  const userId = req.user.id;
+  const groupName = String(req.body?.groupName || "").trim();
+
+  if (groupName.length < 2) {
+    return res.status(400).json({ error: "Group name is required" });
+  }
+
+  try {
+    await ensureGroupChatSchema();
+
+    const { rows } = await pool.query(
+      `
+      UPDATE group_chats
+      SET group_name = $3
+      WHERE id = $1
+        AND $2 = ANY(admin_user_ids)
+      RETURNING id, group_name
+      `,
+      [groupChatId, userId, groupName]
+    );
+
+    if (rows.length === 0) {
+      return res.status(403).json({ error: "Only admins can change the group name" });
+    }
+
+    res.json({ success: true, group_name: rows[0].group_name });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to change group name" });
+  }
+});
+
+router.post("/groups/chats/:groupChatId/image", authenticateToken, async (req, res) => {
+  const { groupChatId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await parseGroupImage(req, res);
+    await ensureGroupChatSchema();
+
+    if (!req.file) {
+      return res.status(400).json({ error: "Image is required" });
+    }
+
+    const adminResult = await pool.query(
+      `
+      SELECT id
+      FROM group_chats
+      WHERE id = $1
+        AND $2 = ANY(admin_user_ids)
+      LIMIT 1
+      `,
+      [groupChatId, userId]
+    );
+
+    if (adminResult.rows.length === 0) {
+      return res.status(403).json({ error: "Only admins can change the group image" });
+    }
+
+    const extension = path.extname(req.file.originalname || "").toLowerCase() || ".jpg";
+    const imageName = sanitizeFileName(path.basename(req.file.originalname || "group-image", extension));
+    const key = `group-chats/${groupChatId}/image-${uuidv4()}-${imageName}${extension}`;
+
+    await r2.send(
+      new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+      })
+    );
+
+    const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+
+    await pool.query(
+      `
+      UPDATE group_chats
+      SET group_image = $2
+      WHERE id = $1
+      `,
+      [groupChatId, imageUrl]
+    );
+
+    res.json({ success: true, group_image: imageUrl });
+  } catch (err) {
+    console.error(err);
+    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "Images must be 5MB or smaller" });
+    }
+    res.status(500).json({ error: err.message || "Failed to change group image" });
+  }
+});
+
+router.get("/groups/chats/:groupChatId/members", authenticateToken, async (req, res) => {
+  const { groupChatId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await ensureGroupChatSchema();
+
+    const groupResult = await pool.query(
+      `
+      SELECT admin_user_ids
+      FROM group_chats
+      WHERE id = $1
+        AND EXISTS (
+          SELECT 1
+          FROM group_chat_members gcm
+          WHERE gcm.group_chat_id = group_chats.id
+            AND gcm.user_id = $2
+        )
+      LIMIT 1
+      `,
+      [groupChatId, userId]
+    );
+
+    if (groupResult.rows.length === 0) {
+      return res.status(404).json({ error: "Group chat not found" });
+    }
+
+    const adminUserIds = groupResult.rows[0].admin_user_ids || [];
+
+    const membersResult = await pool.query(
+      `
+      SELECT
+        u.id,
+        u.username,
+        u.profile_pic,
+        gcm.joined_at,
+        u.id = ANY($2::uuid[]) AS is_admin
+      FROM group_chat_members gcm
+      JOIN users u
+        ON u.id = gcm.user_id
+      WHERE gcm.group_chat_id = $1
+      ORDER BY LOWER(u.username) ASC
+      `,
+      [groupChatId, adminUserIds]
+    );
+
+    res.json({
+      members: membersResult.rows,
+      admins: membersResult.rows.filter((member) => member.is_admin),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load group members" });
+  }
+});
+
+router.post("/groups/chats/:groupChatId/leave", authenticateToken, async (req, res) => {
+  const { groupChatId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await ensureGroupChatSchema();
+
+    const groupResult = await pool.query(
+      `
+      SELECT admin_user_ids
+      FROM group_chats
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [groupChatId]
+    );
+
+    if (groupResult.rows.length === 0) {
+      return res.status(404).json({ error: "Group chat not found" });
+    }
+
+    await pool.query(
+      `
+      DELETE FROM group_chat_members
+      WHERE group_chat_id = $1
+        AND user_id = $2
+      `,
+      [groupChatId, userId]
+    );
+
+    const remainingMembersResult = await pool.query(
+      `
+      SELECT user_id
+      FROM group_chat_members
+      WHERE group_chat_id = $1
+      ORDER BY joined_at ASC
+      `,
+      [groupChatId]
+    );
+
+    if (remainingMembersResult.rows.length === 0) {
+      await pool.query(`DELETE FROM group_chats WHERE id = $1`, [groupChatId]);
+      return res.json({ success: true, deleted: true });
+    }
+
+    const currentAdmins = (groupResult.rows[0].admin_user_ids || []).filter(
+      (adminId) => String(adminId) !== String(userId)
+    );
+
+    const nextAdmins =
+      currentAdmins.length > 0
+        ? currentAdmins
+        : [remainingMembersResult.rows[0].user_id];
+
+    await pool.query(
+      `
+      UPDATE group_chats
+      SET admin_user_ids = $2::uuid[]
+      WHERE id = $1
+      `,
+      [groupChatId, nextAdmins]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to leave group" });
+  }
+});
+
+router.post("/groups/chats/:groupChatId/delete", authenticateToken, async (req, res) => {
+  const { groupChatId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await ensureGroupChatSchema();
+    await ensureDeletedGroupChatsTable();
+
+    const groupResult = await pool.query(
+      `
+      SELECT admin_user_ids
+      FROM group_chats
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [groupChatId]
+    );
+
+    if (groupResult.rows.length === 0) {
+      return res.status(404).json({ error: "Group chat not found" });
+    }
+
+    const isAdmin = (groupResult.rows[0].admin_user_ids || []).some(
+      (adminId) => String(adminId) === String(userId)
+    );
+
+    if (isAdmin) {
+      await pool.query(`DELETE FROM group_chats WHERE id = $1`, [groupChatId]);
+      return res.json({ success: true, deletedForEveryone: true });
+    }
+
+    await pool.query(
+      `
+      INSERT INTO deleted_group_chats (user_id, group_chat_id, deleted_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (user_id, group_chat_id)
+      DO UPDATE SET deleted_at = EXCLUDED.deleted_at
+      `,
+      [userId, groupChatId]
+    );
+
+    res.json({ success: true, deletedForEveryone: false });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to delete group chat" });
   }
 });
 

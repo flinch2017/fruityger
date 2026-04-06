@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   FaArrowLeft,
+  FaCog,
   FaFileAlt,
   FaFilePdf,
   FaFileWord,
@@ -29,14 +30,28 @@ export default function GroupChat() {
   const [sending, setSending] = useState(false);
   const [selectedAttachment, setSelectedAttachment] = useState(null);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [nameModalOpen, setNameModalOpen] = useState(false);
+  const [draftGroupName, setDraftGroupName] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [membersModalOpen, setMembersModalOpen] = useState(false);
+  const [membersTab, setMembersTab] = useState("members");
+  const [membersPayload, setMembersPayload] = useState({ members: [], admins: [] });
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const messagesContainerRef = useRef(null);
   const previousMessagesLengthRef = useRef(0);
   const shouldStickToBottomRef = useRef(true);
   const refreshTimeoutRef = useRef(null);
   const attachmentInputRef = useRef(null);
+  const groupImageInputRef = useRef(null);
+  const headerMenuRef = useRef(null);
 
   const memberCount = groupChat?.members?.length || 0;
+  const isAdmin = Array.isArray(groupChat?.admin_user_ids)
+    ? groupChat.admin_user_ids.some((adminId) => String(adminId) === String(userId))
+    : false;
 
   const scrollToBottom = (behavior = "smooth") => {
     messagesContainerRef.current?.scrollTo({ top: 0, behavior });
@@ -204,6 +219,17 @@ export default function GroupChat() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (headerMenuRef.current && !headerMenuRef.current.contains(event.target)) {
+        setHeaderMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const handleAttachmentSelection = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -287,6 +313,165 @@ export default function GroupChat() {
     }
   };
 
+  const openMembersModal = async () => {
+    setMembersLoading(true);
+    setMembersModalOpen(true);
+    setHeaderMenuOpen(false);
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/members`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load group members");
+      }
+
+      setMembersPayload({
+        members: data.members || [],
+        admins: data.admins || [],
+      });
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: error.message || "Failed to load members." });
+      setMembersModalOpen(false);
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+  const openNameModal = () => {
+    setDraftGroupName(groupChat?.group_name || "");
+    setNameModalOpen(true);
+    setHeaderMenuOpen(false);
+  };
+
+  const saveGroupName = async () => {
+    if (!draftGroupName.trim() || savingName) return;
+
+    setSavingName(true);
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/name`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ groupName: draftGroupName.trim() }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to change group name");
+      }
+
+      setGroupChat((prev) => (prev ? { ...prev, group_name: data.group_name } : prev));
+      setNameModalOpen(false);
+      dispatchMessagesRefresh();
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: error.message || "Failed to change group name." });
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  const handleGroupImageSelection = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setHeaderMenuOpen(false);
+    setActionLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const res = await fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/image`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to change group image");
+      }
+
+      setGroupChat((prev) => (prev ? { ...prev, group_image: data.group_image } : prev));
+      dispatchMessagesRefresh();
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: error.message || "Failed to change group image." });
+    } finally {
+      if (groupImageInputRef.current) {
+        groupImageInputRef.current.value = "";
+      }
+      setActionLoading(false);
+    }
+  };
+
+  const handleLeaveGroup = async () => {
+    if (actionLoading) return;
+
+    setActionLoading(true);
+    setHeaderMenuOpen(false);
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/leave`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to leave group");
+      }
+
+      dispatchMessagesRefresh();
+      navigate("/messages");
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: error.message || "Failed to leave group." });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (actionLoading) return;
+
+    setActionLoading(true);
+    setHeaderMenuOpen(false);
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/delete`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete group chat");
+      }
+
+      dispatchMessagesRefresh();
+      navigate("/messages");
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: error.message || "Failed to delete group chat." });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const renderMessageAttachment = (message) => {
     if (!message?.attachment_url) return null;
 
@@ -365,13 +550,65 @@ export default function GroupChat() {
         <div className="chat-user-link group-chat-link">
           <div className="chat-user-avatar-wrap">
             <div className="chat-user-avatar">
-              <FaUsers />
+              {groupChat?.group_image ? (
+                <img src={getSafeMediaUrl(groupChat.group_image)} alt={groupChat.group_name || "Group chat"} />
+              ) : (
+                <FaUsers />
+              )}
             </div>
           </div>
           <div className="chat-user-heading">
             <h3>{groupChat?.group_name || "Group chat"}</h3>
             <span className="chat-user-status">{memberCount} members · {memberPreview}</span>
           </div>
+        </div>
+
+        <div ref={headerMenuRef} className="chat-header-menu-wrap">
+          <input
+            ref={groupImageInputRef}
+            type="file"
+            accept="image/*"
+            className="chat-attachment-input"
+            onChange={handleGroupImageSelection}
+          />
+          <button
+            className="chat-header-menu-btn"
+            onClick={() => setHeaderMenuOpen((prev) => !prev)}
+            aria-label="Open group options"
+          >
+            <FaCog />
+          </button>
+
+          {headerMenuOpen && (
+            <div className="chat-header-dropdown">
+              <button
+                className="chat-header-dropdown-item"
+                onClick={() => {
+                  setHeaderMenuOpen(false);
+                  groupImageInputRef.current?.click();
+                }}
+                disabled={!isAdmin || actionLoading}
+              >
+                Change group image
+              </button>
+              <button
+                className="chat-header-dropdown-item"
+                onClick={openNameModal}
+                disabled={!isAdmin || actionLoading}
+              >
+                Change group name
+              </button>
+              <button className="chat-header-dropdown-item" onClick={openMembersModal}>
+                View members
+              </button>
+              <button className="chat-header-dropdown-item danger" onClick={handleLeaveGroup} disabled={actionLoading}>
+                Leave group
+              </button>
+              <button className="chat-header-dropdown-item danger" onClick={handleDeleteGroup} disabled={actionLoading}>
+                Delete group chat
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -476,6 +713,112 @@ export default function GroupChat() {
           </button>
         </div>
       </div>
+
+      {nameModalOpen && (
+        <div className="message-reaction-modal-backdrop">
+          <div className="message-reaction-modal group-settings-modal">
+            <div className="message-reaction-modal-header">
+              <div>
+                <h4>Change group name</h4>
+                <p>Give the chat a fresher title.</p>
+              </div>
+              <button
+                type="button"
+                className="message-reaction-modal-close"
+                onClick={() => setNameModalOpen(false)}
+                aria-label="Close group name modal"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <input
+              type="text"
+              className="group-settings-input"
+              value={draftGroupName}
+              onChange={(e) => setDraftGroupName(e.target.value)}
+              placeholder="Weekend plans"
+              maxLength={60}
+            />
+
+            <div className="group-settings-actions">
+              <button type="button" className="messages-action-btn" onClick={() => setNameModalOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="messages-action-btn primary"
+                onClick={saveGroupName}
+                disabled={savingName || !draftGroupName.trim()}
+              >
+                {savingName ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {membersModalOpen && (
+        <div className="message-reaction-modal-backdrop">
+          <div className="message-reaction-modal group-settings-modal members-settings-modal">
+            <div className="message-reaction-modal-header">
+              <div>
+                <h4>People in this group</h4>
+                <p>Messenger-style member list for the room.</p>
+              </div>
+              <button
+                type="button"
+                className="message-reaction-modal-close"
+                onClick={() => setMembersModalOpen(false)}
+                aria-label="Close members modal"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="group-members-tabs">
+              <button
+                type="button"
+                className={`group-members-tab ${membersTab === "members" ? "active" : ""}`}
+                onClick={() => setMembersTab("members")}
+              >
+                Members
+              </button>
+              <button
+                type="button"
+                className={`group-members-tab ${membersTab === "admins" ? "active" : ""}`}
+                onClick={() => setMembersTab("admins")}
+              >
+                Admins
+              </button>
+            </div>
+
+            {membersLoading ? (
+              <p className="message-reaction-modal-empty">Loading people...</p>
+            ) : (
+              <div className="message-reaction-modal-list">
+                {(membersTab === "admins" ? membersPayload.admins : membersPayload.members).map((member) => (
+                  <div key={member.id} className="message-reaction-modal-item">
+                    <div className="message-reaction-modal-user">
+                      <div className="message-reaction-modal-avatar">
+                        {member.profile_pic ? (
+                          <img src={getSafeMediaUrl(member.profile_pic)} alt={member.username} />
+                        ) : (
+                          <FaUserCircle />
+                        )}
+                      </div>
+                      <div className="message-reaction-modal-copy">
+                        <strong>{member.username}</strong>
+                        <span>{member.is_admin ? "Admin" : "Member"}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

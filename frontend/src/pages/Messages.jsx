@@ -536,8 +536,18 @@ export default function Messages() {
     return date.toLocaleDateString();
   };
 
-  const renderGroupAvatar = (members) => {
-    const previewMembers = (members || []).filter((member) => String(member.id) !== String(userId)).slice(0, 2);
+  const renderGroupAvatar = (chat) => {
+    if (chat?.group_image) {
+      return (
+        <div className="chat-avatar group-avatar single-group-avatar">
+          <img src={getSafeMediaUrl(chat.group_image)} alt="Group" />
+        </div>
+      );
+    }
+
+    const previewMembers = (chat?.members || [])
+      .filter((member) => String(member.id) !== String(userId))
+      .slice(0, 2);
 
     return (
       <div className="chat-avatar group-avatar">
@@ -713,7 +723,7 @@ export default function Messages() {
                     className={`chat-preview group-chat-preview ${isUnread ? "unread-chat" : ""}`}
                     onClick={() => handleGroupChatClick(chat.id)}
                   >
-                    {renderGroupAvatar(chat.members)}
+                    {renderGroupAvatar(chat)}
 
                     <div className="chat-info">
                       <div className="chat-top">
