@@ -412,15 +412,18 @@ router.get("/chats", authenticateToken, async (req, res) => {
     await ensureDeletedChatsTable();
     await ensureDeletedMessagesTable();
     await ensureMessageAttachmentsSchema();
-    await ensureChatGroupsSchema();
 
     const { rows } = await pool.query(
       `
       SELECT
-        c.*,
+        c.id,
+        c.user1_id,
+        c.user2_id,
         dc.deleted_at,
-        viewer_membership.last_read_at AS viewer_last_read_at,
-        m.id AS last_message_id,
+        u1.username AS user1_username,
+        u1.profile_pic AS user1_profile_pic,
+        u2.username AS user2_username,
+        u2.profile_pic AS user2_profile_pic,
         m.content AS last_message,
         m.attachment_type AS last_message_attachment_type,
         m.created_at AS last_message_at,
@@ -433,21 +436,18 @@ router.get("/chats", authenticateToken, async (req, res) => {
             ON unread_dm.message_id = unread.id
            AND unread_dm.user_id = $1
           WHERE unread.chat_id = c.id
-            AND unread.sender_id <> $1
+            AND unread.receiver_id = $1
+            AND unread.read_status = FALSE
             AND unread_dm.message_id IS NULL
             AND (
               dc.deleted_at IS NULL OR unread.created_at > dc.deleted_at
             )
-            AND (
-              viewer_membership.last_read_at IS NULL
-              OR unread.created_at > viewer_membership.last_read_at
-            )
-        ) AS unread_count,
-        COALESCE(member_summary.members, '[]'::json) AS members
+        ) AS unread_count
       FROM chats c
-      JOIN chat_members viewer_membership
-        ON viewer_membership.chat_id = c.id
-       AND viewer_membership.user_id = $1
+      JOIN users u1
+        ON u1.id = c.user1_id
+      JOIN users u2
+        ON u2.id = c.user2_id
       LEFT JOIN deleted_chats dc
         ON dc.chat_id = c.id
        AND dc.user_id = $1
@@ -465,21 +465,7 @@ router.get("/chats", authenticateToken, async (req, res) => {
         ORDER BY m.created_at DESC
         LIMIT 1
       ) m ON true
-      LEFT JOIN LATERAL (
-        SELECT json_agg(
-          json_build_object(
-            'id', u.id,
-            'username', u.username,
-            'profile_pic', u.profile_pic
-          )
-          ORDER BY CASE WHEN u.id = $1 THEN 1 ELSE 0 END, LOWER(u.username) ASC
-        ) AS members
-        FROM chat_members cm
-        JOIN users u
-          ON u.id = cm.user_id
-        WHERE cm.chat_id = c.id
-      ) member_summary ON true
-      WHERE TRUE
+      WHERE (c.user1_id = $1 OR c.user2_id = $1)
         AND (
           dc.chat_id IS NULL
           OR EXISTS (
@@ -498,20 +484,27 @@ router.get("/chats", authenticateToken, async (req, res) => {
       [userId]
     );
 
-    const formatted = rows.map((chat) => ({
-      id: chat.id,
-      is_group: Boolean(chat.is_group),
-      group_name: chat.group_name || "",
-      last_message: chat.last_message,
-      last_message_attachment_type: chat.last_message_attachment_type,
-      last_message_at: chat.last_message_at,
-      last_message_sender_id: chat.last_message_sender_id,
-      last_message_read: chat.last_message_read,
-      unread_count: chat.unread_count,
-      members: Array.isArray(chat.members) ? chat.members : [],
-    }));
-
-    res.json(formatted);
+    res.json(
+      rows.map((chat) => ({
+        id: chat.id,
+        user1: {
+          id: chat.user1_id,
+          username: chat.user1_username,
+          profile_pic: chat.user1_profile_pic,
+        },
+        user2: {
+          id: chat.user2_id,
+          username: chat.user2_username,
+          profile_pic: chat.user2_profile_pic,
+        },
+        last_message: chat.last_message,
+        last_message_attachment_type: chat.last_message_attachment_type,
+        last_message_at: chat.last_message_at,
+        last_message_sender_id: chat.last_message_sender_id,
+        last_message_read: chat.last_message_read,
+        unread_count: chat.unread_count,
+      }))
+    );
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch chats" });
@@ -569,10 +562,13 @@ router.post("/send", authenticateToken, async (req, res) => {
     await ensureMessageRepliesSchema();
     await ensureMessageReactionsSchema();
     await ensureMessageAttachmentsSchema();
-    await ensureChatGroupsSchema();
 
     if (!chatId) {
       return res.status(400).json({ error: "chatId is required" });
+    }
+
+    if (!receiverId) {
+      return res.status(400).json({ error: "receiverId is required" });
     }
 
     if (!trimmedContent && !attachment) {
@@ -583,56 +579,35 @@ router.post("/send", authenticateToken, async (req, res) => {
 
     const chatResult = await pool.query(
       `
-      SELECT c.id, c.is_group, c.group_name
+      SELECT c.id
       FROM chats c
-      JOIN chat_members cm
-        ON cm.chat_id = c.id
-       AND cm.user_id = $2
       WHERE c.id = $1
+        AND (
+          (c.user1_id = $2 AND c.user2_id = $3)
+          OR (c.user1_id = $3 AND c.user2_id = $2)
+        )
       LIMIT 1
       `,
-      [chatId, senderId]
+      [chatId, senderId, receiverId]
     );
 
-    const chat = chatResult.rows[0];
-    if (!chat) {
+    if (chatResult.rows.length === 0) {
       return res.status(404).json({ error: "Chat not found" });
     }
 
-    const memberResult = await pool.query(
+    const blockedResult = await pool.query(
       `
-      SELECT user_id
-      FROM chat_members
-      WHERE chat_id = $1
+      SELECT 1
+      FROM blocked_users
+      WHERE (blocker_id = $1 AND blocked_id = $2)
+         OR (blocker_id = $2 AND blocked_id = $1)
+      LIMIT 1
       `,
-      [chatId]
+      [senderId, receiverId]
     );
 
-    const memberIds = memberResult.rows.map((row) => String(row.user_id));
-    let resolvedReceiverId = String(receiverId || "").trim() || null;
-
-    if (!chat.is_group) {
-      resolvedReceiverId =
-        memberIds.find((memberId) => memberId !== String(senderId)) || resolvedReceiverId;
-
-      if (!resolvedReceiverId) {
-        return res.status(400).json({ error: "Direct chat receiver was not found" });
-      }
-
-      const blockedResult = await pool.query(
-        `
-        SELECT 1
-        FROM blocked_users
-        WHERE (blocker_id = $1 AND blocked_id = $2)
-           OR (blocker_id = $2 AND blocked_id = $1)
-        LIMIT 1
-        `,
-        [senderId, resolvedReceiverId]
-      );
-
-      if (blockedResult.rows.length > 0) {
-        return res.status(403).json({ error: "Messaging is unavailable with this user" });
-      }
+    if (blockedResult.rows.length > 0) {
+      return res.status(403).json({ error: "Messaging is unavailable with this user" });
     }
 
     if (normalizedReplyToMessageId) {
@@ -700,7 +675,7 @@ router.post("/send", authenticateToken, async (req, res) => {
       [
         chatId,
         senderId,
-        chat.is_group ? null : resolvedReceiverId,
+        receiverId,
         storedContent,
         normalizedReplyToMessageId,
         attachmentUrl,
@@ -713,66 +688,37 @@ router.post("/send", authenticateToken, async (req, res) => {
 
     const lastMessagePreview = storedContent;
 
-      await pool.query(
-        `
-        UPDATE chats
-        SET last_message = $1, last_message_at = CURRENT_TIMESTAMP
-        WHERE id = $2
-        `,
-        [lastMessagePreview, chatId]
-      );
+    await pool.query(
+      `
+      UPDATE chats
+      SET last_message = $1, last_message_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+      `,
+      [lastMessagePreview, chatId]
+    );
 
-      const senderResult = await pool.query(
-        `
-        SELECT username
-        FROM users
-        WHERE id = $1
-        LIMIT 1
-        `,
-        [senderId]
-      );
+    const senderResult = await pool.query(
+      `
+      SELECT username
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [senderId]
+    );
 
-      await pool.query(
-        `
-        UPDATE chat_members
-        SET last_read_at = CURRENT_TIMESTAMP
-        WHERE chat_id = $1
-          AND user_id = $2
-        `,
-        [chatId, senderId]
-      ).catch(() => null);
+    await sendPushToUser(receiverId, {
+      title: senderResult.rows[0]?.username || "New message",
+      body: storedContent,
+      categoryId: "messageReply",
+      data: {
+        type: "message",
+        chatId,
+        senderId,
+      },
+    }).catch(() => null);
 
-      if (chat.is_group) {
-        await Promise.all(
-          memberIds
-            .filter((memberId) => memberId !== String(senderId))
-            .map((memberId) =>
-              sendPushToUser(memberId, {
-                title: chat.group_name || senderResult.rows[0]?.username || "New group message",
-                body: storedContent,
-                categoryId: "messageReply",
-                data: {
-                  type: "message",
-                  chatId,
-                  senderId,
-                },
-              }).catch(() => null)
-            )
-        );
-      } else {
-        await sendPushToUser(resolvedReceiverId, {
-          title: senderResult.rows[0]?.username || "New message",
-          body: storedContent,
-          categoryId: "messageReply",
-          data: {
-            type: "message",
-            chatId,
-            senderId,
-          },
-        });
-      }
-
-      const enrichedMessage = await fetchMessageForUser(message.rows[0].id, senderId);
+    const enrichedMessage = await fetchMessageForUser(message.rows[0].id, senderId);
 
     res.json(enrichedMessage || message.rows[0]);
   } catch (err) {
@@ -868,7 +814,6 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
   try {
     await ensureDeletedChatsTable();
     await ensureDeletedMessagesTable();
-    await ensureChatGroupsSchema();
     await ensureBlockedUsersTable();
     await ensureActiveUsersTable();
 
@@ -895,18 +840,15 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
           TRUE AS has_chat,
           c.last_message_at
         FROM chats c
-        JOIN chat_members viewer_membership
-          ON viewer_membership.chat_id = c.id
-         AND viewer_membership.user_id = $1
-        JOIN chat_members other_membership
-          ON other_membership.chat_id = c.id
-         AND other_membership.user_id <> $1
         JOIN users other_user
-          ON other_user.id = other_membership.user_id
+          ON other_user.id = CASE
+            WHEN c.user1_id = $1 THEN c.user2_id
+            ELSE c.user1_id
+          END
         LEFT JOIN deleted_chats dc
           ON dc.chat_id = c.id
          AND dc.user_id = $1
-        WHERE c.is_group = FALSE
+        WHERE (c.user1_id = $1 OR c.user2_id = $1)
           AND (
             dc.chat_id IS NULL
             OR EXISTS (
@@ -1034,34 +976,28 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
     await ensureDeletedMessagesTable();
     await ensureMessageRepliesSchema();
     await ensureMessageReactionsSchema();
-    await ensureChatGroupsSchema();
 
     const chatResult = await pool.query(
       `
       SELECT
         c.id,
-        c.is_group,
-        c.group_name,
         c.user1_id,
         c.user2_id,
         dc.deleted_at,
-        viewer_membership.last_read_at,
         u1.username AS user1_username,
         u1.profile_pic AS user1_profile_pic,
         u2.username AS user2_username,
         u2.profile_pic AS user2_profile_pic
       FROM chats c
-      JOIN chat_members viewer_membership
-        ON viewer_membership.chat_id = c.id
-       AND viewer_membership.user_id = $2
       LEFT JOIN deleted_chats dc
         ON dc.chat_id = c.id
        AND dc.user_id = $2
       JOIN users u1
         ON u1.id = c.user1_id
-      LEFT JOIN users u2
+      JOIN users u2
         ON u2.id = c.user2_id
       WHERE c.id = $1
+        AND (c.user1_id = $2 OR c.user2_id = $2)
       `,
       [chatId, userId]
     );
@@ -1071,68 +1007,45 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
     }
 
     const chat = chatResult.rows[0];
-    const members = await fetchChatMembers(chatId);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS blocked_users (
-        blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        blocked_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        PRIMARY KEY (blocker_id, blocked_id)
-      )
-    `);
+    await ensureBlockedUsersTable();
 
     const otherUserId =
       String(chat.user1_id) === String(userId)
         ? chat.user2_id
         : chat.user1_id;
 
-    const blockResult = chat.is_group
-      ? { rows: [{ blocked_by_me: false, blocked_by_them: false }] }
-      : await pool.query(
-          `
-          SELECT
-            EXISTS (
-              SELECT 1
-              FROM blocked_users
-              WHERE blocker_id = $1
-                AND blocked_id = $2
-            ) AS blocked_by_me,
-            EXISTS (
-              SELECT 1
-              FROM blocked_users
-              WHERE blocker_id = $2
-                AND blocked_id = $1
-            ) AS blocked_by_them
-          `,
-          [userId, otherUserId]
-        );
+    const blockResult = await pool.query(
+      `
+      SELECT
+        EXISTS (
+          SELECT 1
+          FROM blocked_users
+          WHERE blocker_id = $1
+            AND blocked_id = $2
+        ) AS blocked_by_me,
+        EXISTS (
+          SELECT 1
+          FROM blocked_users
+          WHERE blocker_id = $2
+            AND blocked_id = $1
+        ) AS blocked_by_them
+      `,
+      [userId, otherUserId]
+    );
 
     await pool.query(
       `
-      UPDATE chat_members
-      SET last_read_at = NOW()
+      UPDATE messages
+      SET read_status = TRUE
       WHERE chat_id = $1
-        AND user_id = $2
+        AND receiver_id = $2
+        AND read_status = FALSE
+        AND (
+          $3::timestamptz IS NULL OR created_at > $3::timestamptz
+        )
       `,
-      [chatId, userId]
-    ).catch(() => null);
-
-    if (!chat.is_group) {
-      await pool.query(
-        `
-        UPDATE messages
-        SET read_status = TRUE
-        WHERE chat_id = $1
-          AND receiver_id = $2
-          AND read_status = FALSE
-          AND (
-            $3::timestamptz IS NULL OR created_at > $3::timestamptz
-          )
-        `,
-        [chatId, userId, chat.deleted_at]
-      );
-    }
+      [chatId, userId, chat.deleted_at]
+    );
 
     const messagesResult = await pool.query(
       `
@@ -1193,9 +1106,6 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
     res.json({
       chat: {
         id: chat.id,
-        is_group: Boolean(chat.is_group),
-        group_name: chat.group_name || null,
-        members,
         blocked_by_me: blockResult.rows[0]?.blocked_by_me || false,
         blocked_by_them: blockResult.rows[0]?.blocked_by_them || false,
         user1: {
@@ -1480,17 +1390,13 @@ router.post("/get-or-create", authenticateToken, async (req, res) => {
   try {
     await ensureDeletedChatsTable();
     await ensureDeletedMessagesTable();
-    await ensureChatGroupsSchema();
 
     const existing = await pool.query(
       `
       SELECT *
       FROM chats
-      WHERE is_group = FALSE
-        AND (
-          (user1_id = $1 AND user2_id = $2)
-          OR (user1_id = $2 AND user2_id = $1)
-        )
+      WHERE (user1_id = $1 AND user2_id = $2)
+         OR (user1_id = $2 AND user2_id = $1)
       `,
       [senderId, targetUserId]
     );
@@ -1501,117 +1407,17 @@ router.post("/get-or-create", authenticateToken, async (req, res) => {
 
     const newChat = await pool.query(
       `
-      INSERT INTO chats (user1_id, user2_id, is_group, group_name, last_message_at)
-      VALUES ($1, $2, FALSE, NULL, CURRENT_TIMESTAMP)
-      RETURNING id, last_message_at
+      INSERT INTO chats (user1_id, user2_id, last_message_at)
+      VALUES ($1, $2, CURRENT_TIMESTAMP)
+      RETURNING id
       `,
       [senderId, targetUserId]
-    );
-
-    await pool.query(
-      `
-      INSERT INTO chat_members (chat_id, user_id, joined_at, last_read_at)
-      VALUES
-        ($1, $2, NOW(), $4),
-        ($1, $3, NOW(), $4)
-      ON CONFLICT (chat_id, user_id) DO NOTHING
-      `,
-      [newChat.rows[0].id, senderId, targetUserId, newChat.rows[0].last_message_at]
     );
 
     res.json({ chatId: newChat.rows[0].id });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create chat" });
-  }
-});
-
-router.post("/group-create", authenticateToken, async (req, res) => {
-  const creatorId = req.user.id;
-  const rawMemberIds = Array.isArray(req.body?.memberIds) ? req.body.memberIds : [];
-  const groupName = String(req.body?.groupName || "").trim();
-
-  if (groupName.length < 2) {
-    return res.status(400).json({ error: "Group name is required" });
-  }
-
-  const memberIds = Array.from(
-    new Set(
-      rawMemberIds
-        .map((value) => String(value || "").trim())
-        .filter(Boolean)
-    )
-  ).filter((id) => id !== String(creatorId));
-
-  if (memberIds.length === 0) {
-    return res.status(400).json({ error: "Choose at least one other member" });
-  }
-
-  try {
-    await ensureChatGroupsSchema();
-    await ensureBlockedUsersTable();
-
-    const validUsersResult = await pool.query(
-      `
-      SELECT id
-      FROM users
-      WHERE id = ANY($1::uuid[])
-      `,
-      [memberIds]
-    );
-
-    const validMemberIds = validUsersResult.rows.map((row) => String(row.id));
-
-    if (validMemberIds.length !== memberIds.length) {
-      return res.status(400).json({ error: "Some selected users were not found" });
-    }
-
-    const blockedResult = await pool.query(
-      `
-      SELECT 1
-      FROM blocked_users
-      WHERE (
-        blocker_id = $1
-        AND blocked_id = ANY($2::uuid[])
-      ) OR (
-        blocked_id = $1
-        AND blocker_id = ANY($2::uuid[])
-      )
-      LIMIT 1
-      `,
-      [creatorId, validMemberIds]
-    );
-
-    if (blockedResult.rows.length > 0) {
-      return res.status(403).json({ error: "You cannot create a group with blocked users" });
-    }
-
-    const newChat = await pool.query(
-      `
-      INSERT INTO chats (user1_id, user2_id, is_group, group_name, last_message_at)
-      VALUES ($1, NULL, TRUE, $2, CURRENT_TIMESTAMP)
-      RETURNING id, last_message_at
-      `,
-      [creatorId, groupName]
-    );
-
-    const chatId = newChat.rows[0].id;
-    const everyone = [String(creatorId), ...validMemberIds];
-
-    await pool.query(
-      `
-      INSERT INTO chat_members (chat_id, user_id, joined_at, last_read_at)
-      SELECT $1, member_id, NOW(), $2
-      FROM unnest($3::uuid[]) AS member_id
-      ON CONFLICT (chat_id, user_id) DO NOTHING
-      `,
-      [chatId, newChat.rows[0].last_message_at, everyone]
-    );
-
-    res.status(201).json({ chatId });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to create group chat" });
   }
 });
 
