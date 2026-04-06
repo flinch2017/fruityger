@@ -1,9 +1,14 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaUser } from "react-icons/fa";
+import { FaPlus, FaTimes, FaUser, FaUsers } from "react-icons/fa";
 import supabase from "../lib/supabaseClient";
 import "../css/Messages.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+
+function buildGroupTitle(groupChat) {
+  if (groupChat.group_name?.trim()) return groupChat.group_name.trim();
+  return "Group chat";
+}
 
 export default function Messages() {
   const navigate = useNavigate();
@@ -11,6 +16,7 @@ export default function Messages() {
   const userId = localStorage.getItem("userId");
 
   const [chats, setChats] = useState([]);
+  const [groupChats, setGroupChats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -20,7 +26,14 @@ export default function Messages() {
   const [onlineCandidates, setOnlineCandidates] = useState([]);
   const [onlineLoading, setOnlineLoading] = useState(true);
   const [onlineUserIds, setOnlineUserIds] = useState([]);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [groupSearchQuery, setGroupSearchQuery] = useState("");
+  const [groupSearchResults, setGroupSearchResults] = useState([]);
+  const [selectedGroupMembers, setSelectedGroupMembers] = useState([]);
+  const [creatingGroup, setCreatingGroup] = useState(false);
   const sidebarRef = useRef(null);
+  const groupModalRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
   const inboxChannelRef = useRef(null);
 
@@ -40,12 +53,15 @@ export default function Messages() {
   };
 
   const selectedChatSet = useMemo(() => new Set(selectedChatIds), [selectedChatIds]);
+  const selectedGroupMemberSet = useMemo(
+    () => new Set(selectedGroupMembers.map((member) => String(member.id))),
+    [selectedGroupMembers]
+  );
 
-  const updateUnreadEvent = (chatList) => {
-    const unreadCount = (chatList || []).reduce(
-      (total, chat) => total + Number(chat.unread_count || 0),
-      0
-    );
+  const updateUnreadEvent = (chatList, groupChatList = []) => {
+    const unreadCount =
+      (chatList || []).reduce((total, chat) => total + Number(chat.unread_count || 0), 0) +
+      (groupChatList || []).reduce((total, chat) => total + Number(chat.unread_count || 0), 0);
 
     window.dispatchEvent(
       new CustomEvent("fruityger:messages-refresh", {
@@ -54,19 +70,38 @@ export default function Messages() {
     );
   };
 
-  const fetchChats = async ({ silent = false } = {}) => {
+  const fetchDirectChats = async () => {
+    const res = await fetch("http://localhost:5000/api/messages/chats", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  };
+
+  const fetchGroupChats = async () => {
+    const res = await fetch("http://localhost:5000/api/messages/groups/chats", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  };
+
+  const fetchConversations = async ({ silent = false } = {}) => {
     if (!token) return;
 
     if (!silent) {
       setLoading(true);
     }
+
     try {
-      const res = await fetch("http://localhost:5000/api/messages/chats", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      setChats(Array.isArray(data) ? data : []);
-      updateUnreadEvent(Array.isArray(data) ? data : []);
+      const [directData, groupData] = await Promise.all([
+        fetchDirectChats(),
+        fetchGroupChats().catch(() => []),
+      ]);
+
+      setChats(directData);
+      setGroupChats(groupData);
+      updateUnreadEvent(directData, groupData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -108,7 +143,7 @@ export default function Messages() {
     }
 
     refreshTimeoutRef.current = setTimeout(() => {
-      fetchChats({ silent: true });
+      fetchConversations({ silent: true });
     }, 120);
   };
 
@@ -132,18 +167,18 @@ export default function Messages() {
   };
 
   useEffect(() => {
-    fetchChats();
+    fetchConversations();
     fetchOnlineCandidates();
   }, [token]);
 
   useEffect(() => {
     const handleRefresh = (event) => {
       if (typeof event.detail?.unreadCount === "number") return;
-      fetchChats({ silent: true });
+      fetchConversations({ silent: true });
       fetchOnlineCandidates({ silent: true });
     };
 
-    const handleFocus = () => fetchChats({ silent: true });
+    const handleFocus = () => fetchConversations({ silent: true });
 
     window.addEventListener("focus", handleFocus);
     window.addEventListener("fruityger:messages-refresh", handleRefresh);
@@ -177,7 +212,43 @@ export default function Messages() {
   }, [searchQuery, token, userId]);
 
   useEffect(() => {
+    if (!groupModalOpen || !groupSearchQuery.trim()) {
+      setGroupSearchResults([]);
+      return;
+    }
+
+    const fetchUsers = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:5000/api/messages/search-users?q=${encodeURIComponent(groupSearchQuery)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = await res.json();
+        setGroupSearchResults(
+          Array.isArray(data)
+            ? data.filter(
+                (user) =>
+                  user.id !== userId && !selectedGroupMemberSet.has(String(user.id))
+              )
+            : []
+        );
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchUsers();
+  }, [groupModalOpen, groupSearchQuery, token, userId, selectedGroupMemberSet]);
+
+  useEffect(() => {
     const handleClickOutside = (event) => {
+      if (groupModalOpen) {
+        if (groupModalRef.current && !groupModalRef.current.contains(event.target)) {
+          setGroupModalOpen(false);
+        }
+        return;
+      }
+
       if (sidebarRef.current && !sidebarRef.current.contains(event.target)) {
         setSearchResults([]);
         setSearchQuery("");
@@ -186,42 +257,23 @@ export default function Messages() {
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [groupModalOpen]);
 
   useEffect(() => {
     if (!token || !userId) return;
 
     const channel = supabase
       .channel(`messages-sidebar-${userId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "messages" },
-        () => {
-          scheduleRealtimeRefresh();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "chats" },
-        () => {
-          scheduleRealtimeRefresh();
-          fetchOnlineCandidates({ silent: true });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "deleted_messages" },
-        () => {
-          scheduleRealtimeRefresh();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "deleted_chats" },
-        () => {
-          scheduleRealtimeRefresh();
-        }
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, scheduleRealtimeRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "chats" }, () => {
+        scheduleRealtimeRefresh();
+        fetchOnlineCandidates({ silent: true });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "deleted_messages" }, scheduleRealtimeRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "deleted_chats" }, scheduleRealtimeRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_chats" }, scheduleRealtimeRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_messages" }, scheduleRealtimeRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_chat_members" }, scheduleRealtimeRefresh)
       .subscribe();
 
     return () => {
@@ -237,17 +289,9 @@ export default function Messages() {
 
     const channel = supabase
       .channel("fruityger-messages-live")
-      .on("broadcast", { event: "inbox-sync" }, ({ payload }) => {
-        if (!payload) return;
+      .on("broadcast", { event: "inbox-sync" }, () => {
         scheduleRealtimeRefresh();
-
-        if (
-          payload.reason === "created-chat" ||
-          payload.reason === "deleted-chat" ||
-          payload.reason === "membership-changed"
-        ) {
-          fetchOnlineCandidates({ silent: true });
-        }
+        fetchOnlineCandidates({ silent: true });
       })
       .subscribe();
 
@@ -264,15 +308,9 @@ export default function Messages() {
 
     const channel = supabase
       .channel("fruityger-online")
-      .on("presence", { event: "sync" }, () => {
-        syncPresenceState(channel);
-      })
-      .on("presence", { event: "join" }, () => {
-        syncPresenceState(channel);
-      })
-      .on("presence", { event: "leave" }, () => {
-        syncPresenceState(channel);
-      })
+      .on("presence", { event: "sync" }, () => syncPresenceState(channel))
+      .on("presence", { event: "join" }, () => syncPresenceState(channel))
+      .on("presence", { event: "leave" }, () => syncPresenceState(channel))
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           syncPresenceState(channel);
@@ -284,13 +322,18 @@ export default function Messages() {
     };
   }, [userId]);
 
-  const handleChatClick = (chatId) => {
+  const handleDirectChatClick = (chatId) => {
     if (selectionMode) {
       toggleSelectedChat(chatId);
       return;
     }
 
     navigate(`/chat/${chatId}`);
+  };
+
+  const handleGroupChatClick = (groupChatId) => {
+    if (selectionMode) return;
+    navigate(`/group-chat/${groupChatId}`);
   };
 
   const handleStartChat = async (targetUserId) => {
@@ -319,6 +362,72 @@ export default function Messages() {
     }
   };
 
+  const openGroupModal = () => {
+    setGroupModalOpen(true);
+    setGroupName("");
+    setGroupSearchQuery("");
+    setGroupSearchResults([]);
+    setSelectedGroupMembers([]);
+  };
+
+  const closeGroupModal = () => {
+    if (creatingGroup) return;
+    setGroupModalOpen(false);
+    setGroupName("");
+    setGroupSearchQuery("");
+    setGroupSearchResults([]);
+    setSelectedGroupMembers([]);
+  };
+
+  const addGroupMember = (user) => {
+    setSelectedGroupMembers((prev) =>
+      prev.some((member) => String(member.id) === String(user.id)) ? prev : [...prev, user]
+    );
+    setGroupSearchQuery("");
+    setGroupSearchResults([]);
+  };
+
+  const removeGroupMember = (memberId) => {
+    setSelectedGroupMembers((prev) =>
+      prev.filter((member) => String(member.id) !== String(memberId))
+    );
+  };
+
+  const handleCreateGroup = async () => {
+    if (!groupName.trim() || selectedGroupMembers.length === 0 || creatingGroup) return;
+
+    setCreatingGroup(true);
+
+    try {
+      const res = await fetch("http://localhost:5000/api/messages/groups/chats", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          groupName: groupName.trim(),
+          memberIds: selectedGroupMembers.map((member) => member.id),
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create group chat");
+      }
+
+      await fetchConversations({ silent: true });
+      await broadcastInboxSync("created-group-chat", { groupChatId: data.groupChatId });
+      closeGroupModal();
+      navigate(`/group-chat/${data.groupChatId}`);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCreatingGroup(false);
+    }
+  };
+
   const onlineVisibleUsers = useMemo(
     () =>
       onlineCandidates
@@ -327,17 +436,35 @@ export default function Messages() {
           is_online: onlineUserIds.includes(String(user.id)),
         }))
         .sort((a, b) => {
-          const aOnline = Boolean(a.is_online);
-          const bOnline = Boolean(b.is_online);
-
-          if (aOnline !== bOnline) {
-            return aOnline ? -1 : 1;
+          if (Boolean(a.is_online) !== Boolean(b.is_online)) {
+            return a.is_online ? -1 : 1;
           }
-
           return String(a.username || "").localeCompare(String(b.username || ""));
         }),
     [onlineCandidates, onlineUserIds]
   );
+
+  const combinedConversations = useMemo(() => {
+    const direct = chats.map((chat) => ({
+      type: "direct",
+      id: chat.id,
+      sortKey: chat.last_message_at || "",
+      data: chat,
+    }));
+
+    const groups = groupChats.map((chat) => ({
+      type: "group",
+      id: chat.id,
+      sortKey: chat.last_message_at || chat.created_at || "",
+      data: chat,
+    }));
+
+    return [...direct, ...groups].sort((a, b) => {
+      const aTime = a.sortKey ? new Date(a.sortKey).getTime() : 0;
+      const bTime = b.sortKey ? new Date(b.sortKey).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [chats, groupChats]);
 
   const toggleSelectedChat = (chatId) => {
     setSelectedChatIds((prev) =>
@@ -375,7 +502,7 @@ export default function Messages() {
 
       setChats((prev) => {
         const nextChats = prev.filter((chat) => !allowedSet.has(chat.id));
-        updateUnreadEvent(nextChats);
+        updateUnreadEvent(nextChats, groupChats);
         return nextChats;
       });
 
@@ -409,6 +536,31 @@ export default function Messages() {
     return date.toLocaleDateString();
   };
 
+  const renderGroupAvatar = (members) => {
+    const previewMembers = (members || []).filter((member) => String(member.id) !== String(userId)).slice(0, 2);
+
+    return (
+      <div className="chat-avatar group-avatar">
+        {previewMembers.length > 0 ? (
+          previewMembers.map((member, index) => (
+            <span
+              key={member.id}
+              className={`group-avatar-bubble group-avatar-bubble-${index + 1}`}
+            >
+              {member.profile_pic ? (
+                <img src={getSafeMediaUrl(member.profile_pic)} alt={member.username} />
+              ) : (
+                member.username?.[0]?.toUpperCase() || "?"
+              )}
+            </span>
+          ))
+        ) : (
+          <FaUsers />
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="messages-page">
       <div
@@ -419,6 +571,13 @@ export default function Messages() {
           <h2>Chats</h2>
 
           <div className="messages-toolbar-actions">
+            {!selectionMode && (
+              <button className="messages-action-btn" onClick={openGroupModal}>
+                <FaPlus />
+                <span>New Group</span>
+              </button>
+            )}
+
             {selectionMode ? (
               <>
                 <button
@@ -487,7 +646,6 @@ export default function Messages() {
                     )}
                   </span>
                   {user.is_online && <span className="messages-online-dot online"></span>}
-
                   <span className="messages-online-name">{user.username}</span>
                 </button>
               ))}
@@ -527,7 +685,7 @@ export default function Messages() {
             <div className="spinner-alpha-container">
               <div className="spinner-alpha"></div>
             </div>
-          ) : chats.length === 0 ? (
+          ) : combinedConversations.length === 0 ? (
             <div className="messages-empty-state">
               <div className="messages-empty-buddy" aria-hidden="true">
                 <div className="buddy-orb">
@@ -536,10 +694,53 @@ export default function Messages() {
                 <div className="buddy-shadow"></div>
               </div>
               <h3>Your inbox is empty</h3>
-              <p>Search for a friend above and start a bright little conversation.</p>
+              <p>Search for a friend above or build a new group chat to get things glowing.</p>
             </div>
           ) : (
-            chats.map((chat) => {
+            combinedConversations.map((entry) => {
+              if (entry.type === "group") {
+                const chat = entry.data;
+                const isUnread = Number(chat.unread_count || 0) > 0;
+                const previewText = chat.last_message
+                  ? chat.last_message_sender_username
+                    ? `${chat.last_message_sender_username}: ${chat.last_message}`
+                    : chat.last_message
+                  : "Group created";
+
+                return (
+                  <div
+                    key={`group-${chat.id}`}
+                    className={`chat-preview group-chat-preview ${isUnread ? "unread-chat" : ""}`}
+                    onClick={() => handleGroupChatClick(chat.id)}
+                  >
+                    {renderGroupAvatar(chat.members)}
+
+                    <div className="chat-info">
+                      <div className="chat-top">
+                        <div className="chat-title-stack">
+                          <h4>{buildGroupTitle(chat)}</h4>
+                          <span className="chat-subtitle">
+                            {(chat.members || []).length} members
+                          </span>
+                        </div>
+
+                        <div className="chat-meta">
+                          <span className="chat-date">{formatChatDate(chat.last_message_at || chat.created_at)}</span>
+                          {isUnread && (
+                            <span className="chat-unread-badge">
+                              {chat.unread_count > 9 ? "9+" : chat.unread_count}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <p className={isUnread ? "unread" : ""}>{previewText}</p>
+                    </div>
+                  </div>
+                );
+              }
+
+              const chat = entry.data;
               const otherUser = chat.user1?.id === userId ? chat.user2 : chat.user1;
               const isMine = String(chat.last_message_sender_id) === String(userId);
               const isUnread = Number(chat.unread_count || 0) > 0;
@@ -547,11 +748,11 @@ export default function Messages() {
 
               return (
                 <div
-                  key={chat.id}
+                  key={`direct-${chat.id}`}
                   className={`chat-preview ${isUnread ? "unread-chat" : ""} ${
                     selectedChatSet.has(chat.id) ? "selected-chat" : ""
                   }`}
-                  onClick={() => handleChatClick(chat.id)}
+                  onClick={() => handleDirectChatClick(chat.id)}
                 >
                   {selectionMode && (
                     <span className="selection-check">
@@ -575,13 +776,11 @@ export default function Messages() {
 
                       <div className="chat-meta">
                         <span className="chat-date">{formatChatDate(chat.last_message_at)}</span>
-
                         {isUnread && (
                           <span className="chat-unread-badge">
                             {chat.unread_count > 9 ? "9+" : chat.unread_count}
                           </span>
                         )}
-
                         {isSeen && <span className="seen-label">Seen</span>}
                       </div>
                     </div>
@@ -600,6 +799,104 @@ export default function Messages() {
           )}
         </div>
       </div>
+
+      {groupModalOpen && (
+        <div className="messages-group-modal-backdrop">
+          <div ref={groupModalRef} className="messages-group-modal">
+            <div className="messages-group-modal-header">
+              <div>
+                <h3>New Group</h3>
+                <p>Pick members first, then give the conversation a name.</p>
+              </div>
+              <button
+                type="button"
+                className="messages-group-modal-close"
+                onClick={closeGroupModal}
+                aria-label="Close group creator"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <label className="messages-group-label">
+              Group name
+              <input
+                type="text"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                placeholder="Weekend plans"
+                maxLength={60}
+              />
+            </label>
+
+            <label className="messages-group-label">
+              Add members
+              <input
+                type="text"
+                value={groupSearchQuery}
+                onChange={(e) => setGroupSearchQuery(e.target.value)}
+                placeholder="Search friends to add"
+              />
+            </label>
+
+            {selectedGroupMembers.length > 0 && (
+              <div className="messages-group-selected">
+                {selectedGroupMembers.map((member) => (
+                  <span key={member.id} className="messages-group-chip">
+                    {member.username}
+                    <button
+                      type="button"
+                      onClick={() => removeGroupMember(member.id)}
+                      aria-label={`Remove ${member.username}`}
+                    >
+                      <FaTimes />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {groupSearchResults.length > 0 && (
+              <div className="messages-group-results">
+                {groupSearchResults.map((user) => (
+                  <button
+                    type="button"
+                    key={user.id}
+                    className="messages-group-result"
+                    onClick={() => addGroupMember(user)}
+                  >
+                    <span className="messages-group-result-avatar">
+                      {user.profile_pic ? (
+                        <img src={getSafeMediaUrl(user.profile_pic)} alt={user.username} />
+                      ) : (
+                        <FaUser />
+                      )}
+                    </span>
+                    <span className="messages-group-result-copy">
+                      <strong>{user.username}</strong>
+                      <small>Add to group</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="messages-group-modal-footer">
+              <button type="button" className="messages-action-btn" onClick={closeGroupModal}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="messages-action-btn primary"
+                onClick={handleCreateGroup}
+                disabled={creatingGroup || !groupName.trim() || selectedGroupMembers.length === 0}
+              >
+                {creatingGroup ? "Creating..." : "Create Group"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

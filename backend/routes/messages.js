@@ -18,6 +18,7 @@ let messageRepliesSchemaReadyPromise = null;
 let messageReactionsSchemaReadyPromise = null;
 let messageAttachmentsSchemaReadyPromise = null;
 let chatGroupsSchemaReadyPromise = null;
+let groupChatSchemaReadyPromise = null;
 
 const CHAT_ATTACHMENT_MAX_SIZE = 5 * 1024 * 1024;
 const allowedDocumentExtensions = new Set([".pdf", ".docx"]);
@@ -313,6 +314,62 @@ async function ensureChatGroupsSchema() {
   }
 
   await chatGroupsSchemaReadyPromise;
+}
+
+async function ensureGroupChatSchema() {
+  if (!groupChatSchemaReadyPromise) {
+    groupChatSchemaReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS group_chats (
+          id UUID PRIMARY KEY,
+          group_name TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          admin_user_ids UUID[] NOT NULL DEFAULT ARRAY[]::uuid[]
+        )
+      `);
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS group_chat_members (
+          group_chat_id UUID NOT NULL REFERENCES group_chats(id) ON DELETE CASCADE,
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_read_at TIMESTAMPTZ,
+          PRIMARY KEY (group_chat_id, user_id)
+        )
+      `);
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS group_messages (
+          id UUID PRIMARY KEY,
+          group_chat_id UUID NOT NULL REFERENCES group_chats(id) ON DELETE CASCADE,
+          sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          content TEXT NOT NULL,
+          attachment_url TEXT,
+          attachment_type VARCHAR(20),
+          attachment_name TEXT,
+          attachment_mime TEXT,
+          attachment_size INTEGER,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_group_chat_members_user
+        ON group_chat_members(user_id, joined_at DESC)
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_group_messages_group_created
+        ON group_messages(group_chat_id, created_at DESC)
+      `);
+    })().catch((error) => {
+      groupChatSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await groupChatSchemaReadyPromise;
 }
 
 async function fetchChatMembers(chatId) {
@@ -1136,12 +1193,10 @@ router.get("/:messageId/reactions", authenticateToken, async (req, res) => {
 
     const messageResult = await pool.query(
       `
-      SELECT messages.id
-      FROM messages
-      JOIN chat_members cm
-        ON cm.chat_id = messages.chat_id
-       AND cm.user_id = $2
-      WHERE messages.id = $1
+      SELECT m.id
+      FROM messages m
+      WHERE m.id = $1
+        AND (m.sender_id = $2 OR m.receiver_id = $2)
       LIMIT 1
       `,
       [messageId, userId]
@@ -1174,12 +1229,10 @@ router.post("/:messageId/react", authenticateToken, async (req, res) => {
 
     const messageResult = await pool.query(
       `
-      SELECT messages.id, messages.chat_id
-      FROM messages
-      JOIN chat_members cm
-        ON cm.chat_id = messages.chat_id
-       AND cm.user_id = $2
-      WHERE messages.id = $1
+      SELECT m.id, m.chat_id
+      FROM messages m
+      WHERE m.id = $1
+        AND (m.sender_id = $2 OR m.receiver_id = $2)
       LIMIT 1
       `,
       [messageId, userId]
@@ -1238,18 +1291,6 @@ router.post("/:chatId/read", authenticateToken, async (req, res) => {
 
     const deletedAt = deletedChatResult.rows[0]?.deleted_at || null;
 
-    await ensureChatGroupsSchema();
-
-    await pool.query(
-      `
-      UPDATE chat_members
-      SET last_read_at = NOW()
-      WHERE chat_id = $1
-        AND user_id = $2
-      `,
-      [chatId, userId]
-    ).catch(() => null);
-
     await pool.query(
       `
       UPDATE messages
@@ -1307,12 +1348,10 @@ router.post("/delete-for-me", authenticateToken, async (req, res) => {
   try {
     const messageResult = await pool.query(
       `
-      SELECT messages.id
-      FROM messages
-      JOIN chat_members cm
-        ON cm.chat_id = messages.chat_id
-       AND cm.user_id = $2
-      WHERE messages.id = $1
+      SELECT m.id
+      FROM messages m
+      WHERE m.id = $1
+        AND (m.sender_id = $2 OR m.receiver_id = $2)
       `,
       [messageId, userId]
     );
@@ -1348,12 +1387,10 @@ router.post("/report", authenticateToken, async (req, res) => {
   try {
     const messageResult = await pool.query(
       `
-      SELECT messages.id, messages.chat_id
-      FROM messages
-      JOIN chat_members cm
-        ON cm.chat_id = messages.chat_id
-       AND cm.user_id = $2
-      WHERE messages.id = $1
+      SELECT m.id, m.chat_id
+      FROM messages m
+      WHERE m.id = $1
+        AND (m.sender_id = $2 OR m.receiver_id = $2)
       `,
       [messageId, reporterId]
     );
@@ -1418,6 +1455,440 @@ router.post("/get-or-create", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create chat" });
+  }
+});
+
+router.get("/groups/chats", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    await ensureGroupChatSchema();
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        gc.id,
+        gc.group_name,
+        gc.created_at,
+        gc.created_by,
+        gcm.last_read_at,
+        gm.id AS last_message_id,
+        gm.content AS last_message,
+        gm.attachment_type AS last_message_attachment_type,
+        gm.created_at AS last_message_at,
+        gm.sender_id AS last_message_sender_id,
+        sender.username AS last_message_sender_username,
+        (
+          SELECT COUNT(*)::int
+          FROM group_messages unread
+          WHERE unread.group_chat_id = gc.id
+            AND unread.sender_id <> $1
+            AND (
+              gcm.last_read_at IS NULL
+              OR unread.created_at > gcm.last_read_at
+            )
+        ) AS unread_count,
+        COALESCE(member_summary.members, '[]'::json) AS members
+      FROM group_chats gc
+      JOIN group_chat_members gcm
+        ON gcm.group_chat_id = gc.id
+       AND gcm.user_id = $1
+      LEFT JOIN LATERAL (
+        SELECT gm.*
+        FROM group_messages gm
+        WHERE gm.group_chat_id = gc.id
+        ORDER BY gm.created_at DESC
+        LIMIT 1
+      ) gm ON true
+      LEFT JOIN users sender
+        ON sender.id = gm.sender_id
+      LEFT JOIN LATERAL (
+        SELECT json_agg(
+          json_build_object(
+            'id', u.id,
+            'username', u.username,
+            'profile_pic', u.profile_pic
+          )
+          ORDER BY CASE WHEN u.id = $1 THEN 1 ELSE 0 END, LOWER(u.username) ASC
+        ) AS members
+        FROM group_chat_members members
+        JOIN users u
+          ON u.id = members.user_id
+        WHERE members.group_chat_id = gc.id
+      ) member_summary ON true
+      ORDER BY gm.created_at DESC NULLS LAST, gc.created_at DESC
+      `,
+      [userId]
+    );
+
+    res.json(
+      rows.map((chat) => ({
+        id: chat.id,
+        group_name: chat.group_name,
+        created_at: chat.created_at,
+        created_by: chat.created_by,
+        last_message: chat.last_message,
+        last_message_attachment_type: chat.last_message_attachment_type,
+        last_message_at: chat.last_message_at,
+        last_message_sender_id: chat.last_message_sender_id,
+        last_message_sender_username: chat.last_message_sender_username,
+        unread_count: chat.unread_count,
+        members: Array.isArray(chat.members) ? chat.members : [],
+      }))
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch group chats" });
+  }
+});
+
+router.post("/groups/chats", authenticateToken, async (req, res) => {
+  const creatorId = req.user.id;
+  const groupName = String(req.body?.groupName || "").trim();
+  const rawMemberIds = Array.isArray(req.body?.memberIds) ? req.body.memberIds : [];
+
+  if (groupName.length < 2) {
+    return res.status(400).json({ error: "Group name is required" });
+  }
+
+  const memberIds = Array.from(
+    new Set(rawMemberIds.map((value) => String(value || "").trim()).filter(Boolean))
+  ).filter((id) => id !== String(creatorId));
+
+  if (memberIds.length === 0) {
+    return res.status(400).json({ error: "Choose at least one other member" });
+  }
+
+  try {
+    await ensureGroupChatSchema();
+    await ensureBlockedUsersTable();
+
+    const validUsersResult = await pool.query(
+      `
+      SELECT id
+      FROM users
+      WHERE id = ANY($1::uuid[])
+        AND deactivated_at IS NULL
+        AND deleted_at IS NULL
+      `,
+      [memberIds]
+    );
+
+    const validMemberIds = validUsersResult.rows.map((row) => String(row.id));
+
+    if (validMemberIds.length !== memberIds.length) {
+      return res.status(400).json({ error: "Some selected users were not found" });
+    }
+
+    const blockedResult = await pool.query(
+      `
+      SELECT 1
+      FROM blocked_users
+      WHERE (
+        blocker_id = $1
+        AND blocked_id = ANY($2::uuid[])
+      ) OR (
+        blocked_id = $1
+        AND blocker_id = ANY($2::uuid[])
+      )
+      LIMIT 1
+      `,
+      [creatorId, validMemberIds]
+    );
+
+    if (blockedResult.rows.length > 0) {
+      return res.status(403).json({ error: "You cannot create a group with blocked users" });
+    }
+
+    const groupChatId = uuidv4();
+    const everyone = [String(creatorId), ...validMemberIds];
+
+    await pool.query(
+      `
+      INSERT INTO group_chats (id, group_name, created_by, admin_user_ids)
+      VALUES ($1, $2, $3, ARRAY[$3]::uuid[])
+      `,
+      [groupChatId, groupName, creatorId]
+    );
+
+    await pool.query(
+      `
+      INSERT INTO group_chat_members (group_chat_id, user_id, joined_at, last_read_at)
+      SELECT $1, member_id, NOW(), NOW()
+      FROM unnest($2::uuid[]) AS member_id
+      ON CONFLICT (group_chat_id, user_id) DO NOTHING
+      `,
+      [groupChatId, everyone]
+    );
+
+    res.status(201).json({ groupChatId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to create group chat" });
+  }
+});
+
+router.get("/groups/chats/:groupChatId", authenticateToken, async (req, res) => {
+  const { groupChatId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await ensureGroupChatSchema();
+
+    const groupResult = await pool.query(
+      `
+      SELECT
+        gc.id,
+        gc.group_name,
+        gc.created_at,
+        gc.created_by,
+        gc.admin_user_ids,
+        gcm.last_read_at
+      FROM group_chats gc
+      JOIN group_chat_members gcm
+        ON gcm.group_chat_id = gc.id
+       AND gcm.user_id = $2
+      WHERE gc.id = $1
+      LIMIT 1
+      `,
+      [groupChatId, userId]
+    );
+
+    if (groupResult.rows.length === 0) {
+      return res.status(404).json({ error: "Group chat not found" });
+    }
+
+    const groupChat = groupResult.rows[0];
+
+    const membersResult = await pool.query(
+      `
+      SELECT
+        u.id,
+        u.username,
+        u.profile_pic,
+        gcm.joined_at,
+        u.id = ANY($2::uuid[]) AS is_admin
+      FROM group_chat_members gcm
+      JOIN users u
+        ON u.id = gcm.user_id
+      WHERE gcm.group_chat_id = $1
+      ORDER BY LOWER(u.username) ASC
+      `,
+      [groupChatId, groupChat.admin_user_ids || []]
+    );
+
+    const messagesResult = await pool.query(
+      `
+      SELECT
+        gm.*,
+        sender.username AS sender_username,
+        sender.profile_pic AS sender_profile_pic
+      FROM group_messages gm
+      JOIN users sender
+        ON sender.id = gm.sender_id
+      WHERE gm.group_chat_id = $1
+      ORDER BY gm.created_at ASC
+      `,
+      [groupChatId]
+    );
+
+    await pool.query(
+      `
+      UPDATE group_chat_members
+      SET last_read_at = NOW()
+      WHERE group_chat_id = $1
+        AND user_id = $2
+      `,
+      [groupChatId, userId]
+    );
+
+    res.json({
+      groupChat: {
+        id: groupChat.id,
+        group_name: groupChat.group_name,
+        created_at: groupChat.created_at,
+        created_by: groupChat.created_by,
+        admin_user_ids: groupChat.admin_user_ids || [],
+        members: membersResult.rows,
+      },
+      messages: messagesResult.rows,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch group chat" });
+  }
+});
+
+router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, res) => {
+  try {
+    await parseChatAttachment(req, res);
+
+    const { groupChatId } = req.params;
+    const senderId = req.user.id;
+    const content = String(req.body?.content || "").trim();
+    const attachment = req.file || null;
+
+    await ensureGroupChatSchema();
+
+    if (!content && !attachment) {
+      return res.status(400).json({ error: "Message content or an attachment is required" });
+    }
+
+    const membershipResult = await pool.query(
+      `
+      SELECT 1
+      FROM group_chat_members
+      WHERE group_chat_id = $1
+        AND user_id = $2
+      LIMIT 1
+      `,
+      [groupChatId, senderId]
+    );
+
+    if (membershipResult.rows.length === 0) {
+      return res.status(404).json({ error: "Group chat not found" });
+    }
+
+    let attachmentUrl = null;
+    let attachmentType = null;
+    let attachmentName = null;
+    let attachmentMime = null;
+    let attachmentSize = null;
+
+    if (attachment) {
+      attachmentType = classifyAttachment(attachment);
+      attachmentName = sanitizeFileName(attachment.originalname);
+      attachmentMime = attachment.mimetype;
+      attachmentSize = attachment.size;
+
+      const key = `group-messages/${groupChatId}/${uuidv4()}-${attachmentName}`;
+
+      await r2.send(
+        new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET,
+          Key: key,
+          Body: attachment.buffer,
+          ContentType: attachmentMime,
+        })
+      );
+
+      attachmentUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+    }
+
+    const storedContent = content || getAttachmentFallbackText(attachmentType);
+    const messageId = uuidv4();
+
+    const { rows } = await pool.query(
+      `
+      INSERT INTO group_messages (
+        id,
+        group_chat_id,
+        sender_id,
+        content,
+        attachment_url,
+        attachment_type,
+        attachment_name,
+        attachment_mime,
+        attachment_size
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *
+      `,
+      [
+        messageId,
+        groupChatId,
+        senderId,
+        storedContent,
+        attachmentUrl,
+        attachmentType,
+        attachmentName,
+        attachmentMime,
+        attachmentSize,
+      ]
+    );
+
+    await pool.query(
+      `
+      UPDATE group_chat_members
+      SET last_read_at = NOW()
+      WHERE group_chat_id = $1
+        AND user_id = $2
+      `,
+      [groupChatId, senderId]
+    );
+
+    const senderResult = await pool.query(
+      `
+      SELECT username, profile_pic
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [senderId]
+    );
+
+    const message = rows[0];
+
+    const memberIdsResult = await pool.query(
+      `
+      SELECT user_id
+      FROM group_chat_members
+      WHERE group_chat_id = $1
+        AND user_id <> $2
+      `,
+      [groupChatId, senderId]
+    );
+
+    await Promise.all(
+      memberIdsResult.rows.map((row) =>
+        sendPushToUser(row.user_id, {
+          title: senderResult.rows[0]?.username || "New group message",
+          body: storedContent,
+          categoryId: "messageReply",
+          data: {
+            type: "group_message",
+            groupChatId,
+            senderId,
+          },
+        }).catch(() => null)
+      )
+    );
+
+    res.json({
+      ...message,
+      sender_username: senderResult.rows[0]?.username || "Member",
+      sender_profile_pic: senderResult.rows[0]?.profile_pic || null,
+    });
+  } catch (err) {
+    console.error(err);
+    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "Attachments must be 5MB or smaller" });
+    }
+    res.status(500).json({ error: "Failed to send group message" });
+  }
+});
+
+router.post("/groups/chats/:groupChatId/read", authenticateToken, async (req, res) => {
+  const { groupChatId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await ensureGroupChatSchema();
+
+    await pool.query(
+      `
+      UPDATE group_chat_members
+      SET last_read_at = NOW()
+      WHERE group_chat_id = $1
+        AND user_id = $2
+      `,
+      [groupChatId, userId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to mark group chat as read" });
   }
 });
 

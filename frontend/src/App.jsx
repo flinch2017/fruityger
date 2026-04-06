@@ -14,6 +14,7 @@ import ForgotPasswordChange from "./pages/ForgotPasswordChange";
 import Notifications from "./pages/Notifications";
 import Messages from "./pages/Messages";
 import Chat from "./pages/Chat";
+import GroupChat from "./pages/GroupChat";
 import Welcome from "./pages/Welcome";
 import WelcomeHeader from "./components/WelcomeHeader";
 import Login from "./pages/Login";
@@ -320,6 +321,16 @@ function App() {
             <PrivateRoute>
               <MainLayout>
                 <Chat />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/group-chat/:groupChatId"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <GroupChat />
               </MainLayout>
             </PrivateRoute>
           }
