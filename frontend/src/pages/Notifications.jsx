@@ -5,34 +5,49 @@ import { formatRelativeTime } from "../utils/timeFormatter";
 
 const TYPE_COPY = {
   post_like: {
-    icon: "❤",
+    icon: "L",
     title: "Post liked",
     body: (username) => `@${username} liked your post.`,
   },
   post_comment: {
-    icon: "💬",
+    icon: "C",
     title: "New comment",
     body: (username) => `@${username} commented on your post.`,
   },
   comment_reply: {
-    icon: "↩",
+    icon: "R",
     title: "New reply",
     body: (username) => `@${username} replied to your comment.`,
   },
   comment_like: {
-    icon: "✨",
+    icon: "CL",
     title: "Comment liked",
     body: (username) => `@${username} liked your comment.`,
   },
   post_repost: {
-    icon: "R",
+    icon: "RP",
     title: "Post reposted",
     body: (username) => `@${username} reposted your post.`,
   },
   new_follower: {
-    icon: "👤",
+    icon: "F",
     title: "New follower",
     body: (username) => `@${username} started following you.`,
+  },
+  direct_message: {
+    icon: "M",
+    title: "New message",
+    body: (username) => `@${username} sent you a message.`,
+  },
+  group_message: {
+    icon: "G",
+    title: "Group message",
+    body: (username) => `@${username} sent a message in your group.`,
+  },
+  message_reaction: {
+    icon: "MR",
+    title: "Message reaction",
+    body: (username) => `@${username} reacted to your message.`,
   },
 };
 
@@ -114,6 +129,16 @@ export default function Notifications() {
 
     if (notification.type === "new_follower") {
       navigate(`/profile/${notification.actor_username}`);
+      return;
+    }
+
+    if (notification.chat_id) {
+      navigate(`/chat/${notification.chat_id}`);
+      return;
+    }
+
+    if (notification.group_chat_id) {
+      navigate(`/group-chat/${notification.group_chat_id}`);
       return;
     }
 
@@ -260,7 +285,7 @@ export default function Notifications() {
 
       {notifications.map((notification) => {
         const meta = TYPE_COPY[notification.type] || {
-          icon: "•",
+          icon: ".",
           title: "New activity",
           body: (username) => `@${username} interacted with your content.`,
         };
@@ -281,7 +306,7 @@ export default function Notifications() {
           >
             {selectionMode && (
               <span className="selection-check">
-                {selectedSet.has(notification.notification_id) ? "✓" : ""}
+                {selectedSet.has(notification.notification_id) ? "OK" : ""}
               </span>
             )}
 

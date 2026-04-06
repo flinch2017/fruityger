@@ -21,6 +21,21 @@ export async function ensureNotificationsTable() {
       `);
 
       await pool.query(`
+        ALTER TABLE notifications
+        ADD COLUMN IF NOT EXISTS chat_id UUID REFERENCES chats(id) ON DELETE CASCADE
+      `);
+
+      await pool.query(`
+        ALTER TABLE notifications
+        ADD COLUMN IF NOT EXISTS group_chat_id UUID REFERENCES group_chats(id) ON DELETE CASCADE
+      `);
+
+      await pool.query(`
+        ALTER TABLE notifications
+        ADD COLUMN IF NOT EXISTS message_id UUID REFERENCES messages(id) ON DELETE CASCADE
+      `);
+
+      await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created
         ON notifications(recipient_id, created_at DESC)
       `);
@@ -28,6 +43,16 @@ export async function ensureNotificationsTable() {
       await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread
         ON notifications(recipient_id, is_read)
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_notifications_recipient_chat
+        ON notifications(recipient_id, chat_id, created_at DESC)
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_notifications_recipient_group_chat
+        ON notifications(recipient_id, group_chat_id, created_at DESC)
       `);
     })().catch((error) => {
       notificationsTableReadyPromise = null;
@@ -107,6 +132,21 @@ const getNotificationPushCopy = (type, actorUsername = "Someone") => {
         title: "New repost",
         body: `@${actorUsername} reposted your post.`,
       };
+    case "direct_message":
+      return {
+        title: "New message",
+        body: `@${actorUsername} sent you a message.`,
+      };
+    case "group_message":
+      return {
+        title: "New group message",
+        body: `@${actorUsername} sent a group message.`,
+      };
+    case "message_reaction":
+      return {
+        title: "New reaction",
+        body: `@${actorUsername} reacted to your message.`,
+      };
     default:
       return {
         title: "Fruityger",
@@ -182,6 +222,13 @@ export async function createNotification({
   type,
   postId = null,
   commentId = null,
+  chatId = null,
+  groupChatId = null,
+  messageId = null,
+  pushTitle = null,
+  pushBody = null,
+  pushCategoryId = null,
+  pushData = null,
 }) {
   if (!recipientId || !actorId || !type || recipientId === actorId) {
     return null;
@@ -194,11 +241,11 @@ export async function createNotification({
     const { rows } = await pool.query(
       `
       INSERT INTO notifications
-        (notification_id, recipient_id, actor_id, type, post_id, comment_id)
-      VALUES ($1, $2, $3, $4, $5, $6)
+        (notification_id, recipient_id, actor_id, type, post_id, comment_id, chat_id, group_chat_id, message_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
       `,
-      [uuidv4(), recipientId, actorId, type, postId, commentId]
+      [uuidv4(), recipientId, actorId, type, postId, commentId, chatId, groupChatId, messageId]
     );
 
     const actorResult = await pool.query(
@@ -215,14 +262,19 @@ export async function createNotification({
     const pushCopy = getNotificationPushCopy(type, actorUsername);
 
     await sendPushToUser(recipientId, {
-      title: pushCopy.title,
-      body: pushCopy.body,
-      data: {
-        type: "notification",
-        notificationType: type,
-        postId,
-        commentId,
-      },
+      title: pushTitle || pushCopy.title,
+      body: pushBody || pushCopy.body,
+      categoryId: pushCategoryId || undefined,
+      data:
+        pushData || {
+          type: "notification",
+          notificationType: type,
+          postId,
+          commentId,
+          chatId,
+          groupChatId,
+          messageId,
+        },
     });
 
     return rows[0] || null;

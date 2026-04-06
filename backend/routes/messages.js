@@ -6,7 +6,7 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import { r2 } from "../utils/r2.js";
-import { sendPushToUser } from "../utils/notifications.js";
+import { createNotification } from "../utils/notifications.js";
 
 const router = express.Router();
 
@@ -832,16 +832,22 @@ router.post("/send", authenticateToken, async (req, res) => {
       [senderId]
     );
 
-    await sendPushToUser(receiverId, {
-      title: senderResult.rows[0]?.username || "New message",
-      body: storedContent,
-      categoryId: "messageReply",
-      data: {
+    await createNotification({
+      recipientId: receiverId,
+      actorId: senderId,
+      type: "direct_message",
+      chatId,
+      messageId: message.rows[0].id,
+      pushTitle: senderResult.rows[0]?.username || "New message",
+      pushBody: storedContent,
+      pushCategoryId: "messageReply",
+      pushData: {
         type: "message",
         chatId,
         senderId,
+        messageId: message.rows[0].id,
       },
-    }).catch(() => null);
+    });
 
     const enrichedMessage = await fetchMessageForUser(message.rows[0].id, senderId);
 
@@ -1297,7 +1303,7 @@ router.post("/:messageId/react", authenticateToken, async (req, res) => {
 
     const messageResult = await pool.query(
       `
-      SELECT m.id, m.chat_id
+      SELECT m.id, m.chat_id, m.sender_id, m.receiver_id, m.content
       FROM messages m
       WHERE m.id = $1
         AND (m.sender_id = $2 OR m.receiver_id = $2)
@@ -1309,6 +1315,8 @@ router.post("/:messageId/react", authenticateToken, async (req, res) => {
     if (messageResult.rows.length === 0) {
       return res.status(404).json({ error: "Message not found" });
     }
+
+    const targetMessage = messageResult.rows[0];
 
     if (!reaction) {
       await pool.query(
@@ -1329,6 +1337,22 @@ router.post("/:messageId/react", authenticateToken, async (req, res) => {
         `,
         [messageId, userId, reaction]
       );
+
+      await createNotification({
+        recipientId: targetMessage.sender_id,
+        actorId: userId,
+        type: "message_reaction",
+        chatId: targetMessage.chat_id,
+        messageId,
+        pushCategoryId: "messageReply",
+        pushData: {
+          type: "message_reaction",
+          chatId: targetMessage.chat_id,
+          messageId,
+          reaction,
+          actorId: userId,
+        },
+      });
     }
 
     const enrichedMessage = await fetchMessageForUser(messageId, userId);
@@ -1930,16 +1954,20 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
 
     await Promise.all(
       memberIdsResult.rows.map((row) =>
-        sendPushToUser(row.user_id, {
-          title: senderResult.rows[0]?.username || "New group message",
-          body: storedContent,
-          categoryId: "messageReply",
-          data: {
+        createNotification({
+          recipientId: row.user_id,
+          actorId: senderId,
+          type: "group_message",
+          groupChatId,
+          pushTitle: senderResult.rows[0]?.username || "New group message",
+          pushBody: storedContent,
+          pushCategoryId: "messageReply",
+          pushData: {
             type: "group_message",
             groupChatId,
             senderId,
           },
-        }).catch(() => null)
+        })
       )
     );
 
