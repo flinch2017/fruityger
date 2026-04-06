@@ -327,10 +327,7 @@ export default function GroupChat() {
         throw new Error(data.error || "Failed to load group members");
       }
 
-      setMembersPayload({
-        members: data.members || [],
-        admins: data.admins || [],
-      });
+      applyMembersPayload(data);
     } catch (error) {
       console.error(error);
       setNotice({ type: "error", message: error.message || "Failed to load members." });
@@ -344,6 +341,26 @@ export default function GroupChat() {
     setDraftGroupName(groupChat?.group_name || "");
     setNameModalOpen(true);
     setHeaderMenuOpen(false);
+  };
+
+  const applyMembersPayload = (data) => {
+    const nextMembers = data.members || [];
+    const nextAdmins = data.admins || [];
+
+    setMembersPayload({
+      members: nextMembers,
+      admins: nextAdmins,
+    });
+
+    setGroupChat((prev) =>
+      prev
+        ? {
+            ...prev,
+            admin_user_ids: nextAdmins.map((member) => member.id),
+            members: nextMembers,
+          }
+        : prev
+    );
   };
 
   const saveGroupName = async () => {
@@ -374,6 +391,39 @@ export default function GroupChat() {
       setNotice({ type: "error", message: error.message || "Failed to change group name." });
     } finally {
       setSavingName(false);
+    }
+  };
+
+  const updateAdminStatus = async (memberId, shouldBeAdmin) => {
+    if (!isAdmin || actionLoading) return;
+
+    setActionLoading(true);
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/messages/groups/chats/${groupChatId}/admins/${memberId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ isAdmin: shouldBeAdmin }),
+        }
+      );
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update admin status");
+      }
+
+      applyMembersPayload(data);
+      dispatchMessagesRefresh();
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: error.message || "Failed to update admin status." });
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -812,6 +862,26 @@ export default function GroupChat() {
                         <span>{member.is_admin ? "Admin" : "Member"}</span>
                       </div>
                     </div>
+                    {isAdmin && membersTab === "members" && !member.is_admin ? (
+                      <button
+                        type="button"
+                        className="message-reaction-remove-btn"
+                        onClick={() => updateAdminStatus(member.id, true)}
+                        disabled={actionLoading}
+                      >
+                        Add as admin
+                      </button>
+                    ) : null}
+                    {isAdmin && membersTab === "admins" ? (
+                      <button
+                        type="button"
+                        className="message-reaction-remove-btn"
+                        onClick={() => updateAdminStatus(member.id, false)}
+                        disabled={actionLoading}
+                      >
+                        Remove as admin
+                      </button>
+                    ) : null}
                   </div>
                 ))}
               </div>

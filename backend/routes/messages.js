@@ -2132,6 +2132,111 @@ router.get("/groups/chats/:groupChatId/members", authenticateToken, async (req, 
   }
 });
 
+router.patch("/groups/chats/:groupChatId/admins/:memberId", authenticateToken, async (req, res) => {
+  const { groupChatId, memberId } = req.params;
+  const userId = req.user.id;
+  const makeAdmin = Boolean(req.body?.isAdmin);
+
+  try {
+    await ensureGroupChatSchema();
+
+    const groupResult = await pool.query(
+      `
+      SELECT admin_user_ids
+      FROM group_chats
+      WHERE id = $1
+        AND EXISTS (
+          SELECT 1
+          FROM group_chat_members gcm
+          WHERE gcm.group_chat_id = group_chats.id
+            AND gcm.user_id = $2
+        )
+      LIMIT 1
+      `,
+      [groupChatId, userId]
+    );
+
+    if (groupResult.rows.length === 0) {
+      return res.status(404).json({ error: "Group chat not found" });
+    }
+
+    const currentAdmins = (groupResult.rows[0].admin_user_ids || []).map((id) => String(id));
+    const requesterIsAdmin = currentAdmins.includes(String(userId));
+
+    if (!requesterIsAdmin) {
+      return res.status(403).json({ error: "Only admins can manage admins" });
+    }
+
+    const memberResult = await pool.query(
+      `
+      SELECT u.id, u.username
+      FROM group_chat_members gcm
+      JOIN users u
+        ON u.id = gcm.user_id
+      WHERE gcm.group_chat_id = $1
+        AND gcm.user_id = $2
+      LIMIT 1
+      `,
+      [groupChatId, memberId]
+    );
+
+    if (memberResult.rows.length === 0) {
+      return res.status(404).json({ error: "Member not found" });
+    }
+
+    let nextAdmins;
+
+    if (makeAdmin) {
+      nextAdmins = Array.from(new Set([...currentAdmins, String(memberId)]));
+    } else {
+      if (String(memberId) === String(userId) && currentAdmins.length === 1) {
+        return res.status(400).json({ error: "The group must keep at least one admin" });
+      }
+
+      nextAdmins = currentAdmins.filter((adminId) => adminId !== String(memberId));
+
+      if (nextAdmins.length === 0) {
+        return res.status(400).json({ error: "The group must keep at least one admin" });
+      }
+    }
+
+    await pool.query(
+      `
+      UPDATE group_chats
+      SET admin_user_ids = $2::uuid[]
+      WHERE id = $1
+      `,
+      [groupChatId, nextAdmins]
+    );
+
+    const membersResult = await pool.query(
+      `
+      SELECT
+        u.id,
+        u.username,
+        u.profile_pic,
+        gcm.joined_at,
+        u.id = ANY($2::uuid[]) AS is_admin
+      FROM group_chat_members gcm
+      JOIN users u
+        ON u.id = gcm.user_id
+      WHERE gcm.group_chat_id = $1
+      ORDER BY LOWER(u.username) ASC
+      `,
+      [groupChatId, nextAdmins]
+    );
+
+    return res.json({
+      success: true,
+      members: membersResult.rows,
+      admins: membersResult.rows.filter((member) => member.is_admin),
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to update admin status" });
+  }
+});
+
 router.post("/groups/chats/:groupChatId/leave", authenticateToken, async (req, res) => {
   const { groupChatId } = req.params;
   const userId = req.user.id;
