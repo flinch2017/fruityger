@@ -11,6 +11,7 @@ import { sendPushToUser } from "../utils/notifications.js";
 const router = express.Router();
 
 let deletedChatsTableReadyPromise = null;
+let deletedMessagesTableReadyPromise = null;
 let blockedUsersTableReadyPromise = null;
 let activeUsersTableReadyPromise = null;
 let messageRepliesSchemaReadyPromise = null;
@@ -109,6 +110,26 @@ async function ensureDeletedChatsTable() {
   }
 
   await deletedChatsTableReadyPromise;
+}
+
+async function ensureDeletedMessagesTable() {
+  if (!deletedMessagesTableReadyPromise) {
+    deletedMessagesTableReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS deleted_messages (
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+          deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (user_id, message_id)
+        )
+      `);
+    })().catch((error) => {
+      deletedMessagesTableReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await deletedMessagesTableReadyPromise;
 }
 
 async function ensureBlockedUsersTable() {
@@ -389,6 +410,7 @@ router.get("/chats", authenticateToken, async (req, res) => {
 
   try {
     await ensureDeletedChatsTable();
+    await ensureDeletedMessagesTable();
     await ensureMessageAttachmentsSchema();
     await ensureChatGroupsSchema();
 
@@ -501,6 +523,7 @@ router.get("/unread-count", authenticateToken, async (req, res) => {
 
   try {
     await ensureDeletedChatsTable();
+    await ensureDeletedMessagesTable();
 
     const { rows } = await pool.query(
       `
@@ -542,6 +565,7 @@ router.post("/send", authenticateToken, async (req, res) => {
     const normalizedReplyToMessageId = String(replyToMessageId || "").trim() || null;
 
     await ensureDeletedChatsTable();
+    await ensureDeletedMessagesTable();
     await ensureMessageRepliesSchema();
     await ensureMessageReactionsSchema();
     await ensureMessageAttachmentsSchema();
@@ -775,6 +799,7 @@ router.post("/delete-chats", authenticateToken, async (req, res) => {
 
   try {
     await ensureDeletedChatsTable();
+    await ensureDeletedMessagesTable();
 
     const participantChats = await pool.query(
       `
@@ -842,6 +867,7 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
 
   try {
     await ensureDeletedChatsTable();
+    await ensureDeletedMessagesTable();
     await ensureBlockedUsersTable();
     await ensureActiveUsersTable();
 
@@ -1001,6 +1027,7 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
 
   try {
     await ensureDeletedChatsTable();
+    await ensureDeletedMessagesTable();
     await ensureMessageRepliesSchema();
     await ensureMessageReactionsSchema();
     await ensureChatGroupsSchema();
@@ -1283,6 +1310,7 @@ router.post("/:chatId/read", authenticateToken, async (req, res) => {
 
   try {
     await ensureDeletedChatsTable();
+    await ensureDeletedMessagesTable();
 
     const deletedChatResult = await pool.query(
       `
@@ -1447,6 +1475,7 @@ router.post("/get-or-create", authenticateToken, async (req, res) => {
 
   try {
     await ensureDeletedChatsTable();
+    await ensureDeletedMessagesTable();
     await ensureChatGroupsSchema();
 
     const existing = await pool.query(
