@@ -672,6 +672,17 @@
   font-size: 13px;
 }
 
+.group-admin-option {
+  cursor: pointer;
+}
+
+.group-admin-option input[type="radio"] {
+  accent-color: #068bb1;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
 .chat-composer {
   margin-top: 20px;
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--chat-keyboard-offset, 0px));

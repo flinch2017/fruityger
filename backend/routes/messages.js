@@ -2240,6 +2240,7 @@ router.patch("/groups/chats/:groupChatId/admins/:memberId", authenticateToken, a
 router.post("/groups/chats/:groupChatId/leave", authenticateToken, async (req, res) => {
   const { groupChatId } = req.params;
   const userId = req.user.id;
+  const successorAdminId = String(req.body?.successorAdminId || "").trim() || null;
 
   try {
     await ensureGroupChatSchema();
@@ -2258,16 +2259,7 @@ router.post("/groups/chats/:groupChatId/leave", authenticateToken, async (req, r
       return res.status(404).json({ error: "Group chat not found" });
     }
 
-    await pool.query(
-      `
-      DELETE FROM group_chat_members
-      WHERE group_chat_id = $1
-        AND user_id = $2
-      `,
-      [groupChatId, userId]
-    );
-
-    const remainingMembersResult = await pool.query(
+    const membersBeforeLeaveResult = await pool.query(
       `
       SELECT user_id
       FROM group_chat_members
@@ -2277,19 +2269,42 @@ router.post("/groups/chats/:groupChatId/leave", authenticateToken, async (req, r
       [groupChatId]
     );
 
-    if (remainingMembersResult.rows.length === 0) {
-      await pool.query(`DELETE FROM group_chats WHERE id = $1`, [groupChatId]);
-      return res.json({ success: true, deleted: true });
-    }
+    const remainingMemberIds = membersBeforeLeaveResult.rows
+      .map((row) => String(row.user_id))
+      .filter((memberId) => memberId !== String(userId));
 
     const currentAdmins = (groupResult.rows[0].admin_user_ids || []).filter(
       (adminId) => String(adminId) !== String(userId)
     );
 
+    if (currentAdmins.length === 0 && remainingMemberIds.length > 0) {
+      if (!successorAdminId) {
+        return res.status(400).json({ error: "Choose a new admin before leaving the group" });
+      }
+
+      if (!remainingMemberIds.includes(String(successorAdminId))) {
+        return res.status(400).json({ error: "Selected member must still be in the group" });
+      }
+    }
+
+    await pool.query(
+      `
+      DELETE FROM group_chat_members
+      WHERE group_chat_id = $1
+        AND user_id = $2
+      `,
+      [groupChatId, userId]
+    );
+
+    if (remainingMemberIds.length === 0) {
+      await pool.query(`DELETE FROM group_chats WHERE id = $1`, [groupChatId]);
+      return res.json({ success: true, deleted: true });
+    }
+
     const nextAdmins =
       currentAdmins.length > 0
         ? currentAdmins
-        : [remainingMembersResult.rows[0].user_id];
+        : [successorAdminId];
 
     await pool.query(
       `

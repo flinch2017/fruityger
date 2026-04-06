@@ -39,6 +39,8 @@ export default function GroupChat() {
   const [membersPayload, setMembersPayload] = useState({ members: [], admins: [] });
   const [membersLoading, setMembersLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [selectedNextAdminId, setSelectedNextAdminId] = useState("");
 
   const messagesContainerRef = useRef(null);
   const previousMessagesLengthRef = useRef(0);
@@ -52,6 +54,11 @@ export default function GroupChat() {
   const isAdmin = Array.isArray(groupChat?.admin_user_ids)
     ? groupChat.admin_user_ids.some((adminId) => String(adminId) === String(userId))
     : false;
+  const adminCount = Array.isArray(groupChat?.admin_user_ids) ? groupChat.admin_user_ids.length : 0;
+  const eligibleNextAdmins = (groupChat?.members || []).filter(
+    (member) => String(member.id) !== String(userId)
+  );
+  const requiresAdminTransferBeforeLeaving = isAdmin && adminCount === 1 && eligibleNextAdmins.length > 0;
 
   const scrollToBottom = (behavior = "smooth") => {
     messagesContainerRef.current?.scrollTo({ top: 0, behavior });
@@ -467,6 +474,19 @@ export default function GroupChat() {
   const handleLeaveGroup = async () => {
     if (actionLoading) return;
 
+    if (requiresAdminTransferBeforeLeaving) {
+      setSelectedNextAdminId((currentValue) => currentValue || eligibleNextAdmins[0]?.id || "");
+      setLeaveModalOpen(true);
+      setHeaderMenuOpen(false);
+      return;
+    }
+
+    await submitLeaveGroup();
+  };
+
+  const submitLeaveGroup = async (successorAdminId = null) => {
+    if (actionLoading) return;
+
     setActionLoading(true);
     setHeaderMenuOpen(false);
 
@@ -474,8 +494,10 @@ export default function GroupChat() {
       const res = await fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/leave`, {
         method: "POST",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify(successorAdminId ? { successorAdminId } : {}),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -483,6 +505,8 @@ export default function GroupChat() {
         throw new Error(data.error || "Failed to leave group");
       }
 
+      setLeaveModalOpen(false);
+      setSelectedNextAdminId("");
       dispatchMessagesRefresh();
       navigate("/messages");
     } catch (error) {
@@ -886,6 +910,76 @@ export default function GroupChat() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {leaveModalOpen && (
+        <div className="message-reaction-modal-backdrop">
+          <div className="message-reaction-modal group-settings-modal members-settings-modal">
+            <div className="message-reaction-modal-header">
+              <div>
+                <h4>Choose the next admin</h4>
+                <p>Select a member to take over admin duties before you leave.</p>
+              </div>
+              <button
+                type="button"
+                className="message-reaction-modal-close"
+                onClick={() => {
+                  if (actionLoading) return;
+                  setLeaveModalOpen(false);
+                }}
+                aria-label="Close leave group modal"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="message-reaction-modal-list">
+              {eligibleNextAdmins.map((member) => (
+                <label key={member.id} className="message-reaction-modal-item group-admin-option">
+                  <div className="message-reaction-modal-user">
+                    <div className="message-reaction-modal-avatar">
+                      {member.profile_pic ? (
+                        <img src={getSafeMediaUrl(member.profile_pic)} alt={member.username} />
+                      ) : (
+                        <FaUserCircle />
+                      )}
+                    </div>
+                    <div className="message-reaction-modal-copy">
+                      <strong>{member.username}</strong>
+                      <span>{member.is_admin ? "Already an admin" : "Member"}</span>
+                    </div>
+                  </div>
+                  <input
+                    type="radio"
+                    name="next-admin"
+                    checked={String(selectedNextAdminId) === String(member.id)}
+                    onChange={() => setSelectedNextAdminId(member.id)}
+                    disabled={actionLoading}
+                  />
+                </label>
+              ))}
+            </div>
+
+            <div className="group-settings-actions">
+              <button
+                type="button"
+                className="messages-action-btn"
+                onClick={() => setLeaveModalOpen(false)}
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="messages-action-btn danger"
+                onClick={() => submitLeaveGroup(selectedNextAdminId)}
+                disabled={actionLoading || !selectedNextAdminId}
+              >
+                {actionLoading ? "Leaving..." : "Leave group"}
+              </button>
+            </div>
           </div>
         </div>
       )}
