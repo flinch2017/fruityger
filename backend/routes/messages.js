@@ -868,6 +868,7 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
   try {
     await ensureDeletedChatsTable();
     await ensureDeletedMessagesTable();
+    await ensureChatGroupsSchema();
     await ensureBlockedUsersTable();
     await ensureActiveUsersTable();
 
@@ -894,15 +895,18 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
           TRUE AS has_chat,
           c.last_message_at
         FROM chats c
+        JOIN chat_members viewer_membership
+          ON viewer_membership.chat_id = c.id
+         AND viewer_membership.user_id = $1
+        JOIN chat_members other_membership
+          ON other_membership.chat_id = c.id
+         AND other_membership.user_id <> $1
         JOIN users other_user
-          ON other_user.id = CASE
-            WHEN c.user1_id = $1 THEN c.user2_id
-            ELSE c.user1_id
-          END
+          ON other_user.id = other_membership.user_id
         LEFT JOIN deleted_chats dc
           ON dc.chat_id = c.id
          AND dc.user_id = $1
-        WHERE (c.user1_id = $1 OR c.user2_id = $1)
+        WHERE c.is_group = FALSE
           AND (
             dc.chat_id IS NULL
             OR EXISTS (
@@ -1055,7 +1059,7 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
        AND dc.user_id = $2
       JOIN users u1
         ON u1.id = c.user1_id
-      JOIN users u2
+      LEFT JOIN users u2
         ON u2.id = c.user2_id
       WHERE c.id = $1
       `,
