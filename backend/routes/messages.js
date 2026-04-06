@@ -358,6 +358,26 @@ async function ensureGroupChatSchema() {
       `);
 
       await pool.query(`
+        ALTER TABLE group_chats
+        ADD COLUMN IF NOT EXISTS group_image TEXT
+      `);
+
+      await pool.query(`
+        ALTER TABLE group_chats
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      `).catch(() => null);
+
+      await pool.query(`
+        ALTER TABLE group_chats
+        ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id) ON DELETE CASCADE
+      `);
+
+      await pool.query(`
+        ALTER TABLE group_chats
+        ADD COLUMN IF NOT EXISTS admin_user_ids UUID[] NOT NULL DEFAULT ARRAY[]::uuid[]
+      `).catch(() => null);
+
+      await pool.query(`
         CREATE TABLE IF NOT EXISTS group_chat_members (
           group_chat_id UUID NOT NULL REFERENCES group_chats(id) ON DELETE CASCADE,
           user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
