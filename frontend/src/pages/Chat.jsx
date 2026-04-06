@@ -12,6 +12,7 @@ import {
   FaTimes,
   FaUserCircle,
   FaPlayCircle,
+  FaUsers,
 } from "react-icons/fa";
 import supabase from "../lib/supabaseClient";
 import AeroNotice from "../components/AeroNotice";
@@ -33,6 +34,7 @@ export default function Chat() {
   const userId = localStorage.getItem("userId");
 
   const [messages, setMessages] = useState([]);
+  const [chatMeta, setChatMeta] = useState(null);
   const [otherUser, setOtherUser] = useState({ username: "..." });
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
@@ -134,9 +136,34 @@ export default function Chat() {
     setOnlineUserIds(Array.from(nextOnlineIds));
   };
 
+  const isGroupChat = Boolean(chatMeta?.is_group);
+  const chatMembers = Array.isArray(chatMeta?.members) ? chatMeta.members : [];
+  const chatTitle = isGroupChat
+    ? chatMeta?.group_name?.trim() ||
+      chatMembers.map((member) => member.username).slice(0, 3).join(", ") ||
+      "Group chat"
+    : otherUser?.username || "...";
+  const groupSubtitle = isGroupChat
+    ? `${chatMembers.length || 0} member${chatMembers.length === 1 ? "" : "s"}`
+    : "";
+
+  const getUsernameById = (targetUserId) => {
+    if (!targetUserId) return "Message";
+    if (String(targetUserId) === String(userId)) return "You";
+    if (!isGroupChat) return otherUser?.username || "Message";
+
+    return (
+      chatMembers.find((member) => String(member.id) === String(targetUserId))?.username ||
+      "Member"
+    );
+  };
+
   const getReplyAuthorLabel = (message) => {
     if (!message) return "Message";
-    return String(message.sender_id) === String(userId) ? "You" : otherUser.username;
+    if (message.sender_username) {
+      return String(message.sender_id) === String(userId) ? "You" : message.sender_username;
+    }
+    return getUsernameById(message.sender_id);
   };
 
   const getReplyPreviewText = (content) => {
@@ -248,8 +275,12 @@ export default function Chat() {
       }
 
       const chat = data.chat;
-      const other = chat.user1.id === userId ? chat.user2 : chat.user1;
+      const members = Array.isArray(chat.members) ? chat.members : [];
+      const other =
+        members.find((member) => String(member.id) !== String(userId)) ||
+        (chat.user1?.id === userId ? chat.user2 : chat.user1);
 
+      setChatMeta(chat);
       setOtherUser(other);
       setMessages([...(data.messages || [])].reverse());
       setBlockedByMe(Boolean(chat.blocked_by_me));
@@ -558,13 +589,13 @@ export default function Chat() {
   }, [input]);
 
   useEffect(() => {
-    if (!otherUser?.id) {
+    if (isGroupChat || !otherUser?.id) {
       setOtherUserOnline(false);
       return;
     }
 
     setOtherUserOnline(onlineUserIds.includes(String(otherUser.id)));
-  }, [otherUser?.id, onlineUserIds]);
+  }, [isGroupChat, otherUser?.id, onlineUserIds]);
 
   const sendMessage = async () => {
     if ((!input.trim() && !selectedAttachment) || blockedByMe || blockedByThem || sending) {
@@ -576,7 +607,9 @@ export default function Chat() {
     try {
       const formData = new FormData();
       formData.append("chatId", chatId);
-      formData.append("receiverId", otherUser.id);
+      if (!isGroupChat && otherUser?.id) {
+        formData.append("receiverId", otherUser.id);
+      }
       formData.append("content", input);
       formData.append("replyToMessageId", replyingTo?.id || "");
       if (selectedAttachment) {
@@ -818,6 +851,8 @@ export default function Chat() {
   };
 
   const handleBlockUser = async () => {
+    if (!otherUser?.id) return;
+
     try {
       const endpoint = blockedByMe
         ? "http://localhost:5000/api/main/unblock-user"
@@ -852,6 +887,7 @@ export default function Chat() {
   };
 
   const handleReportUser = () => {
+    if (!otherUser?.id) return;
     setHeaderMenuOpen(false);
     navigate(`/report?type=user&id=${otherUser.id}`);
   };
@@ -999,27 +1035,39 @@ export default function Chat() {
         </button>
         <button
           type="button"
-          className="chat-user-link"
-          onClick={() => navigate(`/profile/${otherUser.username}`)}
+          className={`chat-user-link ${isGroupChat ? "group-chat-link" : ""}`}
+          onClick={() => {
+            if (!isGroupChat && otherUser?.username) {
+              navigate(`/profile/${otherUser.username}`);
+            }
+          }}
         >
           <div className="chat-user-avatar-wrap">
             <div className="chat-user-avatar">
-              {otherUser.profile_pic ? (
+              {isGroupChat ? (
+                <FaUsers />
+              ) : otherUser.profile_pic ? (
                 <img src={getSafeMediaUrl(otherUser.profile_pic)} alt={otherUser.username} />
               ) : (
                 <FaUserCircle />
               )}
             </div>
-            {otherUserOnline && <span className="chat-user-online-dot"></span>}
+            {!isGroupChat && otherUserOnline && <span className="chat-user-online-dot"></span>}
           </div>
           <div className="chat-user-heading">
-            <h3>{otherUser.username}</h3>
+            <h3>{chatTitle}</h3>
             <span
               className={`chat-user-status ${
-                otherUserTyping ? "typing" : otherUserOnline ? "online" : ""
+                !isGroupChat && (otherUserTyping ? "typing" : otherUserOnline ? "online" : "")
               }`}
             >
-              {otherUserTyping ? "Typing..." : otherUserOnline ? "Online" : "Offline"}
+              {isGroupChat
+                ? groupSubtitle
+                : otherUserTyping
+                  ? "Typing..."
+                  : otherUserOnline
+                    ? "Online"
+                    : "Offline"}
             </span>
           </div>
         </button>
@@ -1037,12 +1085,16 @@ export default function Chat() {
               <button className="chat-header-dropdown-item" onClick={handleDeleteConversation}>
                 Delete this conversation
               </button>
-              <button className="chat-header-dropdown-item danger" onClick={handleBlockUser}>
-                {blockedByMe ? "Unblock this user" : "Block this user"}
-              </button>
-              <button className="chat-header-dropdown-item danger" onClick={handleReportUser}>
-                Report
-              </button>
+              {!isGroupChat && (
+                <>
+                  <button className="chat-header-dropdown-item danger" onClick={handleBlockUser}>
+                    {blockedByMe ? "Unblock this user" : "Block this user"}
+                  </button>
+                  <button className="chat-header-dropdown-item danger" onClick={handleReportUser}>
+                    Report
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1117,15 +1169,24 @@ export default function Chat() {
                   )}
 
                   <div className={bubbleClass}>
+                    {isGroupChat && !isMine && (
+                      <button
+                        type="button"
+                        className="group-message-sender"
+                        onClick={() => {
+                          if (msg.sender_username) {
+                            navigate(`/profile/${msg.sender_username}`);
+                          }
+                        }}
+                      >
+                        {msg.sender_username || getUsernameById(msg.sender_id)}
+                      </button>
+                    )}
                     {msg.reply_to_message_id && (
                       <div className="message-reply-preview">
                         <span className="message-reply-preview-label">
                           Replying to{" "}
-                          {msg.reply_to_sender_id
-                            ? String(msg.reply_to_sender_id) === String(userId)
-                              ? "You"
-                              : otherUser.username
-                            : "Message"}
+                          {msg.reply_to_sender_id ? getUsernameById(msg.reply_to_sender_id) : "Message"}
                         </span>
                         <p>{getReplyPreviewText(msg.reply_to_content)}</p>
                       </div>
@@ -1225,7 +1286,7 @@ export default function Chat() {
         <div ref={messagesEndRef} />
       </div>
 
-      {blockedByMe || blockedByThem ? (
+      {!isGroupChat && (blockedByMe || blockedByThem) ? (
         <div className="chat-blocked-banner">
           Sorry you can&apos;t message this user
         </div>

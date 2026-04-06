@@ -1261,3 +1261,20 @@
     padding: 8px 16px;
   }
 }
+
+.group-chat-link {
+  cursor: default;
+}
+
+.group-message-sender {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0 0 6px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0d87b7;
+  cursor: pointer;
+}

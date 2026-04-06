@@ -1,9 +1,50 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaUser } from "react-icons/fa";
+import { FaCheck, FaPlus, FaTimes, FaUser, FaUsers } from "react-icons/fa";
 import supabase from "../lib/supabaseClient";
 import "../css/Messages.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+
+function buildDirectChatMeta(chat, currentUserId) {
+  const members = Array.isArray(chat.members) ? chat.members : [];
+  const otherUser =
+    members.find((member) => String(member.id) !== String(currentUserId)) || members[0] || null;
+
+  return {
+    isGroup: false,
+    otherUser,
+    title: otherUser?.username || "Conversation",
+    subtitle: "Direct message",
+    avatarType: "direct",
+    avatarUsers: otherUser ? [otherUser] : [],
+  };
+}
+
+function buildGroupChatMeta(chat, currentUserId) {
+  const members = Array.isArray(chat.members) ? chat.members : [];
+  const otherMembers = members.filter((member) => String(member.id) !== String(currentUserId));
+  const title =
+    chat.group_name?.trim() ||
+    otherMembers.map((member) => member.username).slice(0, 3).join(", ") ||
+    "Group chat";
+  const subtitle =
+    members.length > 0 ? `${members.length} members` : "Group conversation";
+
+  return {
+    isGroup: true,
+    otherUser: null,
+    title,
+    subtitle,
+    avatarType: "group",
+    avatarUsers: otherMembers.slice(0, 2),
+  };
+}
+
+function buildChatMeta(chat, currentUserId) {
+  return chat?.is_group
+    ? buildGroupChatMeta(chat, currentUserId)
+    : buildDirectChatMeta(chat, currentUserId);
+}
 
 export default function Messages() {
   const navigate = useNavigate();
@@ -20,7 +61,14 @@ export default function Messages() {
   const [onlineCandidates, setOnlineCandidates] = useState([]);
   const [onlineLoading, setOnlineLoading] = useState(true);
   const [onlineUserIds, setOnlineUserIds] = useState([]);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [groupSearchQuery, setGroupSearchQuery] = useState("");
+  const [groupSearchResults, setGroupSearchResults] = useState([]);
+  const [selectedGroupMembers, setSelectedGroupMembers] = useState([]);
+  const [creatingGroup, setCreatingGroup] = useState(false);
   const sidebarRef = useRef(null);
+  const groupModalRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
   const inboxChannelRef = useRef(null);
 
@@ -40,6 +88,10 @@ export default function Messages() {
   };
 
   const selectedChatSet = useMemo(() => new Set(selectedChatIds), [selectedChatIds]);
+  const selectedGroupMemberSet = useMemo(
+    () => new Set(selectedGroupMembers.map((member) => String(member.id))),
+    [selectedGroupMembers]
+  );
 
   const updateUnreadEvent = (chatList) => {
     const unreadCount = (chatList || []).reduce(
@@ -65,8 +117,8 @@ export default function Messages() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      setChats(data);
-      updateUnreadEvent(data);
+      setChats(Array.isArray(data) ? data : []);
+      updateUnreadEvent(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -167,7 +219,7 @@ export default function Messages() {
           { headers: { Authorization: `Bearer ${token}` } }
         );
         const data = await res.json();
-        setSearchResults(data.filter((user) => user.id !== userId));
+        setSearchResults(Array.isArray(data) ? data.filter((user) => user.id !== userId) : []);
       } catch (err) {
         console.error(err);
       }
@@ -177,7 +229,43 @@ export default function Messages() {
   }, [searchQuery, token, userId]);
 
   useEffect(() => {
+    if (!groupModalOpen || !groupSearchQuery.trim()) {
+      setGroupSearchResults([]);
+      return;
+    }
+
+    const fetchUsers = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:5000/api/messages/search-users?q=${encodeURIComponent(groupSearchQuery)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = await res.json();
+        setGroupSearchResults(
+          Array.isArray(data)
+            ? data.filter(
+                (user) =>
+                  user.id !== userId && !selectedGroupMemberSet.has(String(user.id))
+              )
+            : []
+        );
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchUsers();
+  }, [groupModalOpen, groupSearchQuery, token, userId, selectedGroupMemberSet]);
+
+  useEffect(() => {
     const handleClickOutside = (event) => {
+      if (groupModalOpen) {
+        if (groupModalRef.current && !groupModalRef.current.contains(event.target)) {
+          setGroupModalOpen(false);
+        }
+        return;
+      }
+
       if (sidebarRef.current && !sidebarRef.current.contains(event.target)) {
         setSearchResults([]);
         setSearchQuery("");
@@ -186,7 +274,7 @@ export default function Messages() {
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [groupModalOpen]);
 
   useEffect(() => {
     if (!token || !userId) return;
@@ -319,6 +407,71 @@ export default function Messages() {
     }
   };
 
+  const openGroupModal = () => {
+    setGroupModalOpen(true);
+    setGroupName("");
+    setGroupSearchQuery("");
+    setGroupSearchResults([]);
+    setSelectedGroupMembers([]);
+  };
+
+  const closeGroupModal = () => {
+    if (creatingGroup) return;
+    setGroupModalOpen(false);
+    setGroupName("");
+    setGroupSearchQuery("");
+    setGroupSearchResults([]);
+    setSelectedGroupMembers([]);
+  };
+
+  const addGroupMember = (user) => {
+    setSelectedGroupMembers((prev) =>
+      prev.some((member) => String(member.id) === String(user.id)) ? prev : [...prev, user]
+    );
+    setGroupSearchQuery("");
+    setGroupSearchResults([]);
+  };
+
+  const removeGroupMember = (userIdToRemove) => {
+    setSelectedGroupMembers((prev) =>
+      prev.filter((member) => String(member.id) !== String(userIdToRemove))
+    );
+  };
+
+  const handleCreateGroup = async () => {
+    if (creatingGroup || !groupName.trim() || selectedGroupMembers.length === 0) return;
+
+    setCreatingGroup(true);
+
+    try {
+      const res = await fetch("http://localhost:5000/api/messages/group-create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          groupName: groupName.trim(),
+          memberIds: selectedGroupMembers.map((member) => member.id),
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create group chat");
+      }
+
+      await fetchChats({ silent: true });
+      await broadcastInboxSync("created-chat", { chatId: data.chatId });
+      closeGroupModal();
+      navigate(`/chat/${data.chatId}`);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setCreatingGroup(false);
+    }
+  };
+
   const onlineVisibleUsers = useMemo(
     () =>
       onlineCandidates
@@ -341,9 +494,7 @@ export default function Messages() {
 
   const toggleSelectedChat = (chatId) => {
     setSelectedChatIds((prev) =>
-      prev.includes(chatId)
-        ? prev.filter((id) => id !== chatId)
-        : [...prev, chatId]
+      prev.includes(chatId) ? prev.filter((id) => id !== chatId) : [...prev, chatId]
     );
   };
 
@@ -411,6 +562,48 @@ export default function Messages() {
     return date.toLocaleDateString();
   };
 
+  const renderChatAvatar = (meta) => {
+    if (meta.avatarType === "group") {
+      return (
+        <div className="chat-avatar group-avatar">
+          {meta.avatarUsers.length > 0 ? (
+            <>
+              {meta.avatarUsers.slice(0, 2).map((member, index) => (
+                <span
+                  key={member.id}
+                  className={`group-avatar-bubble group-avatar-bubble-${index + 1}`}
+                >
+                  {member.profile_pic ? (
+                    <img src={getSafeMediaUrl(member.profile_pic)} alt={member.username} />
+                  ) : (
+                    member.username?.[0]?.toUpperCase() || "?"
+                  )}
+                </span>
+              ))}
+              {meta.avatarUsers.length === 1 && (
+                <span className="group-avatar-bubble group-avatar-bubble-2 fallback">
+                  <FaUsers />
+                </span>
+              )}
+            </>
+          ) : (
+            <FaUsers />
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="chat-avatar">
+        {meta.otherUser?.profile_pic ? (
+          <img src={getSafeMediaUrl(meta.otherUser.profile_pic)} alt={meta.title} />
+        ) : (
+          <span className="avatar-initial">{meta.title?.[0]?.toUpperCase() || "?"}</span>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="messages-page">
       <div
@@ -421,6 +614,13 @@ export default function Messages() {
           <h2>Chats</h2>
 
           <div className="messages-toolbar-actions">
+            {!selectionMode && (
+              <button className="messages-action-btn" onClick={openGroupModal}>
+                <FaPlus />
+                <span>New Group</span>
+              </button>
+            )}
+
             {selectionMode ? (
               <>
                 <button
@@ -469,9 +669,7 @@ export default function Messages() {
           </div>
 
           {onlineLoading ? (
-            <div className="messages-online-empty">
-              Loading active people...
-            </div>
+            <div className="messages-online-empty">Loading active people...</div>
           ) : onlineVisibleUsers.length > 0 ? (
             <div className="messages-online-list">
               {onlineVisibleUsers.map((user) => (
@@ -497,9 +695,7 @@ export default function Messages() {
               ))}
             </div>
           ) : (
-            <div className="messages-online-empty">
-              No chat or follow contacts to show yet.
-            </div>
+            <div className="messages-online-empty">No chat or follow contacts to show yet.</div>
           )}
         </div>
 
@@ -515,16 +711,14 @@ export default function Messages() {
                   {user.profile_pic ? (
                     <img src={getSafeMediaUrl(user.profile_pic)} alt={user.username} />
                   ) : (
-                    "👤"
+                    <FaUser />
                   )}
                 </div>
                 <div className="chat-info">
                   <h4>{user.username}</h4>
                   <p>Start a fresh conversation</p>
                 </div>
-                <div className="search-result-cta">
-                  Message
-                </div>
+                <div className="search-result-cta">Message</div>
               </div>
             ))}
           </div>
@@ -539,21 +733,29 @@ export default function Messages() {
             <div className="messages-empty-state">
               <div className="messages-empty-buddy" aria-hidden="true">
                 <div className="buddy-orb">
-                  <span className="buddy-face">◕‿◕</span>
+                  <span className="buddy-face">o_o</span>
                 </div>
                 <div className="buddy-shadow"></div>
               </div>
               <h3>Your inbox is empty</h3>
-              <p>
-                Search for a friend above and start a bright little conversation.
-              </p>
+              <p>Search for a friend above or start a group chat to get things glowing.</p>
             </div>
           ) : (
             chats.map((chat) => {
-              const otherUser = chat.user1?.id === userId ? chat.user2 : chat.user1;
+              const meta = buildChatMeta(chat, userId);
               const isMine = String(chat.last_message_sender_id) === String(userId);
               const isUnread = Number(chat.unread_count || 0) > 0;
               const isSeen = chat.last_message_read && isMine;
+              const senderName = chat.members?.find(
+                (member) => String(member.id) === String(chat.last_message_sender_id)
+              )?.username;
+              const previewText = chat.last_message
+                ? isMine
+                  ? `You: ${chat.last_message}`
+                  : meta.isGroup && senderName
+                    ? `${senderName}: ${chat.last_message}`
+                    : chat.last_message
+                : "Say hi!";
 
               return (
                 <div
@@ -565,28 +767,21 @@ export default function Messages() {
                 >
                   {selectionMode && (
                     <span className="selection-check">
-                      {selectedChatSet.has(chat.id) ? "✓" : ""}
+                      {selectedChatSet.has(chat.id) ? <FaCheck /> : ""}
                     </span>
                   )}
 
-                  <div className="chat-avatar">
-                    {otherUser?.profile_pic ? (
-                      <img src={getSafeMediaUrl(otherUser.profile_pic)} alt={otherUser.username} />
-                    ) : (
-                      <span className="avatar-initial">
-                        {otherUser?.username?.[0]?.toUpperCase() || "?"}
-                      </span>
-                    )}
-                  </div>
+                  {renderChatAvatar(meta)}
 
                   <div className="chat-info">
                     <div className="chat-top">
-                      <h4>{otherUser.username}</h4>
+                      <div className="chat-title-stack">
+                        <h4>{meta.title}</h4>
+                        {meta.isGroup && <span className="chat-subtitle">{meta.subtitle}</span>}
+                      </div>
 
                       <div className="chat-meta">
-                        <span className="chat-date">
-                          {formatChatDate(chat.last_message_at)}
-                        </span>
+                        <span className="chat-date">{formatChatDate(chat.last_message_at)}</span>
 
                         {isUnread && (
                           <span className="chat-unread-badge">
@@ -598,13 +793,7 @@ export default function Messages() {
                       </div>
                     </div>
 
-                    <p className={isUnread ? "unread" : ""}>
-                      {chat.last_message
-                        ? isMine
-                          ? `You: ${chat.last_message}`
-                          : chat.last_message
-                        : "Say hi!"}
-                    </p>
+                    <p className={isUnread ? "unread" : ""}>{previewText}</p>
                   </div>
                 </div>
               );
@@ -612,6 +801,104 @@ export default function Messages() {
           )}
         </div>
       </div>
+
+      {groupModalOpen && (
+        <div className="messages-group-modal-backdrop">
+          <div ref={groupModalRef} className="messages-group-modal">
+            <div className="messages-group-modal-header">
+              <div>
+                <h3>New Group</h3>
+                <p>Pick members first, then give the conversation a name.</p>
+              </div>
+              <button
+                type="button"
+                className="messages-group-modal-close"
+                onClick={closeGroupModal}
+                aria-label="Close group creator"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <label className="messages-group-label">
+              Group name
+              <input
+                type="text"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                placeholder="Weekend plans"
+                maxLength={60}
+              />
+            </label>
+
+            <label className="messages-group-label">
+              Add members
+              <input
+                type="text"
+                value={groupSearchQuery}
+                onChange={(e) => setGroupSearchQuery(e.target.value)}
+                placeholder="Search followers or chat contacts"
+              />
+            </label>
+
+            {selectedGroupMembers.length > 0 && (
+              <div className="messages-group-selected">
+                {selectedGroupMembers.map((member) => (
+                  <span key={member.id} className="messages-group-chip">
+                    {member.username}
+                    <button
+                      type="button"
+                      onClick={() => removeGroupMember(member.id)}
+                      aria-label={`Remove ${member.username}`}
+                    >
+                      <FaTimes />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {groupSearchResults.length > 0 && (
+              <div className="messages-group-results">
+                {groupSearchResults.map((user) => (
+                  <button
+                    type="button"
+                    key={user.id}
+                    className="messages-group-result"
+                    onClick={() => addGroupMember(user)}
+                  >
+                    <span className="messages-group-result-avatar">
+                      {user.profile_pic ? (
+                        <img src={getSafeMediaUrl(user.profile_pic)} alt={user.username} />
+                      ) : (
+                        <FaUser />
+                      )}
+                    </span>
+                    <span className="messages-group-result-copy">
+                      <strong>{user.username}</strong>
+                      <small>Add to group</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="messages-group-modal-footer">
+              <button type="button" className="messages-action-btn" onClick={closeGroupModal}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="messages-action-btn primary"
+                onClick={handleCreateGroup}
+                disabled={creatingGroup || !groupName.trim() || selectedGroupMembers.length === 0}
+              >
+                {creatingGroup ? "Creating..." : "Create Group"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
