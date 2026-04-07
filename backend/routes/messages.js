@@ -2058,10 +2058,12 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
       return res.status(404).json({ error: "Group chat not found" });
     }
 
+    let replyTargetSenderId = null;
+
     if (replyToMessageId) {
       const replyTargetResult = await pool.query(
         `
-        SELECT id
+        SELECT id, sender_id
         FROM group_messages
         WHERE id = $1
           AND group_chat_id = $2
@@ -2073,6 +2075,8 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
       if (replyTargetResult.rows.length === 0) {
         return res.status(400).json({ error: "Reply target was not found" });
       }
+
+      replyTargetSenderId = replyTargetResult.rows[0].sender_id || null;
     }
 
     let attachmentUrl = null;
@@ -2172,14 +2176,20 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
         createNotification({
           recipientId: row.user_id,
           actorId: senderId,
-          type: "group_message",
+          type:
+            replyTargetSenderId && String(row.user_id) === String(replyTargetSenderId)
+              ? "group_message_reply"
+              : "group_message",
           groupChatId,
           messageId,
           pushTitle: senderResult.rows[0]?.username || "New group message",
           pushBody: storedContent,
           pushCategoryId: "messageReply",
           pushData: {
-            type: "group_message",
+            type:
+              replyTargetSenderId && String(row.user_id) === String(replyTargetSenderId)
+                ? "group_message_reply"
+                : "group_message",
             groupChatId,
             senderId,
             messageId,

@@ -142,6 +142,11 @@ const getNotificationPushCopy = (type, actorUsername = "Someone") => {
         title: "New group message",
         body: `@${actorUsername} sent a group message.`,
       };
+    case "group_message_reply":
+      return {
+        title: "New group reply",
+        body: `@${actorUsername} replied to your message.`,
+      };
     case "message_reaction":
       return {
         title: "New reaction",

@@ -44,6 +44,11 @@ const TYPE_COPY = {
     title: "Group message",
     body: (username) => `@${username} sent a message in your group.`,
   },
+  group_message_reply: {
+    icon: "GR",
+    title: "Group reply",
+    body: (username) => `@${username} replied to your message.`,
+  },
   message_reaction: {
     icon: "MR",
     title: "Message reaction",
