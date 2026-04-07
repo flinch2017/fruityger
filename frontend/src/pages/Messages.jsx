@@ -21,7 +21,7 @@ export default function Messages() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedChatIds, setSelectedChatIds] = useState([]);
+  const [selectedConversationKeys, setSelectedConversationKeys] = useState([]);
   const [deletingChats, setDeletingChats] = useState(false);
   const [onlineCandidates, setOnlineCandidates] = useState([]);
   const [onlineLoading, setOnlineLoading] = useState(true);
@@ -52,7 +52,10 @@ export default function Messages() {
     setOnlineUserIds(Array.from(nextOnlineIds));
   };
 
-  const selectedChatSet = useMemo(() => new Set(selectedChatIds), [selectedChatIds]);
+  const selectedConversationSet = useMemo(
+    () => new Set(selectedConversationKeys),
+    [selectedConversationKeys]
+  );
   const selectedGroupMemberSet = useMemo(
     () => new Set(selectedGroupMembers.map((member) => String(member.id))),
     [selectedGroupMembers]
@@ -324,7 +327,7 @@ export default function Messages() {
 
   const handleDirectChatClick = (chatId) => {
     if (selectionMode) {
-      toggleSelectedChat(chatId);
+      toggleSelectedConversation("direct", chatId);
       return;
     }
 
@@ -332,7 +335,10 @@ export default function Messages() {
   };
 
   const handleGroupChatClick = (groupChatId) => {
-    if (selectionMode) return;
+    if (selectionMode) {
+      toggleSelectedConversation("group", groupChatId);
+      return;
+    }
     navigate(`/group-chat/${groupChatId}`);
   };
 
@@ -466,48 +472,84 @@ export default function Messages() {
     });
   }, [chats, groupChats]);
 
-  const toggleSelectedChat = (chatId) => {
-    setSelectedChatIds((prev) =>
-      prev.includes(chatId) ? prev.filter((id) => id !== chatId) : [...prev, chatId]
+  const getConversationSelectionKey = (type, id) => `${type}:${id}`;
+
+  const toggleSelectedConversation = (type, id) => {
+    const key = getConversationSelectionKey(type, id);
+    setSelectedConversationKeys((prev) =>
+      prev.includes(key) ? prev.filter((entry) => entry !== key) : [...prev, key]
     );
   };
 
   const exitSelectionMode = () => {
     setSelectionMode(false);
-    setSelectedChatIds([]);
+    setSelectedConversationKeys([]);
   };
 
   const deleteSelectedChats = async () => {
-    if (!token || selectedChatIds.length === 0) return;
+    if (!token || selectedConversationKeys.length === 0) return;
 
     setDeletingChats(true);
 
     try {
-      const res = await fetch("http://localhost:5000/api/messages/delete-chats", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ chatIds: selectedChatIds }),
-      });
+      const directIds = selectedConversationKeys
+        .filter((key) => key.startsWith("direct:"))
+        .map((key) => key.slice("direct:".length));
+      const groupIds = selectedConversationKeys
+        .filter((key) => key.startsWith("group:"))
+        .map((key) => key.slice("group:".length));
 
-      const data = await res.json();
+      let deletedDirectIds = [];
 
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to delete chats");
+      if (directIds.length > 0) {
+        const res = await fetch("http://localhost:5000/api/messages/delete-chats", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ chatIds: directIds }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to delete chats");
+        }
+
+        deletedDirectIds = data.chatIds || [];
       }
 
-      const allowedSet = new Set(data.chatIds || []);
+      if (groupIds.length > 0) {
+        await Promise.all(
+          groupIds.map(async (groupChatId) => {
+            const res = await fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/delete`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            });
 
-      setChats((prev) => {
-        const nextChats = prev.filter((chat) => !allowedSet.has(chat.id));
-        updateUnreadEvent(nextChats, groupChats);
-        return nextChats;
-      });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              throw new Error(data.error || "Failed to delete group chat");
+            }
+          })
+        );
+      }
+
+      const deletedDirectSet = new Set(deletedDirectIds);
+      const deletedGroupSet = new Set(groupIds);
+
+      const nextChats = chats.filter((chat) => !deletedDirectSet.has(chat.id));
+      const nextGroupChats = groupChats.filter((chat) => !deletedGroupSet.has(chat.id));
+
+      setChats(nextChats);
+      setGroupChats(nextGroupChats);
+      updateUnreadEvent(nextChats, nextGroupChats);
 
       exitSelectionMode();
-      await broadcastInboxSync("deleted-chat", { chatIds: selectedChatIds });
+      await broadcastInboxSync("deleted-chat", { conversationKeys: selectedConversationKeys });
     } catch (err) {
       console.error(err);
     } finally {
@@ -593,7 +635,7 @@ export default function Messages() {
                 <button
                   className="messages-action-btn danger"
                   onClick={deleteSelectedChats}
-                  disabled={deletingChats || selectedChatIds.length === 0}
+                  disabled={deletingChats || selectedConversationKeys.length === 0}
                 >
                   Delete Selected
                 </button>
@@ -609,7 +651,7 @@ export default function Messages() {
               <button
                 className="messages-action-btn"
                 onClick={() => setSelectionMode(true)}
-                disabled={chats.length === 0}
+                disabled={combinedConversations.length === 0}
               >
                 Select
               </button>
@@ -720,9 +762,18 @@ export default function Messages() {
                 return (
                   <div
                     key={`group-${chat.id}`}
-                    className={`chat-preview group-chat-preview ${isUnread ? "unread-chat" : ""}`}
+                    className={`chat-preview group-chat-preview ${isUnread ? "unread-chat" : ""} ${
+                      selectedConversationSet.has(getConversationSelectionKey("group", chat.id))
+                        ? "selected-chat"
+                        : ""
+                    }`}
                     onClick={() => handleGroupChatClick(chat.id)}
                   >
+                    {selectionMode && (
+                      <span className="selection-check">
+                        {selectedConversationSet.has(getConversationSelectionKey("group", chat.id)) ? "✓" : ""}
+                      </span>
+                    )}
                     {renderGroupAvatar(chat)}
 
                     <div className="chat-info">
@@ -760,13 +811,15 @@ export default function Messages() {
                 <div
                   key={`direct-${chat.id}`}
                   className={`chat-preview ${isUnread ? "unread-chat" : ""} ${
-                    selectedChatSet.has(chat.id) ? "selected-chat" : ""
+                    selectedConversationSet.has(getConversationSelectionKey("direct", chat.id))
+                      ? "selected-chat"
+                      : ""
                   }`}
                   onClick={() => handleDirectChatClick(chat.id)}
                 >
                   {selectionMode && (
                     <span className="selection-check">
-                      {selectedChatSet.has(chat.id) ? "✓" : ""}
+                      {selectedConversationSet.has(getConversationSelectionKey("direct", chat.id)) ? "✓" : ""}
                     </span>
                   )}
 
