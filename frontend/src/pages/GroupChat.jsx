@@ -3,10 +3,13 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   FaArrowLeft,
   FaCog,
+  FaEllipsisV,
   FaFileAlt,
   FaFilePdf,
   FaFileWord,
   FaPlayCircle,
+  FaRegSmileBeam,
+  FaReply,
   FaTimes,
   FaUserCircle,
   FaUsers,
@@ -17,6 +20,14 @@ import "../css/Chat.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function GroupChat() {
+  const reactionOptions = [
+    { key: "heart", emoji: "\u2764\uFE0F", label: "Heart" },
+    { key: "laugh", emoji: "\u{1F602}", label: "Laugh" },
+    { key: "sad", emoji: "\u{1F622}", label: "Sad" },
+    { key: "angry", emoji: "\u{1F621}", label: "Angry" },
+    { key: "care", emoji: "\u{1F917}", label: "Care" },
+  ];
+
   const { groupChatId } = useParams();
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
@@ -28,6 +39,13 @@ export default function GroupChat() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState(null);
   const [sending, setSending] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [reactionTargetMessage, setReactionTargetMessage] = useState(null);
+  const [reacting, setReacting] = useState(false);
+  const [pendingReactionKey, setPendingReactionKey] = useState(null);
+  const [reactionViewer, setReactionViewer] = useState(null);
+  const [reactionViewerLoading, setReactionViewerLoading] = useState(false);
   const [selectedAttachment, setSelectedAttachment] = useState(null);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
@@ -73,6 +91,21 @@ export default function GroupChat() {
   const dispatchMessagesRefresh = () => {
     window.dispatchEvent(new CustomEvent("fruityger:messages-refresh"));
   };
+
+  const getReplyAuthorLabel = (message) => {
+    if (!message) return "Message";
+    return String(message.sender_id) === String(userId)
+      ? "You"
+      : message.sender_username || "Member";
+  };
+
+  const getReplyPreviewText = (content) => {
+    const safeContent = (content || "Original message unavailable").trim();
+    return safeContent.length > 90 ? `${safeContent.slice(0, 90)}...` : safeContent;
+  };
+
+  const getReactionEmoji = (reactionKey) =>
+    reactionOptions.find((option) => option.key === reactionKey)?.emoji || "\u2764\uFE0F";
 
   const getAttachmentKindLabel = (attachment) => {
     if (!attachment) return "";
@@ -231,10 +264,28 @@ export default function GroupChat() {
       if (headerMenuRef.current && !headerMenuRef.current.contains(event.target)) {
         setHeaderMenuOpen(false);
       }
+
+      if (!event.target.closest(".message-options-wrapper")) {
+        setOpenMenuId(null);
+      }
+
+      if (!event.target.closest(".message-reaction-wrap")) {
+        return;
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const closeOverlays = () => {
+      setOpenMenuId(null);
+    };
+
+    document.addEventListener("scroll", closeOverlays);
+
+    return () => document.removeEventListener("scroll", closeOverlays);
   }, []);
 
   const handleAttachmentSelection = (event) => {
@@ -287,6 +338,7 @@ export default function GroupChat() {
     try {
       const formData = new FormData();
       formData.append("content", input);
+      formData.append("replyToMessageId", replyingTo?.id || "");
       if (selectedAttachment) {
         formData.append("attachment", selectedAttachment);
       }
@@ -306,6 +358,7 @@ export default function GroupChat() {
 
       setMessages((prev) => [data, ...prev]);
       setInput("");
+      setReplyingTo(null);
       setSelectedAttachment(null);
       if (attachmentInputRef.current) {
         attachmentInputRef.current.value = "";
@@ -317,6 +370,167 @@ export default function GroupChat() {
       setNotice({ type: "error", message: error.message || "Failed to send group message." });
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleDelete = async (msg) => {
+    try {
+      let res;
+
+      if (String(msg.sender_id) === String(userId)) {
+        res = await fetch(`http://localhost:5000/api/messages/groups/messages/${msg.id}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      } else {
+        res = await fetch("http://localhost:5000/api/messages/groups/messages/delete-for-me", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ messageId: msg.id }),
+        });
+      }
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to delete message");
+      }
+
+      setMessages((prev) => prev.filter((message) => message.id !== msg.id));
+      if (replyingTo?.id === msg.id) {
+        setReplyingTo(null);
+      }
+      setOpenMenuId(null);
+      dispatchMessagesRefresh();
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: error.message || "Failed to delete message." });
+    }
+  };
+
+  const handleReport = (msg) => {
+    setOpenMenuId(null);
+    navigate(`/report?type=group-message&id=${msg.id}`);
+  };
+
+  const handleReact = async (message, reactionKey) => {
+    if (reacting) return;
+
+    setReacting(true);
+    setPendingReactionKey(reactionKey);
+
+    try {
+      const currentReaction = Array.isArray(message.reactions)
+        ? message.reactions.find((reaction) => reaction.reacted_by_me)?.reaction
+        : null;
+      const nextReaction = currentReaction === reactionKey ? null : reactionKey;
+
+      const res = await fetch(`http://localhost:5000/api/messages/groups/messages/${message.id}/react`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reaction: nextReaction }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to react to message");
+      }
+
+      if (data.message) {
+        setMessages((prev) =>
+          prev.map((entry) => (entry.id === message.id ? data.message : entry))
+        );
+      }
+
+      setReactionTargetMessage(null);
+      dispatchMessagesRefresh();
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: "Failed to update reaction." });
+    } finally {
+      setReacting(false);
+      setPendingReactionKey(null);
+    }
+  };
+
+  const openReactionViewer = async (message) => {
+    setReactionViewerLoading(true);
+    setReactionViewer({
+      messageId: message.id,
+      reactions: [],
+    });
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/groups/messages/${message.id}/reactions`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load reactions");
+      }
+
+      setReactionViewer({
+        messageId: message.id,
+        reactions: data.reactions || [],
+      });
+    } catch (error) {
+      console.error(error);
+      setReactionViewer(null);
+      setNotice({ type: "error", message: "Failed to load reaction viewers." });
+    } finally {
+      setReactionViewerLoading(false);
+    }
+  };
+
+  const removeOwnReactionFromViewer = async () => {
+    if (!reactionViewer?.messageId) return;
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/messages/groups/messages/${reactionViewer.messageId}/react`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ reaction: null }),
+        }
+      );
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to remove reaction");
+      }
+
+      if (data.message) {
+        setMessages((prev) =>
+          prev.map((entry) => (entry.id === reactionViewer.messageId ? data.message : entry))
+        );
+      }
+
+      setReactionViewer((prev) =>
+        prev
+          ? {
+              ...prev,
+              reactions: prev.reactions.filter((reaction) => !reaction.reacted_by_me),
+            }
+          : prev
+      );
+      dispatchMessagesRefresh();
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: "Failed to remove reaction." });
     }
   };
 
@@ -702,6 +916,49 @@ export default function GroupChat() {
             return (
               <div key={msg.id} className={`message-wrapper ${isMine ? "sent" : "received"}`}>
                 <div className="message-row">
+                  {isMine && (
+                    <div className="message-options-wrapper">
+                      <button
+                        type="button"
+                        className="message-options"
+                        onClick={() => setOpenMenuId(openMenuId === msg.id ? null : msg.id)}
+                        aria-label="Open message options"
+                      >
+                        <FaEllipsisV />
+                      </button>
+
+                      {openMenuId === msg.id && (
+                        <div className="message-dropdown">
+                          <div className="dropdown-item" onClick={() => handleDelete(msg)}>
+                            Delete
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    className="message-reply-btn"
+                    onClick={() => setReplyingTo(msg)}
+                    aria-label="Reply to message"
+                    title="Reply"
+                  >
+                    <FaReply />
+                  </button>
+
+                  <div className="message-reaction-wrap">
+                    <button
+                      type="button"
+                      className="message-reaction-trigger"
+                      onClick={() => setReactionTargetMessage(msg)}
+                      aria-label="React to message"
+                      title="React"
+                    >
+                      <FaRegSmileBeam />
+                    </button>
+                  </div>
+
                   <div className={bubbleClass}>
                     {!isMine && (
                       <button
@@ -712,10 +969,63 @@ export default function GroupChat() {
                         {msg.sender_username || "Member"}
                       </button>
                     )}
+                    {msg.reply_to_message_id && (
+                      <div className="message-reply-preview">
+                        <span className="message-reply-preview-label">
+                          Replying to {msg.reply_to_sender_id
+                            ? String(msg.reply_to_sender_id) === String(userId)
+                              ? "You"
+                              : msg.reply_to_sender_username || "Member"
+                            : "Message"}
+                        </span>
+                        <p>{getReplyPreviewText(msg.reply_to_content)}</p>
+                      </div>
+                    )}
                     {renderMessageAttachment(msg)}
                     {msg.content ? <div className="message-bubble-text">{msg.content}</div> : null}
                   </div>
+
+                  {!isMine && (
+                    <div className="message-options-wrapper">
+                      <button
+                        type="button"
+                        className="message-options"
+                        onClick={() => setOpenMenuId(openMenuId === msg.id ? null : msg.id)}
+                        aria-label="Open message options"
+                      >
+                        <FaEllipsisV />
+                      </button>
+
+                      {openMenuId === msg.id && (
+                        <div className="message-dropdown">
+                          <div className="dropdown-item" onClick={() => handleDelete(msg)}>
+                            Delete
+                          </div>
+                          <div className="dropdown-item danger" onClick={() => handleReport(msg)}>
+                            Report
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
+
+                {Array.isArray(msg.reactions) && msg.reactions.length > 0 && (
+                  <div className={`message-reactions ${isMine ? "sent" : "received"}`}>
+                    {msg.reactions.map((reaction) => (
+                      <button
+                        key={reaction.reaction}
+                        type="button"
+                        className={`message-reaction-pill ${reaction.reacted_by_me ? "active" : ""}`}
+                        disabled={reacting}
+                        onClick={() => openReactionViewer(msg)}
+                      >
+                        <span>{getReactionEmoji(reaction.reaction)}</span>
+                        <span>{reaction.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 <div className="message-meta">
                   <span className="message-time">{formatMessageTime(msg.created_at)}</span>
@@ -727,6 +1037,23 @@ export default function GroupChat() {
       </div>
 
       <div className="chat-composer">
+        {replyingTo && (
+          <div className="chat-replying-bar">
+            <div className="chat-replying-copy">
+              <span>Replying to {getReplyAuthorLabel(replyingTo)}</span>
+              <p>{getReplyPreviewText(replyingTo.content)}</p>
+            </div>
+            <button
+              type="button"
+              className="chat-replying-close"
+              onClick={() => setReplyingTo(null)}
+              aria-label="Cancel reply"
+            >
+              <FaTimes />
+            </button>
+          </div>
+        )}
+
         {selectedAttachment && (
           <div className="chat-attachment-preview">
             <div className="chat-attachment-preview-copy">
@@ -768,7 +1095,7 @@ export default function GroupChat() {
 
           <input
             type="text"
-            placeholder="Type a message..."
+            placeholder={replyingTo ? "Write your reply..." : "Type a message..."}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onFocus={() => {
@@ -787,6 +1114,102 @@ export default function GroupChat() {
           </button>
         </div>
       </div>
+
+      {reactionViewer && (
+        <div className="message-reaction-modal-backdrop">
+          <div className="message-reaction-modal">
+            <div className="message-reaction-modal-header">
+              <div>
+                <h4>Reactions</h4>
+                <p>See who reacted to this message.</p>
+              </div>
+              <button
+                type="button"
+                className="message-reaction-modal-close"
+                onClick={() => setReactionViewer(null)}
+                aria-label="Close reactions viewer"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            {reactionViewerLoading ? (
+              <p className="message-reaction-modal-empty">Loading reactions...</p>
+            ) : reactionViewer.reactions.length === 0 ? (
+              <p className="message-reaction-modal-empty">No reactions yet.</p>
+            ) : (
+              <div className="message-reaction-modal-list">
+                {reactionViewer.reactions.map((reaction) => (
+                  <div key={`${reaction.user_id}-${reaction.reaction}`} className="message-reaction-modal-item">
+                    <div className="message-reaction-modal-user">
+                      <div className="message-reaction-modal-avatar">
+                        {reaction.profile_pic ? (
+                          <img src={getSafeMediaUrl(reaction.profile_pic)} alt={reaction.username} />
+                        ) : (
+                          <FaUserCircle />
+                        )}
+                      </div>
+                      <div className="message-reaction-modal-copy">
+                        <strong>{reaction.username}</strong>
+                        <span>
+                          {getReactionEmoji(reaction.reaction)} {reaction.reaction}
+                        </span>
+                      </div>
+                    </div>
+                    {reaction.reacted_by_me && (
+                      <button
+                        type="button"
+                        className="message-reaction-remove-btn"
+                        onClick={removeOwnReactionFromViewer}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {reactionTargetMessage && (
+        <div className="message-reaction-picker-modal-backdrop">
+          <div className="message-reaction-picker-modal">
+            <div className="message-reaction-picker-header">
+              <div>
+                <h4>Pick a reaction</h4>
+                <p>Choose one reaction for this message.</p>
+              </div>
+              <button
+                type="button"
+                className="message-reaction-modal-close"
+                onClick={() => setReactionTargetMessage(null)}
+                aria-label="Close reaction picker"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="message-reaction-picker-grid">
+              {reactionOptions.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  className={`message-reaction-choice-large ${
+                    pendingReactionKey === option.key ? "active" : ""
+                  }`}
+                  disabled={reacting}
+                  onClick={() => handleReact(reactionTargetMessage, option.key)}
+                >
+                  <span>{option.emoji}</span>
+                  <span>{option.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {nameModalOpen && (
         <div className="message-reaction-modal-backdrop">

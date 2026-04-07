@@ -20,6 +20,9 @@ let messageAttachmentsSchemaReadyPromise = null;
 let chatGroupsSchemaReadyPromise = null;
 let groupChatSchemaReadyPromise = null;
 let deletedGroupChatsTableReadyPromise = null;
+let groupMessageRepliesSchemaReadyPromise = null;
+let groupMessageReactionsSchemaReadyPromise = null;
+let deletedGroupMessagesTableReadyPromise = null;
 
 const CHAT_ATTACHMENT_MAX_SIZE = 5 * 1024 * 1024;
 const allowedDocumentExtensions = new Set([".pdf", ".docx"]);
@@ -440,6 +443,73 @@ async function ensureDeletedGroupChatsTable() {
   await deletedGroupChatsTableReadyPromise;
 }
 
+async function ensureDeletedGroupMessagesTable() {
+  if (!deletedGroupMessagesTableReadyPromise) {
+    deletedGroupMessagesTableReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS deleted_group_messages (
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          message_id UUID NOT NULL REFERENCES group_messages(id) ON DELETE CASCADE,
+          deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (user_id, message_id)
+        )
+      `);
+    })().catch((error) => {
+      deletedGroupMessagesTableReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await deletedGroupMessagesTableReadyPromise;
+}
+
+async function ensureGroupMessageRepliesSchema() {
+  if (!groupMessageRepliesSchemaReadyPromise) {
+    groupMessageRepliesSchemaReadyPromise = (async () => {
+      await pool.query(`
+        ALTER TABLE group_messages
+        ADD COLUMN IF NOT EXISTS reply_to_message_id UUID REFERENCES group_messages(id) ON DELETE SET NULL
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_group_messages_reply_to_message_id
+        ON group_messages(reply_to_message_id)
+      `);
+    })().catch((error) => {
+      groupMessageRepliesSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await groupMessageRepliesSchemaReadyPromise;
+}
+
+async function ensureGroupMessageReactionsSchema() {
+  if (!groupMessageReactionsSchemaReadyPromise) {
+    groupMessageReactionsSchemaReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS group_message_reactions (
+          message_id UUID NOT NULL REFERENCES group_messages(id) ON DELETE CASCADE,
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          reaction VARCHAR(20) NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (message_id, user_id)
+        )
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_group_message_reactions_message_id
+        ON group_message_reactions(message_id)
+      `);
+    })().catch((error) => {
+      groupMessageReactionsSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await groupMessageReactionsSchemaReadyPromise;
+}
+
 async function fetchChatMembers(chatId) {
   const { rows } = await pool.query(
     `
@@ -523,6 +593,84 @@ async function fetchMessageReactionViewers(messageId, userId) {
       ON u.id = mr.user_id
     WHERE mr.message_id = $1
     ORDER BY mr.created_at ASC, u.username ASC
+    `,
+    [messageId, userId]
+  );
+
+  return rows;
+}
+
+async function fetchGroupMessageForUser(messageId, userId) {
+  const { rows } = await pool.query(
+    `
+    SELECT
+      gm.*,
+      sender.username AS sender_username,
+      sender.profile_pic AS sender_profile_pic,
+      CASE
+        WHEN reply_dgm.message_id IS NULL THEN reply_message.content
+        ELSE NULL
+      END AS reply_to_content,
+      CASE
+        WHEN reply_dgm.message_id IS NULL THEN reply_message.sender_id
+        ELSE NULL
+      END AS reply_to_sender_id,
+      reply_sender.username AS reply_to_sender_username,
+      COALESCE(reactions_agg.reactions, '[]'::json) AS reactions
+    FROM group_messages gm
+    JOIN users sender
+      ON sender.id = gm.sender_id
+    LEFT JOIN group_messages reply_message
+      ON reply_message.id = gm.reply_to_message_id
+    LEFT JOIN users reply_sender
+      ON reply_sender.id = reply_message.sender_id
+    LEFT JOIN deleted_group_messages reply_dgm
+      ON reply_dgm.message_id = reply_message.id
+     AND reply_dgm.user_id = $2
+    LEFT JOIN LATERAL (
+      SELECT json_agg(
+        json_build_object(
+          'reaction', grouped.reaction,
+          'count', grouped.reaction_count,
+          'reacted_by_me', grouped.reacted_by_me
+        )
+        ORDER BY grouped.first_reacted_at ASC, grouped.reaction ASC
+      ) AS reactions
+      FROM (
+        SELECT
+          gmr.reaction,
+          COUNT(*)::int AS reaction_count,
+          BOOL_OR(gmr.user_id = $2) AS reacted_by_me,
+          MIN(gmr.created_at) AS first_reacted_at
+        FROM group_message_reactions gmr
+        WHERE gmr.message_id = gm.id
+        GROUP BY gmr.reaction
+      ) grouped
+    ) reactions_agg ON true
+    WHERE gm.id = $1
+    LIMIT 1
+    `,
+    [messageId, userId]
+  );
+
+  return rows[0] || null;
+}
+
+async function fetchGroupMessageReactionViewers(messageId, userId) {
+  const { rows } = await pool.query(
+    `
+    SELECT
+      gmr.reaction,
+      gmr.created_at,
+      u.id AS user_id,
+      u.username,
+      u.profile_pic,
+      gmr.user_id = $2 AS reacted_by_me
+    FROM group_message_reactions gmr
+    JOIN users u
+      ON u.id = gmr.user_id
+    WHERE gmr.message_id = $1
+    ORDER BY gmr.created_at ASC, u.username ASC
     `,
     [messageId, userId]
   );
@@ -1745,6 +1893,9 @@ router.get("/groups/chats/:groupChatId", authenticateToken, async (req, res) => 
 
   try {
     await ensureGroupChatSchema();
+    await ensureDeletedGroupMessagesTable();
+    await ensureGroupMessageRepliesSchema();
+    await ensureGroupMessageReactionsSchema();
 
     const groupResult = await pool.query(
       `
@@ -1794,14 +1945,55 @@ router.get("/groups/chats/:groupChatId", authenticateToken, async (req, res) => 
       SELECT
         gm.*,
         sender.username AS sender_username,
-        sender.profile_pic AS sender_profile_pic
+        sender.profile_pic AS sender_profile_pic,
+        CASE
+          WHEN reply_dgm.message_id IS NULL THEN reply_message.content
+          ELSE NULL
+        END AS reply_to_content,
+        CASE
+          WHEN reply_dgm.message_id IS NULL THEN reply_message.sender_id
+          ELSE NULL
+        END AS reply_to_sender_id,
+        reply_sender.username AS reply_to_sender_username,
+        COALESCE(reactions_agg.reactions, '[]'::json) AS reactions
       FROM group_messages gm
       JOIN users sender
         ON sender.id = gm.sender_id
+      LEFT JOIN deleted_group_messages dgm
+        ON dgm.message_id = gm.id
+       AND dgm.user_id = $2
+      LEFT JOIN group_messages reply_message
+        ON reply_message.id = gm.reply_to_message_id
+      LEFT JOIN users reply_sender
+        ON reply_sender.id = reply_message.sender_id
+      LEFT JOIN deleted_group_messages reply_dgm
+        ON reply_dgm.message_id = reply_message.id
+       AND reply_dgm.user_id = $2
+      LEFT JOIN LATERAL (
+        SELECT json_agg(
+          json_build_object(
+            'reaction', grouped.reaction,
+            'count', grouped.reaction_count,
+            'reacted_by_me', grouped.reacted_by_me
+          )
+          ORDER BY grouped.first_reacted_at ASC, grouped.reaction ASC
+        ) AS reactions
+        FROM (
+          SELECT
+            gmr.reaction,
+            COUNT(*)::int AS reaction_count,
+            BOOL_OR(gmr.user_id = $2) AS reacted_by_me,
+            MIN(gmr.created_at) AS first_reacted_at
+          FROM group_message_reactions gmr
+          WHERE gmr.message_id = gm.id
+          GROUP BY gmr.reaction
+        ) grouped
+      ) reactions_agg ON true
       WHERE gm.group_chat_id = $1
+        AND dgm.message_id IS NULL
       ORDER BY gm.created_at ASC
       `,
-      [groupChatId]
+      [groupChatId, userId]
     );
 
     await pool.query(
@@ -1839,9 +2031,13 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
     const { groupChatId } = req.params;
     const senderId = req.user.id;
     const content = String(req.body?.content || "").trim();
+    const replyToMessageId = String(req.body?.replyToMessageId || "").trim() || null;
     const attachment = req.file || null;
 
     await ensureGroupChatSchema();
+    await ensureGroupMessageRepliesSchema();
+    await ensureGroupMessageReactionsSchema();
+    await ensureDeletedGroupMessagesTable();
 
     if (!content && !attachment) {
       return res.status(400).json({ error: "Message content or an attachment is required" });
@@ -1860,6 +2056,23 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
 
     if (membershipResult.rows.length === 0) {
       return res.status(404).json({ error: "Group chat not found" });
+    }
+
+    if (replyToMessageId) {
+      const replyTargetResult = await pool.query(
+        `
+        SELECT id
+        FROM group_messages
+        WHERE id = $1
+          AND group_chat_id = $2
+        LIMIT 1
+        `,
+        [replyToMessageId, groupChatId]
+      );
+
+      if (replyTargetResult.rows.length === 0) {
+        return res.status(400).json({ error: "Reply target was not found" });
+      }
     }
 
     let attachmentUrl = null;
@@ -1898,13 +2111,14 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
         group_chat_id,
         sender_id,
         content,
+        reply_to_message_id,
         attachment_url,
         attachment_type,
         attachment_name,
         attachment_mime,
         attachment_size
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
       `,
       [
@@ -1912,6 +2126,7 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
         groupChatId,
         senderId,
         storedContent,
+        replyToMessageId,
         attachmentUrl,
         attachmentType,
         attachmentName,
@@ -1959,6 +2174,7 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
           actorId: senderId,
           type: "group_message",
           groupChatId,
+          messageId,
           pushTitle: senderResult.rows[0]?.username || "New group message",
           pushBody: storedContent,
           pushCategoryId: "messageReply",
@@ -1966,16 +2182,21 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
             type: "group_message",
             groupChatId,
             senderId,
+            messageId,
           },
         })
       )
     );
 
-    res.json({
-      ...message,
-      sender_username: senderResult.rows[0]?.username || "Member",
-      sender_profile_pic: senderResult.rows[0]?.profile_pic || null,
-    });
+    const enrichedMessage = await fetchGroupMessageForUser(message.id, senderId);
+
+    res.json(
+      enrichedMessage || {
+        ...message,
+        sender_username: senderResult.rows[0]?.username || "Member",
+        sender_profile_pic: senderResult.rows[0]?.profile_pic || null,
+      }
+    );
   } catch (err) {
     console.error(err);
     if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
@@ -2006,6 +2227,234 @@ router.post("/groups/chats/:groupChatId/read", authenticateToken, async (req, re
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to mark group chat as read" });
+  }
+});
+
+router.get("/groups/messages/:messageId/reactions", authenticateToken, async (req, res) => {
+  const { messageId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await ensureGroupChatSchema();
+    await ensureGroupMessageReactionsSchema();
+
+    const messageResult = await pool.query(
+      `
+      SELECT gm.id
+      FROM group_messages gm
+      JOIN group_chat_members gcm
+        ON gcm.group_chat_id = gm.group_chat_id
+       AND gcm.user_id = $2
+      WHERE gm.id = $1
+      LIMIT 1
+      `,
+      [messageId, userId]
+    );
+
+    if (messageResult.rows.length === 0) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    const viewers = await fetchGroupMessageReactionViewers(messageId, userId);
+    return res.json({ reactions: viewers });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to load reaction viewers" });
+  }
+});
+
+router.post("/groups/messages/:messageId/react", authenticateToken, async (req, res) => {
+  const { messageId } = req.params;
+  const { reaction = null } = req.body || {};
+  const userId = req.user.id;
+  const allowedReactions = new Set(["heart", "laugh", "sad", "angry", "care"]);
+
+  if (reaction && !allowedReactions.has(reaction)) {
+    return res.status(400).json({ error: "Invalid reaction" });
+  }
+
+  try {
+    await ensureGroupChatSchema();
+    await ensureGroupMessageReactionsSchema();
+
+    const messageResult = await pool.query(
+      `
+      SELECT gm.id, gm.group_chat_id, gm.sender_id
+      FROM group_messages gm
+      JOIN group_chat_members gcm
+        ON gcm.group_chat_id = gm.group_chat_id
+       AND gcm.user_id = $2
+      WHERE gm.id = $1
+      LIMIT 1
+      `,
+      [messageId, userId]
+    );
+
+    if (messageResult.rows.length === 0) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    const targetMessage = messageResult.rows[0];
+
+    if (!reaction) {
+      await pool.query(
+        `
+        DELETE FROM group_message_reactions
+        WHERE message_id = $1
+          AND user_id = $2
+        `,
+        [messageId, userId]
+      );
+    } else {
+      await pool.query(
+        `
+        INSERT INTO group_message_reactions (message_id, user_id, reaction)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (message_id, user_id)
+        DO UPDATE SET reaction = EXCLUDED.reaction, created_at = NOW()
+        `,
+        [messageId, userId, reaction]
+      );
+
+      await createNotification({
+        recipientId: targetMessage.sender_id,
+        actorId: userId,
+        type: "message_reaction",
+        groupChatId: targetMessage.group_chat_id,
+        messageId,
+        pushCategoryId: "messageReply",
+        pushData: {
+          type: "group_message_reaction",
+          groupChatId: targetMessage.group_chat_id,
+          messageId,
+          reaction,
+          actorId: userId,
+        },
+      });
+    }
+
+    const enrichedMessage = await fetchGroupMessageForUser(messageId, userId);
+    return res.json({ success: true, message: enrichedMessage });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to update reaction" });
+  }
+});
+
+router.delete("/groups/messages/:messageId", authenticateToken, async (req, res) => {
+  const { messageId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { rows } = await pool.query(
+      `
+      DELETE FROM group_messages
+      WHERE id = $1
+        AND sender_id = $2
+      RETURNING *
+      `,
+      [messageId, userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Message not found or not allowed" });
+    }
+
+    return res.json({ success: true, message: rows[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to delete message" });
+  }
+});
+
+router.post("/groups/messages/delete-for-me", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  const { messageId } = req.body || {};
+
+  if (!messageId) {
+    return res.status(400).json({ error: "messageId is required" });
+  }
+
+  try {
+    await ensureDeletedGroupMessagesTable();
+
+    const messageResult = await pool.query(
+      `
+      SELECT gm.id
+      FROM group_messages gm
+      JOIN group_chat_members gcm
+        ON gcm.group_chat_id = gm.group_chat_id
+       AND gcm.user_id = $2
+      WHERE gm.id = $1
+      LIMIT 1
+      `,
+      [messageId, userId]
+    );
+
+    if (messageResult.rows.length === 0) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    await pool.query(
+      `
+      INSERT INTO deleted_group_messages (user_id, message_id)
+      VALUES ($1, $2)
+      ON CONFLICT (user_id, message_id) DO NOTHING
+      `,
+      [userId, messageId]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to delete message for user" });
+  }
+});
+
+router.post("/groups/messages/report", authenticateToken, async (req, res) => {
+  const reporterId = req.user.id;
+  const { messageId, reason = "message", details = null } = req.body || {};
+
+  if (!messageId) {
+    return res.status(400).json({ error: "messageId is required" });
+  }
+
+  try {
+    const messageResult = await pool.query(
+      `
+      SELECT gm.id, gm.group_chat_id
+      FROM group_messages gm
+      JOIN group_chat_members gcm
+        ON gcm.group_chat_id = gm.group_chat_id
+       AND gcm.user_id = $2
+      WHERE gm.id = $1
+      LIMIT 1
+      `,
+      [messageId, reporterId]
+    );
+
+    if (messageResult.rows.length === 0) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    const message = messageResult.rows[0];
+    const reportDetails = details
+      ? `${details}\nReported group message ID: ${messageId}`
+      : `Reported group message ID: ${messageId}`;
+
+    const { rows } = await pool.query(
+      `
+      INSERT INTO reports (reporter_id, content_type, content_id, reason, details)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+      `,
+      [reporterId, "group_message", message.group_chat_id, reason, reportDetails]
+    );
+
+    return res.status(201).json({ success: true, report: rows[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to report message" });
   }
 });
 

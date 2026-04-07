@@ -47,6 +47,8 @@ export default function ReportPage() {
       const requestUrl =
         contentType === "message"
           ? "http://localhost:5000/api/messages/report"
+          : contentType === "group-message"
+            ? "http://localhost:5000/api/messages/groups/messages/report"
           : "http://localhost:5000/api/reports/submit";
       const requestBody =
         contentType === "message"
@@ -55,6 +57,12 @@ export default function ReportPage() {
               reason,
               details,
             }
+          : contentType === "group-message"
+            ? {
+                messageId: contentId,
+                reason,
+                details,
+              }
           : {
               contentType,
               contentId,
