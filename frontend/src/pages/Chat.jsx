@@ -129,7 +129,10 @@ export default function Chat() {
 
     const triggerRect = event.currentTarget.getBoundingClientRect();
     const estimatedMenuHeight = 96;
-    const spaceBelow = window.innerHeight - triggerRect.bottom;
+    const containerRect = messagesContainerRef.current?.getBoundingClientRect();
+    const spaceBelow = containerRect
+      ? containerRect.bottom - triggerRect.bottom
+      : window.innerHeight - triggerRect.bottom;
     setOpenMenuDirection(spaceBelow < estimatedMenuHeight ? "up" : "down");
     setOpenMenuId(messageId);
   };
