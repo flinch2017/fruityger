@@ -37,6 +37,7 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [openMenuDirection, setOpenMenuDirection] = useState("down");
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [blockedByMe, setBlockedByMe] = useState(false);
   const [blockedByThem, setBlockedByThem] = useState(false);
@@ -117,6 +118,20 @@ export default function Chat() {
     } catch (error) {
       console.error("Failed to broadcast chat sync:", error);
     }
+  };
+
+  const toggleMessageMenu = (messageId, event) => {
+    if (openMenuId === messageId) {
+      setOpenMenuId(null);
+      setOpenMenuDirection("down");
+      return;
+    }
+
+    const triggerRect = event.currentTarget.getBoundingClientRect();
+    const estimatedMenuHeight = 96;
+    const spaceBelow = window.innerHeight - triggerRect.bottom;
+    setOpenMenuDirection(spaceBelow < estimatedMenuHeight ? "up" : "down");
+    setOpenMenuId(messageId);
   };
 
   const syncPresenceState = (channel) => {
@@ -954,6 +969,7 @@ export default function Chat() {
     const handleClickOutside = (e) => {
       if (!e.target.closest(".message-options-wrapper")) {
         setOpenMenuId(null);
+        setOpenMenuDirection("down");
       }
 
       if (!e.target.closest(".message-reaction-wrap")) {
@@ -977,7 +993,10 @@ export default function Chat() {
   }, []);
 
   useEffect(() => {
-    const closeMenu = () => setOpenMenuId(null);
+    const closeMenu = () => {
+      setOpenMenuId(null);
+      setOpenMenuDirection("down");
+    };
     const closeOverlays = () => {
       closeMenu();
     };
@@ -1073,14 +1092,14 @@ export default function Chat() {
                       <button
                         type="button"
                         className="message-options"
-                        onClick={() => setOpenMenuId(openMenuId === msg.id ? null : msg.id)}
+                        onClick={(event) => toggleMessageMenu(msg.id, event)}
                         aria-label="Open message options"
                       >
                         <FaEllipsisV />
                       </button>
 
                       {openMenuId === msg.id && (
-                        <div className="message-dropdown">
+                        <div className={`message-dropdown ${openMenuDirection === "up" ? "flip-up" : ""}`}>
                           <div className="dropdown-item" onClick={() => handleDelete(msg)}>
                             Delete
                           </div>
@@ -1166,14 +1185,14 @@ export default function Chat() {
                       <button
                         type="button"
                         className="message-options"
-                        onClick={() => setOpenMenuId(openMenuId === msg.id ? null : msg.id)}
+                        onClick={(event) => toggleMessageMenu(msg.id, event)}
                         aria-label="Open message options"
                       >
                         <FaEllipsisV />
                       </button>
 
                       {openMenuId === msg.id && (
-                        <div className="message-dropdown">
+                        <div className={`message-dropdown ${openMenuDirection === "up" ? "flip-up" : ""}`}>
                           <div className="dropdown-item" onClick={() => handleDelete(msg)}>
                             Delete
                           </div>

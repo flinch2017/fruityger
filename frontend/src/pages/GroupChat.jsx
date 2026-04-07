@@ -40,6 +40,7 @@ export default function GroupChat() {
   const [notice, setNotice] = useState(null);
   const [sending, setSending] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [openMenuDirection, setOpenMenuDirection] = useState("down");
   const [replyingTo, setReplyingTo] = useState(null);
   const [reactionTargetMessage, setReactionTargetMessage] = useState(null);
   const [reacting, setReacting] = useState(false);
@@ -90,6 +91,20 @@ export default function GroupChat() {
 
   const dispatchMessagesRefresh = () => {
     window.dispatchEvent(new CustomEvent("fruityger:messages-refresh"));
+  };
+
+  const toggleMessageMenu = (messageId, event) => {
+    if (openMenuId === messageId) {
+      setOpenMenuId(null);
+      setOpenMenuDirection("down");
+      return;
+    }
+
+    const triggerRect = event.currentTarget.getBoundingClientRect();
+    const estimatedMenuHeight = 96;
+    const spaceBelow = window.innerHeight - triggerRect.bottom;
+    setOpenMenuDirection(spaceBelow < estimatedMenuHeight ? "up" : "down");
+    setOpenMenuId(messageId);
   };
 
   const getReplyAuthorLabel = (message) => {
@@ -267,6 +282,7 @@ export default function GroupChat() {
 
       if (!event.target.closest(".message-options-wrapper")) {
         setOpenMenuId(null);
+        setOpenMenuDirection("down");
       }
 
       if (!event.target.closest(".message-reaction-wrap")) {
@@ -281,6 +297,7 @@ export default function GroupChat() {
   useEffect(() => {
     const closeOverlays = () => {
       setOpenMenuId(null);
+      setOpenMenuDirection("down");
     };
 
     document.addEventListener("scroll", closeOverlays);
@@ -921,14 +938,14 @@ export default function GroupChat() {
                       <button
                         type="button"
                         className="message-options"
-                        onClick={() => setOpenMenuId(openMenuId === msg.id ? null : msg.id)}
+                        onClick={(event) => toggleMessageMenu(msg.id, event)}
                         aria-label="Open message options"
                       >
                         <FaEllipsisV />
                       </button>
 
                       {openMenuId === msg.id && (
-                        <div className="message-dropdown">
+                        <div className={`message-dropdown ${openMenuDirection === "up" ? "flip-up" : ""}`}>
                           <div className="dropdown-item" onClick={() => handleDelete(msg)}>
                             Delete
                           </div>
@@ -990,14 +1007,14 @@ export default function GroupChat() {
                       <button
                         type="button"
                         className="message-options"
-                        onClick={() => setOpenMenuId(openMenuId === msg.id ? null : msg.id)}
+                        onClick={(event) => toggleMessageMenu(msg.id, event)}
                         aria-label="Open message options"
                       >
                         <FaEllipsisV />
                       </button>
 
                       {openMenuId === msg.id && (
-                        <div className="message-dropdown">
+                        <div className={`message-dropdown ${openMenuDirection === "up" ? "flip-up" : ""}`}>
                           <div className="dropdown-item" onClick={() => handleDelete(msg)}>
                             Delete
                           </div>
