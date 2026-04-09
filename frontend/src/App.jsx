@@ -50,12 +50,12 @@ import "./css/App.css";
 // Layouts
 function MainLayout({ children }) {
   const location = useLocation();
-  const appContainerClassName =
-    location.pathname === "/tapes" ? "app-container tapes-layout" : "app-container";
+  const isTapesRoute = location.pathname === "/tapes";
+  const appContainerClassName = isTapesRoute ? "app-container tapes-layout" : "app-container";
 
   return (
     <>
-      <Header />
+      {!isTapesRoute && <Header />}
       <div className={appContainerClassName}>{children}</div>
     </>
   );
