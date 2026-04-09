@@ -190,9 +190,9 @@
 
 .tape-video-frame {
   position: relative;
-  width: min(100vw, calc(100dvh * 0.5625));
-  height: min(100dvh, calc(100vw * 1.7777778));
-  aspect-ratio: 9 / 16;
+  width: 100vw;
+  height: 100dvh;
+  aspect-ratio: auto;
   overflow: hidden;
   background: #000000;
 }
@@ -203,6 +203,8 @@
   object-fit: cover;
   display: block;
   background: #000000;
+  transform: scale(1.08);
+  transform-origin: center;
 }
 
 .tape-gradient {
@@ -344,6 +346,10 @@
 
   .tapes-mode-tab {
     font-size: 0.98rem;
+  }
+
+  .tape-video {
+    transform: scale(1.12);
   }
 
   .tape-meta {
