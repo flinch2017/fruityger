@@ -11,12 +11,19 @@
 }
 
 .app-container.tapes-layout {
+  position: fixed;
+  top: 70px;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: block;
   padding: 0;
+  overflow: hidden;
 }
 
 .app-container.tapes-layout > * {
   grid-column: auto;
+  height: 100%;
 }
 
 /* Tablet */
@@ -34,8 +41,14 @@
   }
 
   .app-container.tapes-layout {
+    position: fixed;
+    top: 70px;
+    right: 0;
+    bottom: 0;
+    left: 0;
     display: block;
     padding: 0;
+    overflow: hidden;
   }
 }
 
