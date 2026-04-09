@@ -1,28 +1,58 @@
 .create-tape-page {
   min-height: 100vh;
-  padding: 28px 20px 40px;
+  padding: calc(70px + 26px) 20px 40px;
   background:
-    radial-gradient(circle at top left, rgba(255, 160, 102, 0.2), transparent 28%),
-    radial-gradient(circle at top right, rgba(255, 72, 126, 0.22), transparent 30%),
-    linear-gradient(180deg, #120c1d 0%, #1e1130 42%, #2f1437 100%);
+    radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.95), transparent 18%),
+    radial-gradient(circle at 88% 8%, rgba(173, 237, 255, 0.82), transparent 24%),
+    radial-gradient(circle at 78% 78%, rgba(123, 221, 255, 0.32), transparent 22%),
+    linear-gradient(180deg, #dff8ff 0%, #c9f1ff 30%, #bde7ff 64%, #def8ff 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.create-tape-page::before,
+.create-tape-page::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.create-tape-page::before {
+  width: 360px;
+  height: 360px;
+  top: 112px;
+  right: -100px;
+  background: radial-gradient(circle, rgba(119, 232, 255, 0.42), rgba(119, 232, 255, 0) 70%);
+}
+
+.create-tape-page::after {
+  width: 280px;
+  height: 280px;
+  left: -70px;
+  bottom: 40px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0) 72%);
 }
 
 .create-tape-shell {
   max-width: 1240px;
   margin: 0 auto;
+  position: relative;
+  z-index: 1;
 }
 
 .create-tape-stage {
   padding: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.9);
   border-radius: 34px;
   background:
-    radial-gradient(circle at top, rgba(255,255,255,0.1), transparent 32%),
-    linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+    radial-gradient(circle at top left, rgba(255,255,255,0.92), transparent 32%),
+    linear-gradient(160deg, rgba(255,255,255,0.84), rgba(214,245,255,0.58));
   box-shadow:
-    0 30px 90px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255,255,255,0.08);
-  backdrop-filter: blur(20px);
+    0 30px 80px rgba(31, 160, 214, 0.18),
+    inset 0 1px 0 rgba(255,255,255,0.96),
+    inset 0 -18px 30px rgba(146, 226, 255, 0.16);
+  backdrop-filter: blur(22px);
 }
 
 .create-tape-topbar {
@@ -35,7 +65,7 @@
 
 .create-tape-heading {
   text-align: center;
-  color: #fff7fb;
+  color: #0b749a;
 }
 
 .create-tape-heading h1 {
@@ -46,7 +76,7 @@
 
 .create-tape-kicker {
   margin: 0 0 6px;
-  color: #ff9fc4;
+  color: #51a8c6;
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.22em;
@@ -69,15 +99,19 @@
 }
 
 .create-tape-pill.secondary {
-  color: #fff3fb;
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+  color: #0a7598;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.98), rgba(255,255,255,0.42) 34%, transparent 56%),
+    linear-gradient(180deg, rgba(255,255,255,0.92), rgba(216,246,255,0.7));
+  box-shadow:
+    0 10px 18px rgba(0, 173, 255, 0.12),
+    inset 0 1px 0 rgba(255,255,255,0.98);
 }
 
 .create-tape-pill.primary {
   color: #ffffff;
-  background: linear-gradient(135deg, #ff8f70, #ff4b8c 56%, #bc4dff);
-  box-shadow: 0 16px 28px rgba(255, 75, 140, 0.32);
+  background: linear-gradient(135deg, #6eeeff, #1ecfff 56%, #39a5ff);
+  box-shadow: 0 16px 28px rgba(37, 182, 255, 0.26);
 }
 
 .create-tape-pill:disabled {
@@ -99,25 +133,28 @@
   border-radius: 30px;
   overflow: hidden;
   background:
-    radial-gradient(circle at top, rgba(255,255,255,0.08), transparent 26%),
-    linear-gradient(180deg, rgba(18, 18, 24, 0.96), rgba(34, 22, 43, 0.96));
-  border: 1px solid rgba(255,255,255,0.08);
+    radial-gradient(circle at top left, rgba(255,255,255,0.85), transparent 28%),
+    linear-gradient(180deg, rgba(255,255,255,0.64), rgba(182,232,251,0.48));
+  border: 1px solid rgba(255,255,255,0.92);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.96),
+    0 24px 50px rgba(32, 162, 219, 0.16);
 }
 
 .create-tape-preview-video {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  background: #08070d;
+  background: linear-gradient(180deg, #c5efff, #8fdcff);
 }
 
 .create-tape-dropzone {
   width: calc(100% - 32px);
   min-height: calc(72vh - 32px);
-  border: 1px dashed rgba(255,255,255,0.18);
+  border: 1px dashed rgba(88, 198, 233, 0.5);
   border-radius: 28px;
   padding: 24px;
   display: flex;
@@ -127,17 +164,20 @@
   gap: 12px;
   cursor: pointer;
   text-align: center;
-  color: #fff6fb;
+  color: #08779d;
   background:
-    radial-gradient(circle at top, rgba(255,255,255,0.1), transparent 28%),
-    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+    radial-gradient(circle at top, rgba(255,255,255,0.96), transparent 28%),
+    linear-gradient(180deg, rgba(255,255,255,0.82), rgba(212,244,255,0.58));
   transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.98),
+    0 16px 30px rgba(47, 175, 228, 0.12);
 }
 
 .create-tape-dropzone:hover {
   transform: translateY(-2px);
-  border-color: rgba(255, 160, 196, 0.4);
-  box-shadow: 0 18px 40px rgba(255, 75, 140, 0.12);
+  border-color: rgba(67, 199, 238, 0.76);
+  box-shadow: 0 18px 40px rgba(47, 175, 228, 0.18);
 }
 
 .create-tape-dropzone strong {
@@ -146,16 +186,19 @@
 
 .create-tape-dropzone span {
   max-width: 420px;
-  color: rgba(255, 241, 247, 0.76);
+  color: rgba(32, 116, 146, 0.82);
   line-height: 1.5;
 }
 
 .create-tape-dropzone-badge {
   padding: 7px 12px;
   border-radius: 999px;
-  color: #1b0d25;
+  color: #0c6f93;
   font-weight: 800;
-  background: linear-gradient(135deg, #ffd36f, #ff9c6b);
+  background: linear-gradient(135deg, #ffffff, #d9f7ff);
+  box-shadow:
+    0 10px 18px rgba(47, 175, 228, 0.12),
+    inset 0 1px 0 rgba(255,255,255,0.98);
 }
 
 .create-tape-clear {
@@ -167,9 +210,12 @@
   padding: 10px 14px;
   cursor: pointer;
   font-weight: 700;
-  color: #fff8fb;
-  background: rgba(19, 13, 27, 0.72);
+  color: #0a7598;
+  background: rgba(255, 255, 255, 0.84);
   backdrop-filter: blur(16px);
+  box-shadow:
+    0 12px 22px rgba(47, 175, 228, 0.14),
+    inset 0 1px 0 rgba(255,255,255,0.98);
 }
 
 .create-tape-sidebar {
@@ -180,17 +226,20 @@
 
 .create-tape-panel,
 .create-tape-stats {
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.92);
   border-radius: 26px;
   padding: 18px;
   background:
-    radial-gradient(circle at top left, rgba(255,255,255,0.08), transparent 28%),
-    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+    radial-gradient(circle at top left, rgba(255,255,255,0.96), transparent 28%),
+    linear-gradient(180deg, rgba(255,255,255,0.86), rgba(216,246,255,0.6));
+  box-shadow:
+    0 18px 34px rgba(47, 175, 228, 0.12),
+    inset 0 1px 0 rgba(255,255,255,0.98);
 }
 
 .create-tape-panel-label {
   margin: 0 0 12px;
-  color: #ff9fc4;
+  color: #58aeca;
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.18em;
@@ -205,13 +254,13 @@
   cursor: pointer;
   font-weight: 800;
   color: #ffffff;
-  background: linear-gradient(135deg, #ff8f70, #ff4b8c 56%, #bc4dff);
-  box-shadow: 0 14px 26px rgba(255, 75, 140, 0.22);
+  background: linear-gradient(135deg, #7ff4ff, #26d4ff 56%, #39a5ff);
+  box-shadow: 0 14px 26px rgba(37, 182, 255, 0.24);
 }
 
 .create-tape-panel-hint {
   margin: 12px 0 0;
-  color: rgba(255, 240, 247, 0.72);
+  color: rgba(34, 119, 147, 0.8);
   line-height: 1.5;
   font-size: 0.92rem;
 }
@@ -219,18 +268,20 @@
 .create-tape-caption {
   width: 100%;
   min-height: 150px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.94);
   border-radius: 22px;
   padding: 16px;
   resize: none;
-  color: #fff7fb;
-  background: rgba(10, 8, 18, 0.56);
+  color: #0a7598;
+  background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(228,248,255,0.8));
   outline: none;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.98),
+    0 12px 22px rgba(47, 175, 228, 0.08);
 }
 
 .create-tape-caption::placeholder {
-  color: rgba(255, 240, 247, 0.42);
+  color: rgba(74, 149, 174, 0.72);
 }
 
 .create-tape-stats {
@@ -243,19 +294,19 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: rgba(255, 240, 247, 0.72);
+  color: rgba(39, 121, 149, 0.82);
 }
 
 .create-tape-stat strong {
-  color: #ffffff;
+  color: #08779d;
 }
 
 .create-tape-warning {
   border-radius: 20px;
   padding: 14px 16px;
-  color: #fff6e7;
-  background: linear-gradient(135deg, rgba(255, 140, 89, 0.9), rgba(255, 92, 92, 0.78));
-  box-shadow: 0 16px 30px rgba(255, 92, 92, 0.18);
+  color: #9d5200;
+  background: linear-gradient(135deg, rgba(255, 243, 204, 0.96), rgba(255, 218, 170, 0.88));
+  box-shadow: 0 16px 30px rgba(255, 170, 83, 0.14);
 }
 
 @media (max-width: 980px) {
@@ -274,7 +325,7 @@
 
 @media (max-width: 640px) {
   .create-tape-page {
-    padding: 18px 12px 28px;
+    padding: calc(70px + 18px) 12px 28px;
   }
 
   .create-tape-stage {

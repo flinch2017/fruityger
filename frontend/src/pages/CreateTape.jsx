@@ -130,7 +130,7 @@ export default function CreateTape() {
 
             <div className="create-tape-heading">
               <p className="create-tape-kicker">Tape</p>
-              <h1>Create your next short</h1>
+              <h1>Create your next tape</h1>
             </div>
 
             <button
@@ -171,7 +171,7 @@ export default function CreateTape() {
                 >
                   <span className="create-tape-dropzone-badge">9:16</span>
                   <strong>Drop in your tape</strong>
-                  <span>Choose one vertical video to start building your reel-style post.</span>
+                  <span>Choose one vertical video to start building your tape.</span>
                 </button>
               )}
             </div>
@@ -188,7 +188,7 @@ export default function CreateTape() {
                   {videoFile ? "Replace video" : "Choose video"}
                 </button>
                 <p className="create-tape-panel-hint">
-                  One video only. Reels-style tapes look best when they are vertical and punchy.
+                  One video only. Tapes look best when they are vertical and punchy.
                 </p>
               </div>
 
