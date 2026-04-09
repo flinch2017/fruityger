@@ -568,7 +568,7 @@ export default function Header() {
             </button>
 
             <button
-              className={`nav-button ${location.pathname === "/tapes" ? "active" : ""}`}
+              className={`nav-button nav-button-tapes ${location.pathname === "/tapes" ? "active" : ""}`}
               onClick={handleTapesNav}
               title="Tapes"
             >

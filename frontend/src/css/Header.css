@@ -816,7 +816,11 @@ body {
 
   .mobile-search-btn {
     display: inline-block;
-    margin-left: 4px;
+    margin-left: 0;
+  }
+
+  .nav-button-tapes {
+    margin-right: 8px;
   }
 
   .feed-mode-tabs {
