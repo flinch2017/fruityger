@@ -180,10 +180,6 @@ body {
   gap: 10px;
 }
 
-.nav-items > * {
-  align-self: center;
-}
-
 .create-menu-shell,
 .mobile-create-shell {
   position: relative;
@@ -316,8 +312,6 @@ body {
 /* ===== PROFILE CONTAINER ===== */
 .profile-container {
   position: relative;
-  display: flex;
-  align-items: center;
 }
 
 /* PROFILE BUTTON */
