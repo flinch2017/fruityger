@@ -246,21 +246,25 @@
   .tapes-feed-page {
     height: calc(100vh - 70px);
     margin-top: 70px;
-    padding: 8px 8px 18px;
+    padding: 0;
   }
 
   .tapes-feed-shell {
-    gap: 12px;
+    max-width: none;
+    gap: 0;
   }
 
   .tape-slide,
   .tape-stage,
   .tape-video {
-    min-height: calc(100vh - 96px);
+    min-height: calc(100vh - 70px);
   }
 
   .tape-stage {
-    border-radius: 24px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    box-shadow: none;
   }
 
   .tape-meta {
@@ -272,5 +276,9 @@
   .tape-actions {
     right: 10px;
     bottom: 16px;
+  }
+
+  .tapes-loader {
+    padding: 12px 0 18px;
   }
 }

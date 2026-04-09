@@ -45,6 +45,7 @@ export default function Header() {
   const hideMobileFab =
     location.pathname === "/create" ||
     location.pathname === "/create-tape" ||
+    location.pathname === "/tapes" ||
     location.pathname === "/messages" ||
     location.pathname.startsWith("/chat/");
   const isTapesRoute = location.pathname === "/tapes";
