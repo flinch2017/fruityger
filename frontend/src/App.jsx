@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import Header from "./components/Header";
 import Feed from "./components/Feed";
 import Profile from "./pages/Profile";
@@ -49,10 +49,14 @@ import "./css/App.css";
 
 // Layouts
 function MainLayout({ children }) {
+  const location = useLocation();
+  const appContainerClassName =
+    location.pathname === "/tapes" ? "app-container tapes-layout" : "app-container";
+
   return (
     <>
       <Header />
-      <div className="app-container">{children}</div>
+      <div className={appContainerClassName}>{children}</div>
     </>
   );
 }

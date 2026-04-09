@@ -10,6 +10,15 @@
   grid-column: 2;
 }
 
+.app-container.tapes-layout {
+  display: block;
+  padding: 0;
+}
+
+.app-container.tapes-layout > * {
+  grid-column: auto;
+}
+
 /* Tablet */
 @media (max-width: 1100px) {
   .app-container {
@@ -22,6 +31,11 @@
   .app-container {
     display: flex;
     flex-direction: column;
+  }
+
+  .app-container.tapes-layout {
+    display: block;
+    padding: 0;
   }
 }
 

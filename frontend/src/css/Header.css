@@ -788,12 +788,8 @@ body {
   }
 
   .feed-mode-mobile-menu {
-    left: auto;
-    right: 0;
-  }
-
-  .nav-button-bell {
-    display: none;
+    left: 0;
+    right: auto;
   }
 
   .search-form {

@@ -1,6 +1,6 @@
 .tapes-feed-page {
   height: calc(100vh - 70px);
-  margin-top: 70px;
+  margin-top: 0;
   padding: 10px 14px 24px;
   background:
     radial-gradient(circle at top left, rgba(255,255,255,0.96), transparent 20%),
@@ -245,7 +245,7 @@
 @media (max-width: 640px) {
   .tapes-feed-page {
     height: calc(100vh - 70px);
-    margin-top: 70px;
+    margin-top: 0;
     padding: 0;
   }
 
