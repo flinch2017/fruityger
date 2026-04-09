@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  FaArrowLeft,
   FaCommentDots,
   FaHeart,
   FaRegHeart,
@@ -15,10 +16,12 @@ import { getSafeMediaUrl } from "../utils/mediaUrl";
 export default function TapesFeed() {
   const navigate = useNavigate();
   const location = useLocation();
+  const feedContainerRef = useRef(null);
   const loaderRef = useRef(null);
   const videoRefs = useRef({});
   const observerRef = useRef(null);
   const isFetchingRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
 
   const [tapes, setTapes] = useState([]);
   const [offset, setOffset] = useState(0);
@@ -28,8 +31,18 @@ export default function TapesFeed() {
   const [likingMap, setLikingMap] = useState({});
   const [repostingMap, setRepostingMap] = useState({});
   const [activeCommentPost, setActiveCommentPost] = useState(null);
+  const [chromeHidden, setChromeHidden] = useState(false);
 
   const LIMIT = 4;
+  const handleExitTapes = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    navigate("/");
+  };
+
   const feedMode = useMemo(() => {
     const params = new URLSearchParams(location.search);
     return params.get("mode") === "following" ? "following" : "discover";
@@ -171,6 +184,31 @@ export default function TapesFeed() {
     observer.observe(loaderRef.current);
     return () => observer.disconnect();
   }, [hasMore, loadingTapes, offset]);
+
+  useEffect(() => {
+    const feedElement = feedContainerRef.current;
+    if (!feedElement) return undefined;
+
+    const handleScroll = () => {
+      const currentTop = feedElement.scrollTop;
+      const previousTop = lastScrollTopRef.current;
+
+      if (currentTop <= 24) {
+        setChromeHidden(false);
+      } else if (currentTop > previousTop + 10) {
+        setChromeHidden(true);
+      } else if (currentTop < previousTop - 10) {
+        setChromeHidden(false);
+      }
+
+      lastScrollTopRef.current = currentTop;
+    };
+
+    feedElement.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      feedElement.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
 
   useEffect(() => {
     if (observerRef.current) {
@@ -332,7 +370,7 @@ export default function TapesFeed() {
   };
 
   return (
-    <main className="tapes-feed-page">
+    <main ref={feedContainerRef} className="tapes-feed-page">
       {activeCommentPost && (
         <CommentSheet
           postId={activeCommentPost.postId}
@@ -340,6 +378,38 @@ export default function TapesFeed() {
           onClose={() => setActiveCommentPost(null)}
         />
       )}
+
+      <div className={`tapes-top-chrome ${chromeHidden ? "hidden" : ""}`}>
+        <button
+          type="button"
+          className="tapes-back-btn"
+          onClick={handleExitTapes}
+          aria-label="Exit tapes feed"
+        >
+          <FaArrowLeft />
+        </button>
+
+        <div className="tapes-mode-tabs" role="tablist" aria-label="Tape feed mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={feedMode === "discover"}
+            className={`tapes-mode-tab ${feedMode === "discover" ? "active" : ""}`}
+            onClick={() => navigate("/tapes?mode=discover")}
+          >
+            Discover
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={feedMode === "following"}
+            className={`tapes-mode-tab ${feedMode === "following" ? "active" : ""}`}
+            onClick={() => navigate("/tapes?mode=following")}
+          >
+            Following
+          </button>
+        </div>
+      </div>
 
       <div className="tapes-feed-shell">
         {refreshing && <div className="tapes-refresh-banner">Refreshing tapes...</div>}
@@ -359,77 +429,78 @@ export default function TapesFeed() {
         {tapes.map((tape) => (
           <section key={tape.post_id} className="tape-slide">
             <div className="tape-stage">
-              <video
-                ref={(element) => {
-                  if (!element) return;
-                  videoRefs.current[tape.post_id] = element;
-                  element.muted = false;
-                }}
-                className="tape-video"
-                src={getSafeMediaUrl(tape.primaryVideo.media_url)}
-                loop
-                playsInline
-                autoPlay
-                muted={false}
-                preload="metadata"
-              />
+              <div className="tape-video-frame">
+                <video
+                  ref={(element) => {
+                    if (!element) return;
+                    videoRefs.current[tape.post_id] = element;
+                    element.muted = false;
+                  }}
+                  className="tape-video"
+                  src={getSafeMediaUrl(tape.primaryVideo.media_url)}
+                  loop
+                  playsInline
+                  autoPlay
+                  muted={false}
+                  preload="metadata"
+                />
+                <div className="tape-gradient"></div>
 
-              <div className="tape-gradient"></div>
+                <div className="tape-meta">
+                  <button
+                    type="button"
+                    className="tape-author"
+                    onClick={() => navigate(`/profile/${tape.username}`)}
+                  >
+                    <span className="tape-author-avatar">
+                      {tape.profile_pic ? (
+                        <img src={getSafeMediaUrl(tape.profile_pic)} alt={tape.username} />
+                      ) : (
+                        <FaUser />
+                      )}
+                    </span>
+                    <span className="tape-author-copy">
+                      <strong>@{tape.username}</strong>
+                      <span>{formatDate(tape.date_posted)}</span>
+                    </span>
+                  </button>
 
-              <div className="tape-meta">
-                <button
-                  type="button"
-                  className="tape-author"
-                  onClick={() => navigate(`/profile/${tape.username}`)}
-                >
-                  <span className="tape-author-avatar">
-                    {tape.profile_pic ? (
-                      <img src={getSafeMediaUrl(tape.profile_pic)} alt={tape.username} />
-                    ) : (
-                      <FaUser />
-                    )}
-                  </span>
-                  <span className="tape-author-copy">
-                    <strong>@{tape.username}</strong>
-                    <span>{formatDate(tape.date_posted)}</span>
-                  </span>
-                </button>
+                  {tape.caption && <p className="tape-caption">{tape.caption}</p>}
+                </div>
 
-                {tape.caption && <p className="tape-caption">{tape.caption}</p>}
-              </div>
+                <div className="tape-actions">
+                  <button
+                    type="button"
+                    className={`tape-action-btn ${tape.is_liked ? "liked" : ""}`}
+                    onClick={() => toggleLike(tape.post_id)}
+                  >
+                    {tape.is_liked ? <FaHeart /> : <FaRegHeart />}
+                    <span>{tape.like_count || 0}</span>
+                  </button>
 
-              <div className="tape-actions">
-                <button
-                  type="button"
-                  className={`tape-action-btn ${tape.is_liked ? "liked" : ""}`}
-                  onClick={() => toggleLike(tape.post_id)}
-                >
-                  {tape.is_liked ? <FaHeart /> : <FaRegHeart />}
-                  <span>{tape.like_count || 0}</span>
-                </button>
+                  <button
+                    type="button"
+                    className="tape-action-btn"
+                    onClick={() =>
+                      setActiveCommentPost({
+                        postId: tape.post_id,
+                        postAuthorId: tape.user_id,
+                      })
+                    }
+                  >
+                    <FaCommentDots />
+                    <span>{tape.comment_count || 0}</span>
+                  </button>
 
-                <button
-                  type="button"
-                  className="tape-action-btn"
-                  onClick={() =>
-                    setActiveCommentPost({
-                      postId: tape.post_id,
-                      postAuthorId: tape.user_id,
-                    })
-                  }
-                >
-                  <FaCommentDots />
-                  <span>{tape.comment_count || 0}</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`tape-action-btn ${tape.is_reposted ? "reposted" : ""}`}
-                  onClick={() => toggleRepost(tape.post_id)}
-                >
-                  <FaRetweet />
-                  <span>{tape.repost_count || 0}</span>
-                </button>
+                  <button
+                    type="button"
+                    className={`tape-action-btn ${tape.is_reposted ? "reposted" : ""}`}
+                    onClick={() => toggleRepost(tape.post_id)}
+                  >
+                    <FaRetweet />
+                    <span>{tape.repost_count || 0}</span>
+                  </button>
+                </div>
               </div>
             </div>
           </section>
