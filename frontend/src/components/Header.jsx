@@ -19,6 +19,7 @@ import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function Header() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -37,6 +38,8 @@ export default function Header() {
   const profileRef = useRef(null);
   const searchRef = useRef(null);
   const feedMenuRef = useRef(null);
+  const desktopCreateMenuRef = useRef(null);
+  const mobileCreateMenuRef = useRef(null);
 
   const hideMobileFab =
     location.pathname === "/create" ||
@@ -63,6 +66,13 @@ export default function Header() {
   };
 
   const toggleDropdown = () => setDropdownOpen((prev) => !prev);
+  const toggleCreateMenu = () => setCreateMenuOpen((prev) => !prev);
+
+  const openCreateFlow = (type) => {
+    const nextType = type === "tape" ? "tape" : "post";
+    navigate(nextType === "tape" ? "/create?type=tape" : "/create");
+    setCreateMenuOpen(false);
+  };
 
   const updateFeedMode = (mode) => {
     const nextMode = mode === "following" ? "following" : "discover";
@@ -216,6 +226,15 @@ export default function Header() {
       if (feedMenuRef.current && !feedMenuRef.current.contains(e.target)) {
         setFeedMenuOpen(false);
       }
+
+      const clickedInsideDesktopCreateMenu =
+        desktopCreateMenuRef.current && desktopCreateMenuRef.current.contains(e.target);
+      const clickedInsideMobileCreateMenu =
+        mobileCreateMenuRef.current && mobileCreateMenuRef.current.contains(e.target);
+
+      if (!clickedInsideDesktopCreateMenu && !clickedInsideMobileCreateMenu) {
+        setCreateMenuOpen(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -280,6 +299,7 @@ export default function Header() {
     setSearchFocused(false);
     setMobileSearchOpen(false);
     setFeedMenuOpen(false);
+    setCreateMenuOpen(false);
   }, [location.pathname, location.search]);
 
   const hasSuggestions =
@@ -497,13 +517,34 @@ export default function Header() {
 
         <div className="nav-row">
           <nav className="nav-items">
-            <button
-              className={`nav-button desktop-create-btn ${location.pathname === "/create" ? "active" : ""}`}
-              onClick={() => navigate("/create")}
-              title="Create Post"
-            >
-              <FaPlus />
-            </button>
+            <div className="create-menu-shell desktop-create-btn" ref={desktopCreateMenuRef}>
+              <button
+                className={`nav-button ${location.pathname === "/create" ? "active" : ""}`}
+                onClick={toggleCreateMenu}
+                title="Create"
+              >
+                <FaPlus />
+              </button>
+
+              {createMenuOpen && (
+                <div className="create-menu-dropdown">
+                  <button
+                    type="button"
+                    className="create-menu-item"
+                    onClick={() => openCreateFlow("post")}
+                  >
+                    Post
+                  </button>
+                  <button
+                    type="button"
+                    className="create-menu-item"
+                    onClick={() => openCreateFlow("tape")}
+                  >
+                    Tape
+                  </button>
+                </div>
+              )}
+            </div>
 
             <button
               className={`nav-button ${location.pathname === "/feed" ? "active" : ""}`}
@@ -651,9 +692,30 @@ export default function Header() {
       </header>
 
       {!hideMobileFab && (
-        <button className="mobile-fab-create" onClick={() => navigate("/create")}>
-          <FaPlus />
-        </button>
+        <div className="mobile-create-shell" ref={mobileCreateMenuRef}>
+          {createMenuOpen && (
+            <div className="mobile-create-dropdown">
+              <button
+                type="button"
+                className="create-menu-item"
+                onClick={() => openCreateFlow("post")}
+              >
+                Post
+              </button>
+              <button
+                type="button"
+                className="create-menu-item"
+                onClick={() => openCreateFlow("tape")}
+              >
+                Tape
+              </button>
+            </div>
+          )}
+
+          <button className="mobile-fab-create" onClick={toggleCreateMenu}>
+            <FaPlus />
+          </button>
+        </div>
       )}
     </>
   );

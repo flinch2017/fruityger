@@ -1,15 +1,18 @@
 import React, { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import "../css/CreatePost.css";
 
 export default function CreatePost() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const fileInputRef = useRef(null);
 
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [warning, setWarning] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const createType = searchParams.get("type") === "tape" ? "tape" : "post";
+  const isTapeMode = createType === "tape";
 
   const MAX_ATTACHMENTS = 4;
   const MAX_TOTAL_SIZE_MB = 50;
@@ -29,22 +32,32 @@ export default function CreatePost() {
 
   const handleFileChange = (event) => {
     const files = Array.from(event.target.files || []);
+    const nextFiles = isTapeMode ? files.filter((file) => file.type.startsWith("video")) : files;
 
     if (!files.length) return;
+
+    if (isTapeMode && nextFiles.length !== files.length) {
+      showWarning("Tape only supports video uploads.");
+    }
+
+    if (!nextFiles.length) {
+      event.target.value = "";
+      return;
+    }
 
     if (attachments.length >= MAX_ATTACHMENTS) {
       showWarning(`Attachment limit reached (${MAX_ATTACHMENTS}/4)`);
       return;
     }
 
-    if (attachments.length + files.length > MAX_ATTACHMENTS) {
+    if (attachments.length + nextFiles.length > MAX_ATTACHMENTS) {
       showWarning(`You can only attach up to ${MAX_ATTACHMENTS} files.`);
       return;
     }
 
     const totalSizeMB = getTotalAttachmentSizeMB([
       ...attachments.map((attachment) => attachment.file),
-      ...files,
+      ...nextFiles,
     ]);
 
     if (totalSizeMB > MAX_TOTAL_SIZE_MB) {
@@ -54,7 +67,7 @@ export default function CreatePost() {
 
     setWarning("");
 
-    const previews = files.map((file) => ({
+    const previews = nextFiles.map((file) => ({
       file,
       preview: URL.createObjectURL(file),
       type: file.type.startsWith("video") ? "video" : "image",
@@ -134,7 +147,7 @@ export default function CreatePost() {
             Cancel
           </button>
 
-          <h2 className="create-title">Create Post</h2>
+          <h2 className="create-title">{isTapeMode ? "Create Tape" : "Create Post"}</h2>
 
           <button
             type="button"
@@ -144,14 +157,20 @@ export default function CreatePost() {
           >
             <span className="submit-btn-content">
               {submitting && <span className="submit-spinner" aria-hidden="true"></span>}
-              <span>{submitting ? "Posting..." : "Post"}</span>
+              <span>
+                {submitting ? (isTapeMode ? "Publishing..." : "Posting...") : isTapeMode ? "Tape" : "Post"}
+              </span>
             </span>
           </button>
         </div>
 
         <textarea
           className="create-textarea"
-          placeholder="What's happening in your world today?"
+          placeholder={
+            isTapeMode
+              ? "Add a caption for your tape..."
+              : "What's happening in your world today?"
+          }
           value={text}
           onChange={(event) => setText(event.target.value)}
         />
@@ -175,7 +194,7 @@ export default function CreatePost() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,video/*"
+            accept={isTapeMode ? "video/*" : "image/*,video/*"}
             multiple
             hidden
             onChange={handleFileChange}

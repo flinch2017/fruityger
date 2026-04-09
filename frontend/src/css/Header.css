@@ -180,6 +180,70 @@ body {
   gap: 10px;
 }
 
+.create-menu-shell,
+.mobile-create-shell {
+  position: relative;
+}
+
+.create-menu-dropdown,
+.mobile-create-dropdown {
+  position: absolute;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 150px;
+  padding: 10px;
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.92);
+  background:
+    radial-gradient(circle at top left, rgba(255,255,255,0.78), transparent 42%),
+    linear-gradient(165deg, rgba(255,255,255,0.92), rgba(208,244,255,0.72));
+  box-shadow:
+    0 20px 34px rgba(0, 166, 224, 0.18),
+    inset 0 1px 0 rgba(255,255,255,0.95);
+  backdrop-filter: blur(20px);
+  z-index: 80;
+  animation: profileDropdownIn 0.24s cubic-bezier(.26,.98,.45,1);
+}
+
+.create-menu-dropdown {
+  top: calc(100% + 12px);
+}
+
+.mobile-create-dropdown {
+  bottom: calc(100% + 14px);
+}
+
+.create-menu-item {
+  width: 100%;
+  border: 1px solid rgba(255,255,255,0.82);
+  border-radius: 18px;
+  padding: 11px 14px;
+  text-align: left;
+  cursor: pointer;
+  color: #076b90;
+  font-weight: 700;
+  background:
+    radial-gradient(circle at 25% 20%, rgba(255,255,255,0.9), rgba(255,255,255,0.28) 34%, transparent 56%),
+    linear-gradient(180deg, rgba(255,255,255,0.8), rgba(216,246,255,0.56));
+  box-shadow:
+    0 10px 18px rgba(0, 180, 255, 0.08),
+    inset 0 1px 0 rgba(255,255,255,0.94);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.22s ease, color 0.22s ease;
+}
+
+.create-menu-item:hover {
+  transform: translateY(-2px);
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 25% 18%, rgba(255,255,255,0.96), rgba(255,255,255,0.32) 34%, transparent 56%),
+    linear-gradient(180deg, rgba(145,232,255,0.96), rgba(23,183,230,0.9));
+  box-shadow:
+    0 14px 24px rgba(0, 180, 255, 0.18),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+}
+
 /* ===== GLOSSY ORB BUTTONS ===== */
 .nav-button {
   width: 42px;
@@ -477,6 +541,19 @@ body {
 
   z-index: 9999; /* make sure it is above header */
   transition: all 0.25s ease;
+}
+
+.mobile-create-shell {
+  position: fixed !important;
+  right: 20px !important;
+  bottom: 25px !important;
+  z-index: 9999;
+}
+
+.mobile-create-shell .mobile-fab-create {
+  position: static !important;
+  right: auto !important;
+  bottom: auto !important;
 }
 
 .mobile-fab-create:hover {
