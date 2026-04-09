@@ -180,6 +180,10 @@ body {
   gap: 10px;
 }
 
+.nav-items > * {
+  align-self: center;
+}
+
 .create-menu-shell,
 .mobile-create-shell {
   position: relative;
@@ -257,6 +261,7 @@ body {
   justify-content: center;
 
   font-size: 1rem;
+  line-height: 1;
 
   background: transparent;
   color: #0a7fa8;
@@ -264,6 +269,12 @@ body {
   backdrop-filter: none;
   transition: transform 0.24s ease, color 0.24s ease, filter 0.24s ease;
   position: relative;
+}
+
+.nav-button svg {
+  display: block;
+  width: 1em;
+  height: 1em;
 }
 
 .nav-button:hover {
@@ -305,6 +316,8 @@ body {
 /* ===== PROFILE CONTAINER ===== */
 .profile-container {
   position: relative;
+  display: flex;
+  align-items: center;
 }
 
 /* PROFILE BUTTON */
@@ -321,6 +334,7 @@ body {
     linear-gradient(180deg, rgba(255,255,255,0.88), rgba(191,240,255,0.44) 56%, rgba(87,197,234,0.34));
   color: #0a7fa8;
   font-size: 1rem;
+  line-height: 1;
   cursor: pointer;
   box-shadow:
     0 12px 24px rgba(0, 180, 255, 0.18),
@@ -329,6 +343,12 @@ body {
   backdrop-filter: blur(12px);
   transition: transform 0.24s ease, box-shadow 0.24s ease, background 0.24s ease;
   overflow: hidden;
+}
+
+.profile-placeholder svg {
+  display: block;
+  width: 1em;
+  height: 1em;
 }
 
 .profile-placeholder:hover {
