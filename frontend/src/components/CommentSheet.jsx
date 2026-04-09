@@ -14,6 +14,7 @@ export default function CommentSheet({
   const navigate = useNavigate();
   const historyMarkerRef = useRef(`comment-sheet-${postId}-${Date.now()}`);
   const closeHandledRef = useRef(false);
+  const closeFallbackTimerRef = useRef(null);
   const overlayHashRef = useRef(`#comments-${postId}`);
 
   const [comments, setComments] = useState([]);
@@ -82,6 +83,10 @@ export default function CommentSheet({
 
     return () => {
       window.removeEventListener("popstate", handlePopState);
+      if (closeFallbackTimerRef.current) {
+        window.clearTimeout(closeFallbackTimerRef.current);
+        closeFallbackTimerRef.current = null;
+      }
     };
   }, [onClose]);
 
@@ -99,6 +104,9 @@ export default function CommentSheet({
     ) {
       closeHandledRef.current = true;
       window.history.back();
+      closeFallbackTimerRef.current = window.setTimeout(() => {
+        onClose();
+      }, 120);
       return;
     }
 
@@ -458,7 +466,15 @@ const loadMoreReplies = (commentId) => {
 
         <div className="comment-header">
           Comments
-          <div className="comment-close-btn" onClick={requestClose}>✕</div>
+          <button
+            type="button"
+            className="comment-close-btn"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={requestClose}
+            aria-label="Close comments"
+          >
+            ✕
+          </button>
         </div>
 
         <div className="comment-list" ref={listRef}>
