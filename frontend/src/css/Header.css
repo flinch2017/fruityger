@@ -816,6 +816,7 @@ body {
 
   .mobile-search-btn {
     display: inline-block;
+    margin-left: 4px;
   }
 
   .feed-mode-tabs {
