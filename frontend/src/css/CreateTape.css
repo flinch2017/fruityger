@@ -1,11 +1,7 @@
 .create-tape-page {
   min-height: 100vh;
   padding: calc(70px + 26px) 20px 40px;
-  background:
-    radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.95), transparent 18%),
-    radial-gradient(circle at 88% 8%, rgba(173, 237, 255, 0.82), transparent 24%),
-    radial-gradient(circle at 78% 78%, rgba(123, 221, 255, 0.32), transparent 22%),
-    linear-gradient(180deg, #dff8ff 0%, #c9f1ff 30%, #bde7ff 64%, #def8ff 100%);
+  
   position: relative;
   overflow: hidden;
 }
