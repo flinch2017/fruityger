@@ -816,11 +816,15 @@ body {
 
   .mobile-search-btn {
     display: inline-block;
-    margin-left: 0;
+    margin-left: 0 !important;
   }
 
   .nav-button-tapes {
-    margin-right: 8px;
+    margin-right: 0 !important;
+  }
+
+  .nav-button-tapes + .mobile-search-btn {
+    margin-left: 12px !important;
   }
 
   .feed-mode-tabs {
