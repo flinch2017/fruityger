@@ -566,6 +566,10 @@ body {
 
 /* Show only on mobile */
 @media (max-width: 768px) {
+  .mobile-create-shell {
+    display: block;
+  }
+
   .mobile-fab-create {
     display: flex;
   }
@@ -788,6 +792,11 @@ body {
 
 /* Desktop hide search icon */
 @media (min-width: 769px) {
+  .mobile-create-shell,
+  .mobile-create-dropdown {
+    display: none !important;
+  }
+
   .mobile-search-btn {
     display: none;
   }

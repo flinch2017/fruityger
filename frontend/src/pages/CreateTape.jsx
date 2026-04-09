@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/CreateTape.css";
+import { useUploadManager } from "../context/UploadManagerContext";
 
 export default function CreateTape() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const { enqueueUpload } = useUploadManager();
 
   const [caption, setCaption] = useState("");
   const [videoFile, setVideoFile] = useState(null);
@@ -75,37 +77,14 @@ export default function CreateTape() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("caption", caption);
-    formData.append("media", videoFile);
-
-    const token = localStorage.getItem("token");
-    setSubmitting(true);
-
     try {
-      const res = await fetch("http://localhost:5000/api/posts/create", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
+      setSubmitting(true);
+      enqueueUpload({
+        kind: "tape",
+        caption,
+        files: [videoFile],
       });
-
-      const responseText = await res.text();
-      let data = {};
-
-      try {
-        data = responseText ? JSON.parse(responseText) : {};
-      } catch {
-        data = {};
-      }
-
-      if (data.success) {
-        navigate("/feed");
-        return;
-      }
-
-      showWarning(data.error || responseText || "Tape publishing failed.");
+      navigate("/feed");
     } catch (error) {
       console.error(error);
       showWarning(error?.message || "Tape publishing failed.");

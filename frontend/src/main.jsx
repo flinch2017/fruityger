@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import OnlinePresenceSync from "./components/OnlinePresenceSync";
+import { UploadManagerProvider } from "./context/UploadManagerContext";
 import "./css/index.css";
 import { applyTheme, getStoredTheme } from "./utils/theme";
 
@@ -208,7 +209,9 @@ applyTheme(getStoredTheme());
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <BrowserRouter>
-    <OnlinePresenceSync />
-    <App />
+    <UploadManagerProvider>
+      <OnlinePresenceSync />
+      <App />
+    </UploadManagerProvider>
   </BrowserRouter>
 );

@@ -1,10 +1,12 @@
 import React, { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/CreatePost.css";
+import { useUploadManager } from "../context/UploadManagerContext";
 
 export default function CreatePost() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const { enqueueUpload } = useUploadManager();
 
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState([]);
@@ -79,40 +81,14 @@ export default function CreatePost() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("caption", text);
-
-    attachments.forEach((attachment) => {
-      formData.append("media", attachment.file);
-    });
-
-    const token = localStorage.getItem("token");
-    setSubmitting(true);
-
     try {
-      const res = await fetch("http://localhost:5000/api/posts/create", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
+      setSubmitting(true);
+      enqueueUpload({
+        kind: "post",
+        caption: text,
+        files: attachments.map((attachment) => attachment.file),
       });
-
-      const responseText = await res.text();
-      let data = {};
-
-      try {
-        data = responseText ? JSON.parse(responseText) : {};
-      } catch {
-        data = {};
-      }
-
-      if (data.success) {
-        navigate("/feed");
-        return;
-      }
-
-      showWarning(data.error || responseText || "Post creation failed.");
+      navigate("/feed");
     } catch (error) {
       console.error(error);
       showWarning(error?.message || "Post creation failed.");
