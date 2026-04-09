@@ -29,6 +29,7 @@ import OnboardingRoute from "./components/OnboardingRoute";
 import NotFound from "./pages/NotFound"; // <-- import it
 import EditProfile from "./pages/EditProfile"; // <-- import it
 import CreatePost from "./pages/CreatePost"; // <-- import it
+import CreateTape from "./pages/CreateTape";
 import EditPost from "./pages/EditPost";
 import CommentSheet from "./components/CommentSheet";
 import Search from "./pages/Search";
@@ -359,6 +360,16 @@ function App() {
             <PrivateRoute>
               <MainLayout>
                 <CreatePost />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/create-tape"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <CreateTape />
               </MainLayout>
             </PrivateRoute>
           }

@@ -43,6 +43,7 @@ export default function Header() {
 
   const hideMobileFab =
     location.pathname === "/create" ||
+    location.pathname === "/create-tape" ||
     location.pathname === "/messages" ||
     location.pathname.startsWith("/chat/");
   const feedMode = useMemo(() => {
@@ -70,7 +71,7 @@ export default function Header() {
 
   const openCreateFlow = (type) => {
     const nextType = type === "tape" ? "tape" : "post";
-    navigate(nextType === "tape" ? "/create?type=tape" : "/create");
+    navigate(nextType === "tape" ? "/create-tape" : "/create");
     setCreateMenuOpen(false);
   };
 
