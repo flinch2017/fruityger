@@ -30,6 +30,7 @@ import NotFound from "./pages/NotFound"; // <-- import it
 import EditProfile from "./pages/EditProfile"; // <-- import it
 import CreatePost from "./pages/CreatePost"; // <-- import it
 import CreateTape from "./pages/CreateTape";
+import TapesFeed from "./pages/TapesFeed";
 import EditPost from "./pages/EditPost";
 import CommentSheet from "./components/CommentSheet";
 import Search from "./pages/Search";
@@ -213,6 +214,16 @@ function App() {
             <PrivateRoute>
               <MainLayout>
                 <Feed />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/tapes"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <TapesFeed />
               </MainLayout>
             </PrivateRoute>
           }

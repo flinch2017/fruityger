@@ -619,6 +619,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 5;
     const offset = parseInt(req.query.offset, 10) || 0;
     const mode = req.query.mode === "following" ? "following" : "discover";
+    const surface = req.query.surface === "tapes" ? "tapes" : "feed";
     const feedScopeClause =
       mode === "following"
         ? `
@@ -633,6 +634,17 @@ router.get("/feed", authenticateToken, async (req, res) => {
           )
         `
         : `TRUE`;
+    const mediaScopeClause =
+      surface === "tapes"
+        ? `
+      AND EXISTS (
+        SELECT 1
+        FROM post_media tape_media
+        WHERE tape_media.post_id = p.post_id
+          AND tape_media.media_type = 'video'
+      )
+        `
+        : "";
 
     const { rows } = await pool.query(
       `
@@ -762,13 +774,14 @@ router.get("/feed", authenticateToken, async (req, res) => {
             AND bu.blocked_id = $1
           )
         )
+        ${mediaScopeClause}
       ORDER BY COALESCE(latest_repost.reposted_at, p.date_posted) DESC
       LIMIT $2 OFFSET $3
       `,
       [userId, limit, offset]
     );
 
-    res.json({ posts: rows, mode });
+    res.json({ posts: rows, mode, surface });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });

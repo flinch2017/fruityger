@@ -6,6 +6,7 @@ import {
   FaCompass,
   FaEnvelope,
   FaHome,
+  FaPlayCircle,
   FaPlus,
   FaSearch,
   FaSignOutAlt,
@@ -46,6 +47,7 @@ export default function Header() {
     location.pathname === "/create-tape" ||
     location.pathname === "/messages" ||
     location.pathname.startsWith("/chat/");
+  const isTapesRoute = location.pathname === "/tapes";
   const feedMode = useMemo(() => {
     const params = new URLSearchParams(location.search);
     return params.get("mode") === "following" ? "following" : "discover";
@@ -77,7 +79,7 @@ export default function Header() {
 
   const updateFeedMode = (mode) => {
     const nextMode = mode === "following" ? "following" : "discover";
-    navigate(`/feed?mode=${nextMode}`);
+    navigate(`${isTapesRoute ? "/tapes" : "/feed"}?mode=${nextMode}`);
     setFeedMenuOpen(false);
   };
 
@@ -89,6 +91,16 @@ export default function Header() {
     }
 
     navigate(`/feed?mode=${feedMode}`);
+  };
+
+  const handleTapesNav = () => {
+    if (location.pathname === "/tapes") {
+      window.dispatchEvent(new CustomEvent("fruityger:feed-refresh"));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    navigate(`/tapes?mode=${feedMode}`);
   };
 
   useEffect(() => {
@@ -552,6 +564,14 @@ export default function Header() {
               onClick={handleFeedNav}
             >
               <FaHome />
+            </button>
+
+            <button
+              className={`nav-button ${location.pathname === "/tapes" ? "active" : ""}`}
+              onClick={handleTapesNav}
+              title="Tapes"
+            >
+              <FaPlayCircle />
             </button>
 
             <button
