@@ -107,35 +107,10 @@
   pointer-events: none;
 }
 
-.tape-sound-btn {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 42px;
-  height: 42px;
-  border: 1px solid rgba(255,255,255,0.92);
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #ffffff;
-  background: rgba(5, 63, 88, 0.34);
-  backdrop-filter: blur(12px);
-  box-shadow:
-    0 12px 22px rgba(0, 93, 132, 0.18),
-    inset 0 1px 0 rgba(255,255,255,0.34);
-  z-index: 2;
-  cursor: pointer;
-}
-
-.tape-sound-btn.muted {
-  background: rgba(5, 47, 66, 0.42);
-}
-
 .tape-meta {
   position: absolute;
   left: 18px;
-  right: 90px;
+  right: 86px;
   bottom: 20px;
   z-index: 2;
   color: #ffffff;
@@ -237,9 +212,11 @@
 }
 
 .tapes-loader {
-  text-align: center;
-  color: #4e7786;
-  padding: 8px 0 18px;
+  width: 1px;
+  height: 1px;
+  margin: 0 auto;
+  opacity: 0;
+  pointer-events: none;
 }
 
 @media (max-width: 640px) {
@@ -269,16 +246,12 @@
 
   .tape-meta {
     left: 14px;
-    right: 78px;
+    right: 74px;
     bottom: 16px;
   }
 
   .tape-actions {
     right: 10px;
     bottom: 16px;
-  }
-
-  .tapes-loader {
-    padding: 12px 0 18px;
   }
 }

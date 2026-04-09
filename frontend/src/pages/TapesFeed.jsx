@@ -6,8 +6,6 @@ import {
   FaRegHeart,
   FaRetweet,
   FaUser,
-  FaVolumeMute,
-  FaVolumeUp,
 } from "react-icons/fa";
 import CommentSheet from "../components/CommentSheet";
 import "../css/CommentSheet.css";
@@ -27,7 +25,6 @@ export default function TapesFeed() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingTapes, setLoadingTapes] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [videoMutedMap, setVideoMutedMap] = useState({});
   const [likingMap, setLikingMap] = useState({});
   const [repostingMap, setRepostingMap] = useState({});
   const [activeCommentPost, setActiveCommentPost] = useState(null);
@@ -203,22 +200,7 @@ export default function TapesFeed() {
     });
 
     return () => observerRef.current?.disconnect();
-  }, [tapes, videoMutedMap]);
-
-  const toggleVideoMuted = (postId) => {
-    setVideoMutedMap((prev) => {
-      const nextMuted = !(prev[postId] ?? true);
-      const next = { ...prev, [postId]: nextMuted };
-      const video = videoRefs.current[postId];
-      if (video) {
-        video.muted = nextMuted;
-        if (!nextMuted) {
-          video.play().catch(() => {});
-        }
-      }
-      return next;
-    });
-  };
+  }, [tapes]);
 
   const toggleLike = async (postId) => {
     const token = localStorage.getItem("token");
@@ -381,26 +363,18 @@ export default function TapesFeed() {
                 ref={(element) => {
                   if (!element) return;
                   videoRefs.current[tape.post_id] = element;
-                  element.muted = videoMutedMap[tape.post_id] ?? true;
+                  element.muted = false;
                 }}
                 className="tape-video"
                 src={getSafeMediaUrl(tape.primaryVideo.media_url)}
                 loop
                 playsInline
-                muted={videoMutedMap[tape.post_id] ?? true}
+                autoPlay
+                muted={false}
                 preload="metadata"
               />
 
               <div className="tape-gradient"></div>
-
-              <button
-                type="button"
-                className={`tape-sound-btn ${(videoMutedMap[tape.post_id] ?? true) ? "muted" : ""}`}
-                onClick={() => toggleVideoMuted(tape.post_id)}
-                aria-label={(videoMutedMap[tape.post_id] ?? true) ? "Turn on sound" : "Mute tape"}
-              >
-                {(videoMutedMap[tape.post_id] ?? true) ? <FaVolumeMute /> : <FaVolumeUp />}
-              </button>
 
               <div className="tape-meta">
                 <button
@@ -461,7 +435,7 @@ export default function TapesFeed() {
           </section>
         ))}
 
-        {hasMore && <div ref={loaderRef} className="tapes-loader">{loadingTapes ? "Loading tapes..." : ""}</div>}
+        {hasMore && <div ref={loaderRef} className="tapes-loader" aria-hidden="true" />}
       </div>
     </main>
   );
