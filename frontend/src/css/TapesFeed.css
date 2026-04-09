@@ -31,9 +31,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 72px;
   padding: calc(env(safe-area-inset-top, 0px) + 12px) 18px 12px;
-  pointer-events: none;
   transition:
     transform 180ms ease,
     opacity 180ms ease;
@@ -45,9 +43,10 @@
 }
 
 .tapes-back-btn {
-  position: absolute;
+  position: fixed;
   left: 16px;
   top: calc(env(safe-area-inset-top, 0px) + 10px);
+  z-index: 9;
   width: 42px;
   height: 42px;
   border: 1px solid rgba(255,255,255,0.14);
@@ -60,7 +59,6 @@
   backdrop-filter: blur(14px);
   box-shadow: 0 14px 34px rgba(0,0,0,0.26);
   cursor: pointer;
-  pointer-events: auto;
 }
 
 .tapes-back-btn svg {
@@ -330,7 +328,6 @@
 
 @media (max-width: 640px) {
   .tapes-top-chrome {
-    min-height: 68px;
     padding: calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px;
   }
 

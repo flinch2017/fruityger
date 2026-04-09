@@ -35,11 +35,6 @@ export default function TapesFeed() {
 
   const LIMIT = 4;
   const handleExitTapes = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-
     navigate("/");
   };
 
@@ -379,16 +374,16 @@ export default function TapesFeed() {
         />
       )}
 
-      <div className={`tapes-top-chrome ${chromeHidden ? "hidden" : ""}`}>
-        <button
-          type="button"
-          className="tapes-back-btn"
-          onClick={handleExitTapes}
-          aria-label="Exit tapes feed"
-        >
-          <FaArrowLeft />
-        </button>
+      <button
+        type="button"
+        className="tapes-back-btn"
+        onClick={handleExitTapes}
+        aria-label="Exit tapes feed"
+      >
+        <FaArrowLeft />
+      </button>
 
+      <div className={`tapes-top-chrome ${chromeHidden ? "hidden" : ""}`}>
         <div className="tapes-mode-tabs" role="tablist" aria-label="Tape feed mode">
           <button
             type="button"
