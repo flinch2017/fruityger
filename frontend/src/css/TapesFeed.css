@@ -346,6 +346,11 @@
   font-size: 1.28rem;
 }
 
+.tape-action-count-placeholder {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .tape-more-dropdown {
   position: absolute;
   right: calc(100% + 10px);

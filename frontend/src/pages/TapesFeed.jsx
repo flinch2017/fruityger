@@ -648,6 +648,9 @@ export default function TapesFeed() {
                       }}
                     >
                       <FaEllipsisV />
+                      <span className="tape-action-count-placeholder" aria-hidden="true">
+                        0
+                      </span>
                     </button>
 
                     {activeMenuPostId === tape.post_id && (
