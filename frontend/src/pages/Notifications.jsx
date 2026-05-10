@@ -34,6 +34,11 @@ const TYPE_COPY = {
     title: "Mentioned you",
     body: (username) => `@${username} mentioned you in a post.`,
   },
+  comment_mention: {
+    icon: "@",
+    title: "Mentioned you",
+    body: (username) => `@${username} mentioned you in a comment.`,
+  },
   new_follower: {
     icon: "F",
     title: "New follower",
@@ -158,7 +163,8 @@ export default function Notifications() {
           openComments:
             notification.type === "post_comment" ||
             notification.type === "comment_reply" ||
-            notification.type === "comment_like",
+            notification.type === "comment_like" ||
+            notification.type === "comment_mention",
         },
       });
     }

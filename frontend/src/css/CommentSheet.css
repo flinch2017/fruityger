@@ -426,6 +426,7 @@
 ================================ */
 
 .comment-input-wrapper {
+  position: relative;
   display: flex;
   padding: 14px;
 
@@ -433,6 +434,45 @@
 
   background: rgba(255,255,255,0.7);
   backdrop-filter: blur(20px);
+}
+
+.comment-mention-dropdown {
+  position: absolute;
+  left: 14px;
+  right: 86px;
+  bottom: calc(100% + 8px);
+  border-radius: 14px;
+  border: 1px solid rgba(0, 160, 220, 0.2);
+  background: linear-gradient(160deg, rgba(255,255,255,0.96), rgba(214,246,255,0.92));
+  box-shadow: 0 12px 30px rgba(0, 160, 220, 0.2);
+  overflow: hidden;
+  z-index: 5;
+}
+
+.comment-mention-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  color: #0077aa;
+  text-align: left;
+}
+
+.comment-mention-item:hover {
+  background: rgba(0, 180, 255, 0.12);
+}
+
+.comment-mention-item strong {
+  font-size: 13px;
+}
+
+.comment-mention-item span {
+  font-size: 12px;
+  color: #4e8fa8;
 }
 
 .comment-input-wrapper input {

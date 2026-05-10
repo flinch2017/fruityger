@@ -5,6 +5,17 @@ import "../css/CommentSheet.css";
 import { formatRelativeTime } from "../utils/timeFormatter";
 import supabase from "../lib/supabaseClient";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import CaptionWithHashtags from "./CaptionWithHashtags";
+
+const getActiveMentionQuery = (value = "", cursor = 0) => {
+  const uptoCursor = String(value).slice(0, cursor);
+  const match = uptoCursor.match(/(?:^|\s)@([A-Za-z0-9._]*)$/);
+  if (!match) return null;
+
+  const query = match[1] || "";
+  const start = uptoCursor.length - query.length - 1;
+  return { query: query.toLowerCase(), start, end: cursor };
+};
 
 export default function CommentSheet({
   postId,
@@ -32,6 +43,9 @@ export default function CommentSheet({
   const REPLY_PAGE_SIZE = 5;
 
   const [activeMenu, setActiveMenu] = useState(null);
+  const [mentionSuggestions, setMentionSuggestions] = useState([]);
+  const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+  const [activeMentionRange, setActiveMentionRange] = useState(null);
   
 
   const inputRef = useRef(null);
@@ -346,12 +360,67 @@ export default function CommentSheet({
 
       setText("");
       setReplyingTo(null);
+      setShowMentionSuggestions(false);
+      setMentionSuggestions([]);
+      setActiveMentionRange(null);
 
     } catch (err) {
       console.error(err);
     }
 
     setLoading(false);
+  };
+
+  const fetchMentionSuggestions = async (query) => {
+    if (!token || !query) {
+      setMentionSuggestions([]);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setMentionSuggestions([]);
+        return;
+      }
+
+      setMentionSuggestions((data.users || []).slice(0, 6));
+    } catch {
+      setMentionSuggestions([]);
+    }
+  };
+
+  const handleTextChange = async (value) => {
+    setText(value);
+    const cursor = inputRef.current?.selectionStart ?? value.length;
+    const activeMention = getActiveMentionQuery(value, cursor);
+    setActiveMentionRange(activeMention);
+
+    if (activeMention?.query) {
+      await fetchMentionSuggestions(activeMention.query);
+      setShowMentionSuggestions(true);
+      return;
+    }
+
+    setShowMentionSuggestions(false);
+    setMentionSuggestions([]);
+  };
+
+  const applyMentionSuggestion = (username) => {
+    if (!activeMentionRange) return;
+
+    const nextValue = `${text.slice(0, activeMentionRange.start)}@${username} ${text.slice(activeMentionRange.end)}`;
+    setText(nextValue);
+    setShowMentionSuggestions(false);
+    setMentionSuggestions([]);
+
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
   };
 
   /* ===============================
@@ -569,9 +638,7 @@ const loadMoreReplies = (commentId) => {
 
                   </div>
 
-                  <p className="comment-text">
-                    {c.commented_text}
-                  </p>
+                  <CaptionWithHashtags className="comment-text" text={c.commented_text} />
 
                   <div className="comment-actions">
 
@@ -678,9 +745,7 @@ const loadMoreReplies = (commentId) => {
 
                             </div>
 
-                            <div className="thread-text">
-                              {r.commented_text}
-                            </div>
+                            <CaptionWithHashtags className="thread-text" text={r.commented_text} />
 
                             <div className="thread-actions">
 
@@ -789,8 +854,22 @@ const loadMoreReplies = (commentId) => {
           <input
             ref={inputRef}
             value={text}
-            onChange={e => setText(e.target.value)}
+            onChange={(e) => handleTextChange(e.target.value)}
             placeholder="Write a comment..."
+            onBlur={() => {
+              window.setTimeout(() => {
+                setShowMentionSuggestions(false);
+              }, 120);
+            }}
+            onFocus={() => {
+              const cursor = inputRef.current?.selectionStart ?? text.length;
+              const activeMention = getActiveMentionQuery(text, cursor);
+              if (activeMention?.query) {
+                setActiveMentionRange(activeMention);
+                fetchMentionSuggestions(activeMention.query);
+                setShowMentionSuggestions(true);
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !loading) {
                 e.preventDefault();
@@ -798,6 +877,23 @@ const loadMoreReplies = (commentId) => {
               }
             }}
           />
+
+          {showMentionSuggestions && mentionSuggestions.length > 0 && (
+            <div className="comment-mention-dropdown">
+              {mentionSuggestions.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="comment-mention-item"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => applyMentionSuggestion(item.username)}
+                >
+                  <strong>@{item.username}</strong>
+                  <span>Profile</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           <button onClick={sendComment} disabled={loading}>
             {loading ? <span className="spinner" /> : "Post"}

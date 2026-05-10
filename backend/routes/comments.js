@@ -2,6 +2,7 @@ import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { createNotification } from "../utils/notifications.js";
+import { extractMentionUsernames } from "../utils/mentions.js";
 
 const router = express.Router();
 
@@ -122,6 +123,41 @@ router.post("/", authenticateToken, async (req, res) => {
         postId,
         commentId: newComment.comment_id,
       });
+    }
+
+    const mentionUsernames = extractMentionUsernames(text);
+    if (mentionUsernames.length > 0) {
+      const mentionTargets = await pool.query(
+        `
+        SELECT id
+        FROM users
+        WHERE LOWER(username) = ANY($1::text[])
+          AND deactivated_at IS NULL
+          AND deleted_at IS NULL
+        `,
+        [mentionUsernames]
+      );
+
+      const seenMentionIds = new Set();
+      for (const row of mentionTargets.rows) {
+        const recipientId = row.id;
+        if (!recipientId || String(recipientId) === String(userId)) {
+          continue;
+        }
+
+        if (seenMentionIds.has(String(recipientId))) {
+          continue;
+        }
+
+        seenMentionIds.add(String(recipientId));
+        await createNotification({
+          recipientId,
+          actorId: userId,
+          type: "comment_mention",
+          postId,
+          commentId: newComment.comment_id,
+        });
+      }
     }
 
     const full = await pool.query(
