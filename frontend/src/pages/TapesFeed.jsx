@@ -32,6 +32,7 @@ export default function TapesFeed() {
   const [repostingMap, setRepostingMap] = useState({});
   const [activeCommentPost, setActiveCommentPost] = useState(null);
   const [chromeHidden, setChromeHidden] = useState(false);
+  const [videoMutedMap, setVideoMutedMap] = useState({});
 
   const LIMIT = 4;
   const handleExitTapes = () => {
@@ -217,7 +218,15 @@ export default function TapesFeed() {
           if (!video) return;
 
           if (entry.isIntersecting) {
-            video.play().catch(() => {});
+            const tryPlay = async () => {
+              try {
+                await video.play();
+              } catch {
+                video.muted = true;
+                await video.play().catch(() => {});
+              }
+            };
+            tryPlay();
           } else {
             video.pause();
           }
@@ -364,6 +373,20 @@ export default function TapesFeed() {
     }
   };
 
+  const toggleVideoMute = (postId) => {
+    setVideoMutedMap((prev) => {
+      const nextMuted = !(prev[postId] ?? true);
+      const video = videoRefs.current[postId];
+      if (video) {
+        video.muted = nextMuted;
+      }
+      return {
+        ...prev,
+        [postId]: nextMuted,
+      };
+    });
+  };
+
   return (
     <main ref={feedContainerRef} className="tapes-feed-page">
       {activeCommentPost && (
@@ -429,15 +452,15 @@ export default function TapesFeed() {
                   ref={(element) => {
                     if (!element) return;
                     videoRefs.current[tape.post_id] = element;
-                    element.muted = false;
+                    element.muted = videoMutedMap[tape.post_id] ?? true;
                   }}
                   className="tape-video"
                   src={getSafeMediaUrl(tape.primaryVideo.media_url)}
                   loop
                   playsInline
                   autoPlay
-                  muted={false}
-                  preload="metadata"
+                  muted={videoMutedMap[tape.post_id] ?? true}
+                  preload="auto"
                 />
                 <div className="tape-gradient"></div>
 
@@ -464,6 +487,14 @@ export default function TapesFeed() {
                 </div>
 
                 <div className="tape-actions">
+                  <button
+                    type="button"
+                    className={`tape-action-btn ${(videoMutedMap[tape.post_id] ?? true) ? "" : "active"}`}
+                    onClick={() => toggleVideoMute(tape.post_id)}
+                  >
+                    <span>{(videoMutedMap[tape.post_id] ?? true) ? "Unmute" : "Mute"}</span>
+                  </button>
+
                   <button
                     type="button"
                     className={`tape-action-btn ${tape.is_liked ? "liked" : ""}`}
