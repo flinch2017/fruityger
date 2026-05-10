@@ -216,6 +216,24 @@
   pointer-events: none;
 }
 
+.tape-unmute-overlay {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  border: 1px solid rgba(255,255,255,0.26);
+  border-radius: 999px;
+  padding: 10px 16px;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.88rem;
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(0,0,0,0.28);
+}
+
 .tape-meta {
   position: absolute;
   left: 18px;

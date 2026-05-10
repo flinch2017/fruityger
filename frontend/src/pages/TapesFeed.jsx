@@ -463,6 +463,15 @@ export default function TapesFeed() {
                   preload="auto"
                 />
                 <div className="tape-gradient"></div>
+                {(videoMutedMap[tape.post_id] ?? true) && (
+                  <button
+                    type="button"
+                    className="tape-unmute-overlay"
+                    onClick={() => toggleVideoMute(tape.post_id)}
+                  >
+                    Tap to unmute
+                  </button>
+                )}
 
                 <div className="tape-meta">
                   <button
