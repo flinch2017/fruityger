@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "../css/Signup.css";
 import { persistAuthSession } from "../utils/authSession";
 import TurnstileWidget from "../components/TurnstileWidget";
+
+const SIGNUP_STEPS = ["Email", "Username", "Birthday", "Password", "Confirm"];
 
 const getAgeFromBirthDate = (birthDate) => {
   if (!birthDate) return null;
@@ -64,6 +66,25 @@ const normalizeUsername = (value = "") =>
     .replace(/^[^a-z]+/, "")
     .replace(/\.$/g, "");
 
+const getUsernameValidationMessage = (username) => {
+  if (!username) return "Username is required.";
+  if (username.length < 3) return "Username must be at least 3 characters long.";
+  if (username.length > 30) return "Username must be 30 characters or fewer.";
+  if (!/^[a-z]/.test(username)) return "Username must start with a letter.";
+  if (username.endsWith(".")) return "Username cannot end with a period.";
+  if (!/^[a-z0-9._]+$/.test(username)) {
+    return "Username can only use lowercase letters, numbers, periods, and underscores.";
+  }
+  return "";
+};
+
+const getEmailValidationMessage = (email = "") => {
+  const value = String(email).trim();
+  if (!value) return "Email is required.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Please enter a valid email address.";
+  return "";
+};
+
 const getPasswordChecklist = (password) => [
   { label: "8+ characters", met: password.length >= 8 },
   { label: "Uppercase letter", met: /[A-Z]/.test(password) },
@@ -106,6 +127,7 @@ export default function Signup() {
     confirmPassword: "",
     birthDate: "",
   });
+  const [stepIndex, setStepIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
   const [birthDateInputType, setBirthDateInputType] = useState("text");
@@ -156,34 +178,60 @@ export default function Signup() {
     });
   };
 
+  const validateStep = (index) => {
+    if (index === 0) {
+      return getEmailValidationMessage(form.email);
+    }
+
+    if (index === 1) {
+      return getUsernameValidationMessage(form.username);
+    }
+
+    if (index === 2) {
+      if (!form.birthDate) return "Please enter your birthday.";
+      const age = getAgeFromBirthDate(form.birthDate);
+      if (age === null) return "Please enter a valid birthday.";
+      if (age < 13) return "You must be at least 13 years old to create an account.";
+      return "";
+    }
+
+    if (index === 3) {
+      return getPasswordValidationMessage(form.password);
+    }
+
+    if (index === 4) {
+      if (!form.confirmPassword) return "Please confirm your password.";
+      if (form.password !== form.confirmPassword) return "Passwords do not match.";
+      return "";
+    }
+
+    return "";
+  };
+
+  const goNext = () => {
+    clearMessage();
+    const errorMessage = validateStep(stepIndex);
+
+    if (errorMessage) {
+      setCustomMessage("error", errorMessage);
+      return;
+    }
+
+    setStepIndex((current) => Math.min(current + 1, SIGNUP_STEPS.length - 1));
+  };
+
+  const goBack = () => {
+    clearMessage();
+    setStepIndex((current) => Math.max(current - 1, 0));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     clearMessage();
 
-    if (form.password !== form.confirmPassword) {
-      setCustomMessage("error", "Passwords do not match.");
-      return;
-    }
-
-    const passwordValidationMessage = getPasswordValidationMessage(form.password);
-    if (passwordValidationMessage) {
-      setCustomMessage("error", passwordValidationMessage);
-      return;
-    }
-
-    if (!form.birthDate) {
-      setCustomMessage("error", "Please enter your birthday.");
-      return;
-    }
-
-    const age = getAgeFromBirthDate(form.birthDate);
-    if (age === null) {
-      setCustomMessage("error", "Please enter a valid birthday.");
-      return;
-    }
-
-    if (age < 13) {
-      setCustomMessage("error", "You must be at least 13 years old to create an account.");
+    const finalStepError = validateStep(4);
+    if (finalStepError) {
+      setCustomMessage("error", finalStepError);
       return;
     }
 
@@ -237,12 +285,21 @@ export default function Signup() {
   };
 
   const maxBirthDate = new Date().toISOString().split("T")[0];
+  const stepTitle = useMemo(() => SIGNUP_STEPS[stepIndex], [stepIndex]);
 
   return (
     <div className="welcome">
       <div className="signup-aero-page">
         <div className="signup-aero-card">
           <h2 className="signup-aero-title">Create Account</h2>
+          <p className="signup-step-indicator">
+            Step {stepIndex + 1} of {SIGNUP_STEPS.length}: {stepTitle}
+          </p>
+          <div className="signup-step-progress" aria-hidden="true">
+            {SIGNUP_STEPS.map((step, index) => (
+              <span key={step} className={`signup-step-dot ${index <= stepIndex ? "active" : ""}`} />
+            ))}
+          </div>
 
           {feedback.message && (
             <div className={`signup-feedback ${feedback.type}`}>
@@ -251,148 +308,178 @@ export default function Signup() {
           )}
 
           <form className="signup-aero-form" onSubmit={handleSubmit}>
-            <input
-              type="text"
-              name="username"
-              placeholder="Username"
-              className="signup-aero-input"
-              value={form.username}
-              onChange={handleChange}
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck="false"
-              required
-            />
+            {stepIndex === 0 && (
+              <>
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="Email"
+                  className="signup-aero-input"
+                  value={form.email}
+                  onChange={handleChange}
+                  required
+                />
+                <p className="signup-password-hint">Use a real email you can access for verification codes.</p>
+              </>
+            )}
 
-            <p className="signup-password-hint">
-              Lowercase only. Must start with a letter. Spaces become underscores. Cannot end with a period.
-            </p>
+            {stepIndex === 1 && (
+              <>
+                <input
+                  type="text"
+                  name="username"
+                  placeholder="Username"
+                  className="signup-aero-input"
+                  value={form.username}
+                  onChange={handleChange}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck="false"
+                  required
+                />
 
-            <input
-              type="email"
-              name="email"
-              placeholder="Email"
-              className="signup-aero-input"
-              value={form.email}
-              onChange={handleChange}
-              required
-            />
+                <p className="signup-password-hint">
+                  Lowercase only. Must start with a letter. Spaces become underscores. Cannot end with a period.
+                </p>
+              </>
+            )}
 
-            <input
-              ref={birthDateRef}
-              type={birthDateInputType}
-              name="birthDate"
-              placeholder="Birthday"
-              className="signup-aero-input signup-aero-date"
-              value={form.birthDate}
-              onChange={handleChange}
-              onClick={activateBirthDatePicker}
-              onTouchStart={activateBirthDatePicker}
-              readOnly={birthDateInputType === "text"}
-              inputMode="none"
-              onBlur={() => {
-                if (!form.birthDate) {
-                  setBirthDateInputType("text");
-                }
-              }}
-              max={maxBirthDate}
-              required
-            />
-
-            <div className="signup-password-field">
+            {stepIndex === 2 && (
               <input
-                type={showPassword ? "text" : "password"}
-                name="password"
-                placeholder="Password"
-                className="signup-aero-input signup-password-input"
-                value={form.password}
+                ref={birthDateRef}
+                type={birthDateInputType}
+                name="birthDate"
+                placeholder="Birthday"
+                className="signup-aero-input signup-aero-date"
+                value={form.birthDate}
                 onChange={handleChange}
+                onClick={activateBirthDatePicker}
+                onTouchStart={activateBirthDatePicker}
+                readOnly={birthDateInputType === "text"}
+                inputMode="none"
+                onBlur={() => {
+                  if (!form.birthDate) {
+                    setBirthDateInputType("text");
+                  }
+                }}
+                max={maxBirthDate}
                 required
               />
-              <button
-                type="button"
-                className="signup-password-toggle"
-                onClick={() => setShowPassword((prev) => !prev)}
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
-            </div>
+            )}
 
-            <div className={`signup-password-strength ${passwordStrength.tone}`}>
-              <div className="signup-password-strength-top">
-                <span>Password strength</span>
-                <strong>{passwordStrength.label}</strong>
-              </div>
-
-              <div className="signup-password-strength-bars">
-                {[1, 2, 3].map((bar) => (
-                  <span
-                    key={bar}
-                    className={
-                      passwordStrength.score >= bar * 2 ||
-                      (bar === 1 && passwordStrength.score > 0)
-                        ? "active"
-                        : ""
-                    }
+            {stepIndex === 3 && (
+              <>
+                <div className="signup-password-field">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    placeholder="Password"
+                    className="signup-aero-input signup-password-input"
+                    value={form.password}
+                    onChange={handleChange}
+                    required
                   />
-                ))}
-              </div>
-
-              <div className="signup-password-checklist">
-                {passwordChecklist.map((item) => (
-                  <span
-                    key={item.label}
-                    className={item.met ? "met" : ""}
+                  <button
+                    type="button"
+                    className="signup-password-toggle"
+                    onClick={() => setShowPassword((prev) => !prev)}
                   >
-                    {item.met ? "✓" : "•"} {item.label}
-                  </span>
-                ))}
-              </div>
-            </div>
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
 
-            <div className="signup-password-field">
-              <input
-                type={showConfirmPassword ? "text" : "password"}
-                name="confirmPassword"
-                placeholder="Confirm Password"
-                className="signup-aero-input signup-password-input"
-                value={form.confirmPassword}
-                onChange={handleChange}
-                required
-              />
-              <button
-                type="button"
-                className="signup-password-toggle"
-                onClick={() => setShowConfirmPassword((prev) => !prev)}
-              >
-                {showConfirmPassword ? "Hide" : "Show"}
-              </button>
-            </div>
+                <div className={`signup-password-strength ${passwordStrength.tone}`}>
+                  <div className="signup-password-strength-top">
+                    <span>Password strength</span>
+                    <strong>{passwordStrength.label}</strong>
+                  </div>
 
-            <p
-              className={`signup-password-hint signup-confirm-status ${
-                form.confirmPassword
-                  ? confirmMatches
-                    ? "match"
-                    : "mismatch"
-                  : ""
-              }`}
-            >
-              {form.confirmPassword
-                ? confirmMatches
-                  ? "Passwords match."
-                  : "Passwords do not match yet."
-                : "Use 8+ characters with uppercase, lowercase, a number, and a special character."}
-            </p>
+                  <div className="signup-password-strength-bars">
+                    {[1, 2, 3].map((bar) => (
+                      <span
+                        key={bar}
+                        className={
+                          passwordStrength.score >= bar * 2 ||
+                          (bar === 1 && passwordStrength.score > 0)
+                            ? "active"
+                            : ""
+                        }
+                      />
+                    ))}
+                  </div>
+
+                  <div className="signup-password-checklist">
+                    {passwordChecklist.map((item) => (
+                      <span key={item.label} className={item.met ? "met" : ""}>
+                        {item.met ? "?" : "�"} {item.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {stepIndex === 4 && (
+              <>
+                <div className="signup-password-field">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    name="confirmPassword"
+                    placeholder="Confirm Password"
+                    className="signup-aero-input signup-password-input"
+                    value={form.confirmPassword}
+                    onChange={handleChange}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="signup-password-toggle"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  >
+                    {showConfirmPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
+
+                <p
+                  className={`signup-password-hint signup-confirm-status ${
+                    form.confirmPassword
+                      ? confirmMatches
+                        ? "match"
+                        : "mismatch"
+                      : ""
+                  }`}
+                >
+                  {form.confirmPassword
+                    ? confirmMatches
+                      ? "Passwords match."
+                      : "Passwords do not match yet."
+                    : "Re-enter your password to confirm."}
+                </p>
+              </>
+            )}
 
             <TurnstileWidget
               ref={captchaRef}
               siteKey={siteKey}
             />
 
-            <button type="submit" className="signup-aero-btn" disabled={submitting}>
-              {submitting ? "Creating account..." : "Sign Up"}
-            </button>
+            <div className="signup-step-actions">
+              {stepIndex > 0 && (
+                <button type="button" className="signup-aero-btn signup-aero-btn-secondary" onClick={goBack}>
+                  Back
+                </button>
+              )}
+
+              {stepIndex < SIGNUP_STEPS.length - 1 ? (
+                <button type="button" className="signup-aero-btn" onClick={goNext}>
+                  Next
+                </button>
+              ) : (
+                <button type="submit" className="signup-aero-btn" disabled={submitting}>
+                  {submitting ? "Creating account..." : "Sign Up"}
+                </button>
+              )}
+            </div>
           </form>
 
           <p className="signup-login-link">

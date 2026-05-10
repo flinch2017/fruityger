@@ -47,11 +47,37 @@
 /* ===== TITLE ===== */
 .signup-aero-title {
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 12px;
   font-size: 1.6rem;
   font-weight: 700;
   color: #0077aa;
   text-shadow: 0 0 10px rgba(0, 200, 255, 0.6);
+}
+
+.signup-step-indicator {
+  margin: 0 0 12px;
+  text-align: center;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #36839d;
+}
+
+.signup-step-progress {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.signup-step-dot {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(119, 180, 202, 0.25);
+}
+
+.signup-step-dot.active {
+  background: linear-gradient(90deg, #00dfff, #42b4ff);
+  box-shadow: 0 0 10px rgba(66, 180, 255, 0.35);
 }
 
 /* ===== FORM ===== */
@@ -328,6 +354,29 @@
   box-shadow:
     0 8px 20px rgba(0, 200, 255, 0.4),
     inset 0 0 15px rgba(255,255,255,0.3);
+}
+
+.signup-step-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+}
+
+.signup-step-actions .signup-aero-btn {
+  margin-top: 0;
+  flex: 1;
+}
+
+.signup-aero-btn-secondary {
+  color: #0a759c;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.95),
+    rgba(213, 243, 255, 0.8)
+  );
+  box-shadow:
+    0 8px 20px rgba(0, 200, 255, 0.2),
+    inset 0 0 14px rgba(255,255,255,0.4);
 }
 
 .signup-login-link {
