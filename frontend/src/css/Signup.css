@@ -169,6 +169,22 @@
   color: #6c95a6;
 }
 
+.signup-birthday-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.signup-aero-select {
+  appearance: none;
+  -webkit-appearance: none;
+  color: #2d6f86;
+}
+
+.signup-aero-select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .signup-password-field {
   position: relative;
 }

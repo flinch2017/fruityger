@@ -130,11 +130,12 @@ export default function Signup() {
   const [stepIndex, setStepIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
-  const [birthDateInputType, setBirthDateInputType] = useState("text");
+  const [birthMonth, setBirthMonth] = useState("");
+  const [birthDay, setBirthDay] = useState("");
+  const [birthYear, setBirthYear] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const captchaRef = useRef(null);
-  const birthDateRef = useRef(null);
   const siteKey =
     import.meta.env.VITE_TURNSTILE_SITE_KEY || import.meta.env.VITE_RECAPTCHA_SITE_KEY;
   const passwordChecklist = getPasswordChecklist(form.password);
@@ -164,18 +165,67 @@ export default function Signup() {
     });
   };
 
-  const activateBirthDatePicker = () => {
-    if (birthDateInputType === "date") return;
+  const monthOptions = [
+    { value: "01", label: "January" },
+    { value: "02", label: "February" },
+    { value: "03", label: "March" },
+    { value: "04", label: "April" },
+    { value: "05", label: "May" },
+    { value: "06", label: "June" },
+    { value: "07", label: "July" },
+    { value: "08", label: "August" },
+    { value: "09", label: "September" },
+    { value: "10", label: "October" },
+    { value: "11", label: "November" },
+    { value: "12", label: "December" },
+  ];
 
-    setBirthDateInputType("date");
+  const yearOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return Array.from({ length: currentYear - 1899 }, (_, index) => String(currentYear - index));
+  }, []);
 
-    requestAnimationFrame(() => {
-      if (typeof birthDateRef.current?.showPicker === "function") {
-        birthDateRef.current.showPicker();
-      } else {
-        birthDateRef.current?.focus();
-      }
-    });
+  const dayOptions = useMemo(() => {
+    if (!birthMonth) return [];
+    const safeYear = Number(birthYear || "2000");
+    const daysInMonth = new Date(safeYear, Number(birthMonth), 0).getDate();
+    return Array.from({ length: daysInMonth }, (_, index) => String(index + 1).padStart(2, "0"));
+  }, [birthMonth, birthYear]);
+
+  const syncBirthDate = (month, day, year) => {
+    if (month && day && year) {
+      setForm((current) => ({
+        ...current,
+        birthDate: `${year}-${month}-${day}`,
+      }));
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      birthDate: "",
+    }));
+  };
+
+  const handleMonthSelect = (value) => {
+    clearMessage();
+    setBirthMonth(value);
+    setBirthDay("");
+    setBirthYear("");
+    syncBirthDate(value, "", "");
+  };
+
+  const handleDaySelect = (value) => {
+    clearMessage();
+    setBirthDay(value);
+    setBirthYear("");
+    syncBirthDate(birthMonth, value, "");
+  };
+
+  const handleYearSelect = (value) => {
+    clearMessage();
+    setBirthYear(value);
+    syncBirthDate(birthMonth, birthDay, value);
   };
 
   const validateStep = (index) => {
@@ -287,7 +337,6 @@ export default function Signup() {
     await submitSignup();
   };
 
-  const maxBirthDate = new Date().toISOString().split("T")[0];
   const stepTitle = useMemo(() => SIGNUP_STEPS[stepIndex], [stepIndex]);
 
   return (
@@ -347,26 +396,48 @@ export default function Signup() {
             )}
 
             {stepIndex === 2 && (
-              <input
-                ref={birthDateRef}
-                type={birthDateInputType}
-                name="birthDate"
-                placeholder="Birthday"
-                className="signup-aero-input signup-aero-date"
-                value={form.birthDate}
-                onChange={handleChange}
-                onClick={activateBirthDatePicker}
-                onTouchStart={activateBirthDatePicker}
-                readOnly={birthDateInputType === "text"}
-                inputMode="none"
-                onBlur={() => {
-                  if (!form.birthDate) {
-                    setBirthDateInputType("text");
-                  }
-                }}
-                max={maxBirthDate}
-                required
-              />
+              <div className="signup-birthday-grid">
+                <select
+                  className="signup-aero-input signup-aero-select"
+                  value={birthMonth}
+                  onChange={(event) => handleMonthSelect(event.target.value)}
+                >
+                  <option value="">Month</option>
+                  {monthOptions.map((month) => (
+                    <option key={month.value} value={month.value}>
+                      {month.label}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  className="signup-aero-input signup-aero-select"
+                  value={birthDay}
+                  onChange={(event) => handleDaySelect(event.target.value)}
+                  disabled={!birthMonth}
+                >
+                  <option value="">Day</option>
+                  {dayOptions.map((day) => (
+                    <option key={day} value={day}>
+                      {Number(day)}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  className="signup-aero-input signup-aero-select"
+                  value={birthYear}
+                  onChange={(event) => handleYearSelect(event.target.value)}
+                  disabled={!birthDay}
+                >
+                  <option value="">Year</option>
+                  {yearOptions.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
 
             {stepIndex === 3 && (
