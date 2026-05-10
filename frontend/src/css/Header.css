@@ -786,7 +786,15 @@ body {
   }
 
   .nav-items {
-    gap: 4px;
+    gap: 0;
+  }
+
+  .nav-items > * + * {
+    margin-left: 4px;
+  }
+
+  .nav-items > * {
+    margin-right: 0 !important;
   }
 
   .nav-button,
