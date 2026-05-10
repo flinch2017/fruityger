@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "../css/Signup.css";
 import { persistAuthSession } from "../utils/authSession";
@@ -179,13 +179,8 @@ export default function Signup() {
   };
 
   const validateStep = (index) => {
-    if (index === 0) {
-      return getEmailValidationMessage(form.email);
-    }
-
-    if (index === 1) {
-      return getUsernameValidationMessage(form.username);
-    }
+    if (index === 0) return getEmailValidationMessage(form.email);
+    if (index === 1) return getUsernameValidationMessage(form.username);
 
     if (index === 2) {
       if (!form.birthDate) return "Please enter your birthday.";
@@ -195,9 +190,7 @@ export default function Signup() {
       return "";
     }
 
-    if (index === 3) {
-      return getPasswordValidationMessage(form.password);
-    }
+    if (index === 3) return getPasswordValidationMessage(form.password);
 
     if (index === 4) {
       if (!form.confirmPassword) return "Please confirm your password.";
@@ -211,13 +204,13 @@ export default function Signup() {
   const goNext = () => {
     clearMessage();
     const errorMessage = validateStep(stepIndex);
-
     if (errorMessage) {
       setCustomMessage("error", errorMessage);
-      return;
+      return false;
     }
 
     setStepIndex((current) => Math.min(current + 1, SIGNUP_STEPS.length - 1));
+    return true;
   };
 
   const goBack = () => {
@@ -225,8 +218,7 @@ export default function Signup() {
     setStepIndex((current) => Math.max(current - 1, 0));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const submitSignup = async () => {
     clearMessage();
 
     const finalStepError = validateStep(4);
@@ -284,6 +276,17 @@ export default function Signup() {
     }
   };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (stepIndex < SIGNUP_STEPS.length - 1) {
+      goNext();
+      return;
+    }
+
+    await submitSignup();
+  };
+
   const maxBirthDate = new Date().toISOString().split("T")[0];
   const stepTitle = useMemo(() => SIGNUP_STEPS[stepIndex], [stepIndex]);
 
@@ -337,7 +340,6 @@ export default function Signup() {
                   spellCheck="false"
                   required
                 />
-
                 <p className="signup-password-hint">
                   Lowercase only. Must start with a letter. Spaces become underscores. Cannot end with a period.
                 </p>
@@ -411,7 +413,7 @@ export default function Signup() {
                   <div className="signup-password-checklist">
                     {passwordChecklist.map((item) => (
                       <span key={item.label} className={item.met ? "met" : ""}>
-                        {item.met ? "?" : "�"} {item.label}
+                        {item.met ? "✓" : "•"} {item.label}
                       </span>
                     ))}
                   </div>
