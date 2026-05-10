@@ -47,7 +47,10 @@ export default function Header() {
     location.pathname === "/create-tape" ||
     location.pathname === "/tapes" ||
     location.pathname === "/messages" ||
-    location.pathname.startsWith("/chat/");
+    location.pathname === "/chat" ||
+    location.pathname.startsWith("/chat/") ||
+    location.pathname === "/group-chat" ||
+    location.pathname.startsWith("/group-chat/");
   const isTapesRoute = location.pathname === "/tapes";
   const feedMode = useMemo(() => {
     const params = new URLSearchParams(location.search);
