@@ -620,6 +620,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
     const offset = parseInt(req.query.offset, 10) || 0;
     const mode = req.query.mode === "following" ? "following" : "discover";
     const surface = req.query.surface === "tapes" ? "tapes" : "feed";
+    const startPostId = typeof req.query.start === "string" ? req.query.start.trim() : "";
     const feedScopeClause =
       mode === "following"
         ? `
@@ -645,6 +646,47 @@ router.get("/feed", authenticateToken, async (req, res) => {
       )
         `
         : "";
+    const orderClause =
+      surface === "tapes"
+        ? mode === "following"
+          ? `
+      CASE
+        WHEN $4 <> '' AND CAST(p.post_id AS TEXT) = $4 THEN 0
+        ELSE 1
+      END ASC,
+      COALESCE(latest_repost.reposted_at, p.date_posted) DESC
+          `
+          : `
+      CASE
+        WHEN $4 <> '' AND CAST(p.post_id AS TEXT) = $4 THEN 0
+        ELSE 1
+      END ASC,
+      (
+        (
+          LEAST((
+            SELECT COUNT(*)::numeric
+            FROM likes l2
+            WHERE l2.post_id = p.post_id
+          ), 300) * 0.45
+        ) + (
+          LEAST((
+            SELECT COUNT(*)::numeric
+            FROM comments c2
+            WHERE c2.post_id = p.post_id
+          ), 120) * 1.2
+        ) + (
+          LEAST((
+            SELECT COUNT(*)::numeric
+            FROM reposts r2
+            WHERE r2.post_id = p.post_id
+          ), 100) * 1.8
+        ) - (
+          EXTRACT(EPOCH FROM (NOW() - COALESCE(latest_repost.reposted_at, p.date_posted))) / 21600.0
+        ) + (RANDOM() * 0.8)
+      ) DESC,
+      COALESCE(latest_repost.reposted_at, p.date_posted) DESC
+          `
+        : `COALESCE(latest_repost.reposted_at, p.date_posted) DESC`;
 
     const { rows } = await pool.query(
       `
@@ -775,10 +817,10 @@ router.get("/feed", authenticateToken, async (req, res) => {
           )
         )
         ${mediaScopeClause}
-      ORDER BY COALESCE(latest_repost.reposted_at, p.date_posted) DESC
+      ORDER BY ${orderClause}
       LIMIT $2 OFFSET $3
       `,
-      [userId, limit, offset]
+      [userId, limit, offset, startPostId]
     );
 
     res.json({ posts: rows, mode, surface });

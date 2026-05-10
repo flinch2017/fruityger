@@ -53,6 +53,10 @@ export default function TapesFeed() {
     const params = new URLSearchParams(location.search);
     return params.get("mode") === "following" ? "following" : "discover";
   }, [location.search]);
+  const startPostId = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("start") || "";
+  }, [location.search]);
 
   const mergeUniqueTapes = (existingTapes, incomingTapes) => {
     const seen = new Set();
@@ -75,6 +79,20 @@ export default function TapesFeed() {
     });
 
     return merged;
+  };
+
+  const prioritizeStartingTape = (items) => {
+    if (!startPostId) return items;
+    const seedTape = location.state?.seedTape;
+    const normalizedSeed =
+      seedTape && seedTape.post_id
+        ? mergeUniqueTapes([], [seedTape])[0]
+        : null;
+    const merged = normalizedSeed ? mergeUniqueTapes([normalizedSeed], items) : items;
+    const startIndex = merged.findIndex((item) => String(item.post_id) === String(startPostId));
+    if (startIndex <= 0) return merged;
+    const [startItem] = merged.splice(startIndex, 1);
+    return [startItem, ...merged];
   };
 
   const formatDate = (dateString) => {
@@ -138,10 +156,10 @@ export default function TapesFeed() {
       }
 
       if (initial || refresh) {
-        setTapes(mergeUniqueTapes([], data.posts || []));
+        setTapes(prioritizeStartingTape(mergeUniqueTapes([], data.posts || [])));
         setOffset((data.posts || []).length);
       } else {
-        setTapes((prev) => mergeUniqueTapes(prev, data.posts || []));
+        setTapes((prev) => prioritizeStartingTape(mergeUniqueTapes(prev, data.posts || [])));
         setOffset((prev) => prev + (data.posts || []).length);
       }
 
@@ -173,7 +191,7 @@ export default function TapesFeed() {
     setOffset(0);
     setHasMore(true);
     fetchTapes({ initial: true });
-  }, [feedMode]);
+  }, [feedMode, startPostId]);
 
   useEffect(() => {
     const handleExternalRefresh = () => {

@@ -583,6 +583,16 @@ export default function Feed() {
     navigate(`/report?type=post&id=${postId}`);
   };
 
+  const handleOpenTapeFeed = (post) => {
+    if (!post?.post_id) return;
+    const params = new URLSearchParams();
+    params.set("mode", feedMode);
+    params.set("start", post.post_id);
+    navigate(`/tapes?${params.toString()}`, {
+      state: { seedTape: post },
+    });
+  };
+
   return (
     <main className="feed-page">
       {deleteModal.visible && (
@@ -844,6 +854,7 @@ export default function Feed() {
                             muted={videoMutedMap[getVideoControlKey(post.post_id, index)] ?? true}
                             preload="metadata"
                             className="feed-auto-video"
+                            onClick={() => handleOpenTapeFeed(post)}
                           />
                         </>
                       ) : (
