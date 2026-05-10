@@ -3,12 +3,34 @@ import { useNavigate } from "react-router-dom";
 import "../css/CreatePost.css";
 import { useUploadManager } from "../context/UploadManagerContext";
 
+const MAX_HASHTAGS = 5;
+const HASHTAG_MATCHER = /#[A-Za-z0-9_]+/g;
+
+const extractHashtags = (text = "") => {
+  const matches = String(text).match(HASHTAG_MATCHER) || [];
+  return [...new Set(matches.map((tag) => tag.slice(1).toLowerCase()))];
+};
+
+const getActiveHashtagQuery = (text = "", cursor = 0) => {
+  const uptoCursor = String(text).slice(0, cursor);
+  const match = uptoCursor.match(/(?:^|\s)#([A-Za-z0-9_]*)$/);
+  if (!match) return null;
+
+  const query = match[1] || "";
+  const start = uptoCursor.length - query.length - 1;
+  return { query: query.toLowerCase(), start, end: cursor };
+};
+
 export default function CreatePost() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const textareaRef = useRef(null);
   const { enqueueUpload } = useUploadManager();
 
   const [text, setText] = useState("");
+  const [hashtagSuggestions, setHashtagSuggestions] = useState([]);
+  const [showHashtagSuggestions, setShowHashtagSuggestions] = useState(false);
+  const [activeHashtagRange, setActiveHashtagRange] = useState(null);
   const [attachments, setAttachments] = useState([]);
   const [warning, setWarning] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -81,6 +103,11 @@ export default function CreatePost() {
       return;
     }
 
+    if (extractHashtags(text).length > MAX_HASHTAGS) {
+      showWarning(`You can only use up to ${MAX_HASHTAGS} hashtags.`);
+      return;
+    }
+
     try {
       setSubmitting(true);
       enqueueUpload({
@@ -95,6 +122,55 @@ export default function CreatePost() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const fetchHashtagSuggestions = async (query) => {
+    const token = localStorage.getItem("token");
+    if (!token || !query) {
+      setHashtagSuggestions([]);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setHashtagSuggestions([]);
+        return;
+      }
+
+      setHashtagSuggestions((data.hashtags || []).slice(0, 6));
+    } catch {
+      setHashtagSuggestions([]);
+    }
+  };
+
+  const handleCaptionChange = async (value) => {
+    setText(value);
+    const cursor = textareaRef.current?.selectionStart ?? value.length;
+    const activeQuery = getActiveHashtagQuery(value, cursor);
+    setActiveHashtagRange(activeQuery);
+
+    if (!activeQuery || !activeQuery.query) {
+      setShowHashtagSuggestions(false);
+      setHashtagSuggestions([]);
+      return;
+    }
+
+    await fetchHashtagSuggestions(activeQuery.query);
+    setShowHashtagSuggestions(true);
+  };
+
+  const applyHashtagSuggestion = (tag) => {
+    if (!activeHashtagRange) return;
+
+    const nextValue = `${text.slice(0, activeHashtagRange.start)}#${tag} ${text.slice(activeHashtagRange.end)}`;
+    setText(nextValue);
+    setShowHashtagSuggestions(false);
+    setHashtagSuggestions([]);
   };
 
   return (
@@ -126,11 +202,41 @@ export default function CreatePost() {
         </div>
 
         <textarea
+          ref={textareaRef}
           className="create-textarea"
           placeholder="What's happening in your world today?"
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => handleCaptionChange(event.target.value)}
+          onBlur={() => {
+            window.setTimeout(() => setShowHashtagSuggestions(false), 120);
+          }}
+          onFocus={() => {
+            const cursor = textareaRef.current?.selectionStart ?? text.length;
+            const activeQuery = getActiveHashtagQuery(text, cursor);
+            if (activeQuery?.query) {
+              setActiveHashtagRange(activeQuery);
+              fetchHashtagSuggestions(activeQuery.query);
+              setShowHashtagSuggestions(true);
+            }
+          }}
         />
+
+        {showHashtagSuggestions && hashtagSuggestions.length > 0 && (
+          <div className="hashtag-suggest-dropdown">
+            {hashtagSuggestions.map((item) => (
+              <button
+                key={item.tag}
+                type="button"
+                className="hashtag-suggest-item"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyHashtagSuggestion(item.tag)}
+              >
+                <strong>#{item.tag}</strong>
+                <span>{(item.post_count || 0).toLocaleString()} posts</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {warning && <div className="composer-warning">{warning}</div>}
 

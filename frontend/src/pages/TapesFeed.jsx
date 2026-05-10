@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaArrowLeft,
@@ -12,6 +12,7 @@ import CommentSheet from "../components/CommentSheet";
 import "../css/CommentSheet.css";
 import "../css/TapesFeed.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import CaptionWithHashtags from "../components/CaptionWithHashtags";
 
 export default function TapesFeed() {
   const navigate = useNavigate();
@@ -492,7 +493,7 @@ export default function TapesFeed() {
                     </span>
                   </button>
 
-                  {tape.caption && <p className="tape-caption">{tape.caption}</p>}
+                  {tape.caption && <CaptionWithHashtags className="tape-caption" text={tape.caption} />}
                 </div>
 
                 <div className="tape-actions">

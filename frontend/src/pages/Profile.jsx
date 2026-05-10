@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+﻿import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useParams } from "react-router-dom";
 import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaTimes, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
@@ -7,6 +7,7 @@ import "../css/Profile.css";
 import CommentSheet from "../components/CommentSheet";
 import "../css/CommentSheet.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import CaptionWithHashtags from "../components/CaptionWithHashtags";
 
 export default function Profile() {
 
@@ -1085,7 +1086,7 @@ export default function Profile() {
             )}
 
             {post.caption && (
-              <p className="post-content">{post.caption}</p>
+              <CaptionWithHashtags className="post-content" text={post.caption} />
             )}
 
             {/* ===== CAROUSEL ===== */}

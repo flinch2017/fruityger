@@ -1,7 +1,13 @@
 import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
-import { ensureHashtagSchema, removePostHashtags, syncPostHashtags } from "../utils/hashtags.js";
+import {
+  ensureHashtagSchema,
+  extractHashtags,
+  MAX_HASHTAGS_PER_POST,
+  removePostHashtags,
+  syncPostHashtags,
+} from "../utils/hashtags.js";
 import { ensureRepostSchema } from "../utils/reposts.js";
 
 const router = express.Router();
@@ -302,8 +308,15 @@ router.put("/:postId", authenticateToken, async (req, res) => {
   const { postId } = req.params;
   const userId = req.user.id;
   const { caption } = req.body;
+  const hashtagCount = extractHashtags(caption ?? "").length;
 
   try {
+    if (hashtagCount > MAX_HASHTAGS_PER_POST) {
+      return res
+        .status(400)
+        .json({ error: `You can only use up to ${MAX_HASHTAGS_PER_POST} hashtags per post.` });
+    }
+
     await ensureHashtagSchema();
     const postCheck = await pool.query(
       "SELECT user_id FROM posts WHERE post_id = $1",

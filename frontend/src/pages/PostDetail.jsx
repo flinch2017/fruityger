@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { FaChevronLeft, FaChevronRight, FaCommentDots, FaHeart, FaRegHeart, FaRetweet, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import CommentSheet from "../components/CommentSheet";
@@ -6,6 +6,7 @@ import "../css/Feed.css";
 import "../css/CommentSheet.css";
 import "../css/PostDetail.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import CaptionWithHashtags from "../components/CaptionWithHashtags";
 
 export default function PostDetail() {
   const { postId } = useParams();
@@ -402,7 +403,7 @@ export default function PostDetail() {
             </div>
           )}
 
-          {post.caption && <p className="feed-post-content">{post.caption}</p>}
+          {post.caption && <CaptionWithHashtags className="feed-post-content" text={post.caption} />}
 
           {post.media?.length > 0 && (
             <div className="feed-carousel">

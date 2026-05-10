@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import CommentSheet from "../components/CommentSheet";
 import "../css/Search.css";
 import "../css/CommentSheet.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import CaptionWithHashtags from "../components/CaptionWithHashtags";
 
 const SEARCH_TABS = [
   { key: "profiles", label: "Profiles", resultKey: "users" },
@@ -667,7 +668,7 @@ export default function Search() {
                       )}
 
                       {p.caption && (
-                        <p className="search-post-content">{p.caption}</p>
+                        <CaptionWithHashtags className="search-post-content" text={p.caption} />
                       )}
 
                       {p.media?.length > 0 && (

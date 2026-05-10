@@ -1,4 +1,5 @@
 import pool from "../db.js";
+export const MAX_HASHTAGS_PER_POST = 5;
 
 let hashtagSchemaReadyPromise = null;
 let hashtagBackfillReadyPromise = null;
@@ -141,8 +142,7 @@ export const extractHashtags = (caption = "") => {
 
       seen.add(tag);
       return true;
-    })
-    .slice(0, 25);
+    });
 };
 
 const updatePostCounts = async (client, tags) => {

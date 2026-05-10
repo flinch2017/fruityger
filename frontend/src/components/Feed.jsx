@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import CommentSheet from "./CommentSheet";
 import "../css/Feed.css";
 import "../css/CommentSheet.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import CaptionWithHashtags from "./CaptionWithHashtags";
 
 export default function Feed() {
   const navigate = useNavigate();
@@ -789,7 +790,7 @@ export default function Feed() {
               </div>
             )}
 
-            {post.caption && <p className="feed-post-content">{post.caption}</p>}
+            {post.caption && <CaptionWithHashtags className="feed-post-content" text={post.caption} />}
 
             {post.media?.length > 0 && (
               <div className="feed-carousel">
