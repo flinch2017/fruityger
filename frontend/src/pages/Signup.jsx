@@ -223,9 +223,9 @@ export default function Signup() {
       }
 
       persistAuthSession(data);
-      setCustomMessage("success", "Account created. Check your email for the 6-digit verification code.");
+      setCustomMessage("success", "Account created. You can verify your email anytime from Settings.");
       setTimeout(() => {
-        navigate("/verify-email", { replace: true });
+        navigate("/onboarding/interests", { replace: true });
       }, 500);
     } catch (err) {
       console.error(err);

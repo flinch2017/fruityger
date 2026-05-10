@@ -71,7 +71,7 @@ const resolveAuth = async (req, res, next, { requireVerified }) => {
 };
 
 export function authenticateToken(req, res, next) {
-  return resolveAuth(req, res, next, { requireVerified: true });
+  return resolveAuth(req, res, next, { requireVerified: false });
 }
 
 export function authenticateTokenAllowUnverified(req, res, next) {

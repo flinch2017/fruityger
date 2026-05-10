@@ -20,11 +20,6 @@ export default function OnboardingRoute({ children }) {
 
       const user = session.data?.user;
 
-      if (!user?.email_verified) {
-        setStatus("unverified");
-        return;
-      }
-
       setStatus(user?.interests_completed ? "complete" : "incomplete");
     };
 
@@ -41,10 +36,6 @@ export default function OnboardingRoute({ children }) {
 
   if (status === "guest") {
     return <Navigate to="/login" replace />;
-  }
-
-  if (status === "unverified") {
-    return <Navigate to="/verify-email" replace />;
   }
 
   if (status === "complete") {

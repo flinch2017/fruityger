@@ -24,7 +24,6 @@ import ChooseInterests from "./pages/ChooseInterests";
 import ScrollToTop from "./components/ScrollToTop";
 import PrivateRoute from "./components/PrivateRoute";
 import PublicRoute from "./components/PublicRoute";
-import VerificationRoute from "./components/VerificationRoute";
 import OnboardingRoute from "./components/OnboardingRoute";
 import NotFound from "./pages/NotFound"; // <-- import it
 import EditProfile from "./pages/EditProfile"; // <-- import it
@@ -137,11 +136,11 @@ function App() {
         <Route
           path="/verify-email"
           element={
-            <VerificationRoute>
+            <PrivateRoute>
               <StandaloneLayout>
                 <VerifyEmail />
               </StandaloneLayout>
-            </VerificationRoute>
+            </PrivateRoute>
           }
         />
         <Route

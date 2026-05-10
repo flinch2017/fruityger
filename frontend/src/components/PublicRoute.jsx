@@ -20,12 +20,7 @@ export default function PublicRoute({ children }) {
 
       const user = session.data?.user;
 
-      if (!user?.email_verified) {
-        setStatus("unverified");
-        return;
-      }
-
-      setStatus(user?.interests_completed ? "verified" : "onboarding");
+      setStatus(user?.interests_completed ? "ready" : "onboarding");
     };
 
     checkSession();
@@ -39,16 +34,12 @@ export default function PublicRoute({ children }) {
     return <RouteLoadingScreen />;
   }
 
-  if (status === "verified") {
+  if (status === "ready") {
     return <Navigate to="/feed" replace />;
   }
 
   if (status === "onboarding") {
     return <Navigate to="/onboarding/interests" replace />;
-  }
-
-  if (status === "unverified") {
-    return <Navigate to="/verify-email" replace />;
   }
 
   return children;

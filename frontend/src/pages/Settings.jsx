@@ -30,6 +30,11 @@ export default function Settings() {
   const [newsletterEnabled, setNewsletterEnabled] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [notificationSaving, setNotificationSaving] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(localStorage.getItem("emailVerified") === "true");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verificationSubmitting, setVerificationSubmitting] = useState(false);
+  const [verificationResending, setVerificationResending] = useState(false);
+  const [verificationFeedback, setVerificationFeedback] = useState({ type: "", message: "" });
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -49,6 +54,7 @@ export default function Settings() {
           if (data.user.email) {
             setEmail(data.user.email);
           }
+          setEmailVerified(Boolean(data.user.email_verified));
           setPendingEmail(data.user.pending_email || "");
           persistAuthSession({ user: data.user });
         }
@@ -96,6 +102,10 @@ export default function Settings() {
 
   const maskedEmail = useMemo(() => maskEmail(email), [email]);
   const maskedPendingEmail = useMemo(() => maskEmail(pendingEmail), [pendingEmail]);
+  const formattedVerificationCode = useMemo(
+    () => verificationCode.replace(/\D/g, "").slice(0, 6),
+    [verificationCode]
+  );
 
   const handleCancelPendingEmailChange = async () => {
     const token = localStorage.getItem("token");
@@ -170,6 +180,87 @@ export default function Settings() {
     }
   };
 
+  const handleVerifyEmail = async () => {
+    const token = localStorage.getItem("token");
+    if (!token || verificationSubmitting) return;
+
+    if (formattedVerificationCode.length !== 6) {
+      setVerificationFeedback({ type: "error", message: "Enter the full 6-digit code." });
+      return;
+    }
+
+    setVerificationSubmitting(true);
+    setVerificationFeedback({ type: "", message: "" });
+
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/verify-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ code: formattedVerificationCode }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setVerificationFeedback({
+          type: "error",
+          message: data.error || "Verification failed.",
+        });
+        return;
+      }
+
+      setEmailVerified(Boolean(data.user?.email_verified));
+      persistAuthSession({ user: data.user });
+      setVerificationFeedback({ type: "success", message: "Email verified successfully." });
+      setVerificationCode("");
+    } catch (error) {
+      console.error(error);
+      setVerificationFeedback({ type: "error", message: "Verification request failed." });
+    } finally {
+      setVerificationSubmitting(false);
+    }
+  };
+
+  const handleResendVerificationCode = async () => {
+    const token = localStorage.getItem("token");
+    if (!token || verificationResending) return;
+
+    setVerificationResending(true);
+    setVerificationFeedback({ type: "", message: "" });
+
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/resend-verification", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setVerificationFeedback({
+          type: "error",
+          message: data.error || "Failed to resend code.",
+        });
+        return;
+      }
+
+      setVerificationFeedback({
+        type: "success",
+        message: data.message || "A new verification code was sent.",
+      });
+    } catch (error) {
+      console.error(error);
+      setVerificationFeedback({ type: "error", message: "Failed to resend code." });
+    } finally {
+      setVerificationResending(false);
+    }
+  };
+
   return (
     <div className="settings-page">
       <div className="settings-hero">
@@ -191,6 +282,9 @@ export default function Settings() {
             <div className="settings-row-copy">
               <span className="settings-row-label">Email</span>
               <span className="settings-row-value">{maskedEmail}</span>
+              <span className={`settings-verify-status ${emailVerified ? "verified" : "unverified"}`}>
+                {emailVerified ? "Verified" : "Not verified"}
+              </span>
               {pendingEmail && (
                 <span className="settings-row-pending">
                   Pending: {maskedPendingEmail}
@@ -226,6 +320,52 @@ export default function Settings() {
               </button>
             )}
           </div>
+
+          {!emailVerified && (
+            <div className="settings-verify-panel">
+              <p className="settings-verify-title">Verify your email</p>
+              <p className="settings-verify-subtitle">
+                Enter the 6-digit code sent to your email. You can resend a new code anytime.
+              </p>
+
+              {verificationFeedback.message && (
+                <div className={`settings-verify-feedback ${verificationFeedback.type}`}>
+                  {verificationFeedback.message}
+                </div>
+              )}
+
+              <div className="settings-verify-actions">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="000000"
+                  className="settings-verify-input"
+                  value={formattedVerificationCode}
+                  onChange={(event) => {
+                    setVerificationFeedback({ type: "", message: "" });
+                    setVerificationCode(event.target.value);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="settings-row-btn"
+                  onClick={handleVerifyEmail}
+                  disabled={verificationSubmitting}
+                >
+                  {verificationSubmitting ? "Verifying..." : "Verify email"}
+                </button>
+                <button
+                  type="button"
+                  className="settings-row-btn settings-row-btn-secondary"
+                  onClick={handleResendVerificationCode}
+                  disabled={verificationResending}
+                >
+                  {verificationResending ? "Sending..." : "Resend code"}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="settings-row">
             <div className="settings-row-copy">
