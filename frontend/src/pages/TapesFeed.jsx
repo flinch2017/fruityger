@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaArrowLeft,
   FaCommentDots,
+  FaEllipsisV,
   FaHeart,
   FaRegHeart,
   FaRetweet,
@@ -32,10 +33,18 @@ export default function TapesFeed() {
   const [likingMap, setLikingMap] = useState({});
   const [repostingMap, setRepostingMap] = useState({});
   const [activeCommentPost, setActiveCommentPost] = useState(null);
+  const [activeMenuPostId, setActiveMenuPostId] = useState(null);
   const [chromeHidden, setChromeHidden] = useState(false);
   const [videoMutedMap, setVideoMutedMap] = useState({});
+  const [deleteModal, setDeleteModal] = useState({
+    visible: false,
+    postId: null,
+  });
+  const [deletingPost, setDeletingPost] = useState(false);
+  const [actionResult, setActionResult] = useState(null);
 
   const LIMIT = 4;
+  const currentUserId = localStorage.getItem("userId");
   const handleExitTapes = () => {
     navigate("/");
   };
@@ -145,6 +154,19 @@ export default function TapesFeed() {
       if (refresh) setRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest(".tape-more-wrapper")) {
+        setActiveMenuPostId(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     setTapes([]);
@@ -388,8 +410,87 @@ export default function TapesFeed() {
     });
   };
 
+  const toggleMenu = (postId) => {
+    setActiveMenuPostId((prev) => (prev === postId ? null : postId));
+  };
+
+  const promptDeletePost = (postId) => {
+    setActiveMenuPostId(null);
+    setDeleteModal({ visible: true, postId });
+  };
+
+  const handleCancelDelete = () => {
+    if (!deletingPost) {
+      setDeleteModal({ visible: false, postId: null });
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    const token = localStorage.getItem("token");
+    if (!token || !deleteModal.postId) return;
+
+    setDeletingPost(true);
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/profile/${deleteModal.postId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        throw new Error("Delete failed");
+      }
+
+      setTapes((prev) => prev.filter((post) => post.post_id !== deleteModal.postId));
+      setActionResult({ type: "success", message: "Tape deleted successfully!" });
+    } catch (error) {
+      console.error(error);
+      setActionResult({ type: "error", message: "Failed to delete tape!" });
+    } finally {
+      setDeletingPost(false);
+      setDeleteModal({ visible: false, postId: null });
+      setTimeout(() => setActionResult(null), 3000);
+    }
+  };
+
+  const handleEditTape = (tape) => {
+    setActiveMenuPostId(null);
+    navigate(`/edit-post/${tape.post_id}`, {
+      state: { post: tape },
+    });
+  };
+
+  const handleReportTape = (postId) => {
+    setActiveMenuPostId(null);
+    navigate(`/report?type=post&id=${postId}`);
+  };
+
   return (
     <main ref={feedContainerRef} className="tapes-feed-page">
+      {deleteModal.visible && (
+        <div className="tape-modal-overlay">
+          <div className={`tape-modal-card ${deletingPost ? "loading" : "animate-in"}`}>
+            <h3>Confirm Delete</h3>
+            <p>Are you sure you want to delete this tape?</p>
+
+            {deletingPost && <div className="tape-spinner"></div>}
+
+            {!deletingPost && (
+              <div className="tape-modal-actions">
+                <button className="tape-modal-btn cancel" onClick={handleCancelDelete}>
+                  Cancel
+                </button>
+                <button className="tape-modal-btn confirm" onClick={handleConfirmDelete}>
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {actionResult && <div className={`tape-toast ${actionResult.type}`}>{actionResult.message}</div>}
+
       {activeCommentPost && (
         <CommentSheet
           postId={activeCommentPost.postId}
@@ -536,6 +637,50 @@ export default function TapesFeed() {
                     <FaRetweet />
                     <span>{tape.repost_count || 0}</span>
                   </button>
+
+                  <div className="tape-more-wrapper">
+                    <button
+                      type="button"
+                      className="tape-action-btn tape-action-more"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleMenu(tape.post_id);
+                      }}
+                    >
+                      <FaEllipsisV />
+                    </button>
+
+                    {activeMenuPostId === tape.post_id && (
+                      <div className="tape-more-dropdown">
+                        {String(tape.user_id) === String(currentUserId) ? (
+                          <>
+                            <button
+                              type="button"
+                              className="tape-dropdown-item edit"
+                              onClick={() => handleEditTape(tape)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="tape-dropdown-item delete"
+                              onClick={() => promptDeletePost(tape.post_id)}
+                            >
+                              Delete
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="tape-dropdown-item report"
+                            onClick={() => handleReportTape(tape.post_id)}
+                          >
+                            Report
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

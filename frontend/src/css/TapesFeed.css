@@ -338,6 +338,151 @@
   color: #78ffd1;
 }
 
+.tape-more-wrapper {
+  position: relative;
+}
+
+.tape-action-more svg {
+  font-size: 1.28rem;
+}
+
+.tape-more-dropdown {
+  position: absolute;
+  right: calc(100% + 10px);
+  bottom: 0;
+  min-width: 132px;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(7, 12, 21, 0.92);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 18px 30px rgba(0,0,0,0.34);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tape-dropdown-item {
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  color: #e9fbff;
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-align: left;
+  padding: 9px 10px;
+  cursor: pointer;
+}
+
+.tape-dropdown-item:hover {
+  background: rgba(120, 217, 255, 0.18);
+}
+
+.tape-dropdown-item.delete {
+  color: #ff90b6;
+}
+
+.tape-dropdown-item.report {
+  color: #ffd99b;
+}
+
+.tape-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 16;
+  background: rgba(0, 0, 0, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+}
+
+.tape-modal-card {
+  width: min(92vw, 360px);
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.18);
+  padding: 20px;
+  background: rgba(8, 14, 24, 0.95);
+  color: #f4fcff;
+  box-shadow: 0 22px 40px rgba(0,0,0,0.4);
+}
+
+.tape-modal-card h3 {
+  margin: 0 0 8px;
+}
+
+.tape-modal-card p {
+  margin: 0;
+  color: rgba(255,255,255,0.82);
+}
+
+.tape-modal-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+}
+
+.tape-modal-btn {
+  flex: 1;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tape-modal-btn.cancel {
+  background: rgba(255,255,255,0.12);
+  color: #ecfbff;
+}
+
+.tape-modal-btn.confirm {
+  background: linear-gradient(140deg, #ff8aab, #ff5b8a);
+  color: #ffffff;
+}
+
+.tape-spinner {
+  width: 28px;
+  height: 28px;
+  margin: 16px auto 2px;
+  border: 3px solid rgba(255,255,255,0.2);
+  border-top-color: #7edfff;
+  border-radius: 50%;
+  animation: tapeSpin 0.8s linear infinite;
+}
+
+.tape-toast {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 66px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 18;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.tape-toast.success {
+  background: rgba(48, 214, 136, 0.95);
+  color: #06241a;
+}
+
+.tape-toast.error {
+  background: rgba(255, 110, 154, 0.95);
+  color: #320516;
+}
+
+@keyframes tapeSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .tapes-loader {
   width: 1px;
   height: 1px;
