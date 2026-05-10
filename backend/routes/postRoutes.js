@@ -10,6 +10,7 @@ import path from "path";
 import { r2 } from "../utils/r2.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { ensureHashtagSchema, extractHashtags, MAX_HASHTAGS_PER_POST, syncPostHashtags } from "../utils/hashtags.js";
+import { syncPostMentions } from "../utils/mentions.js";
 import { transcodeVideoFileToMp4 } from "../utils/videoProcessing.js";
 
 const router = express.Router();
@@ -72,6 +73,7 @@ router.post(
             );
 
             await syncPostHashtags(postId, caption);
+            await syncPostMentions(postId, caption, req.user.id);
 
             /* ===================================================
                Upload Media Files → Cloudflare R2

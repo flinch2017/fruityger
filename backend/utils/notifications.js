@@ -132,6 +132,11 @@ const getNotificationPushCopy = (type, actorUsername = "Someone") => {
         title: "New repost",
         body: `@${actorUsername} reposted your post.`,
       };
+    case "post_mention":
+      return {
+        title: "You were mentioned",
+        body: `@${actorUsername} mentioned you in a post.`,
+      };
     case "direct_message":
       return {
         title: "New message",

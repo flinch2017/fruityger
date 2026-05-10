@@ -430,6 +430,21 @@ body[data-theme="dark"] .settings-flow-input::placeholder {
   text-decoration: underline;
 }
 
+.caption-mention-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  color: #1b7fd6;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.caption-mention-link:hover {
+  text-decoration: underline;
+}
+
 body[data-theme="dark"] .welcome-page,
 body[data-theme="dark"] .login-aero-page,
 body[data-theme="dark"] .signup-aero-page,

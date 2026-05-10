@@ -21,6 +21,16 @@ const getActiveHashtagQuery = (text = "", cursor = 0) => {
   return { query: query.toLowerCase(), start, end: cursor };
 };
 
+const getActiveMentionQuery = (text = "", cursor = 0) => {
+  const uptoCursor = String(text).slice(0, cursor);
+  const match = uptoCursor.match(/(?:^|\s)@([A-Za-z0-9._]*)$/);
+  if (!match) return null;
+
+  const query = match[1] || "";
+  const start = uptoCursor.length - query.length - 1;
+  return { query: query.toLowerCase(), start, end: cursor };
+};
+
 export default function CreatePost() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -29,8 +39,11 @@ export default function CreatePost() {
 
   const [text, setText] = useState("");
   const [hashtagSuggestions, setHashtagSuggestions] = useState([]);
+  const [mentionSuggestions, setMentionSuggestions] = useState([]);
   const [showHashtagSuggestions, setShowHashtagSuggestions] = useState(false);
+  const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
   const [activeHashtagRange, setActiveHashtagRange] = useState(null);
+  const [activeMentionRange, setActiveMentionRange] = useState(null);
   const [attachments, setAttachments] = useState([]);
   const [warning, setWarning] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -148,20 +161,59 @@ export default function CreatePost() {
     }
   };
 
+  const fetchMentionSuggestions = async (query) => {
+    const token = localStorage.getItem("token");
+    if (!token || !query) {
+      setMentionSuggestions([]);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setMentionSuggestions([]);
+        return;
+      }
+
+      setMentionSuggestions((data.users || []).slice(0, 6));
+    } catch {
+      setMentionSuggestions([]);
+    }
+  };
+
   const handleCaptionChange = async (value) => {
     setText(value);
     const cursor = textareaRef.current?.selectionStart ?? value.length;
     const activeQuery = getActiveHashtagQuery(value, cursor);
+    const activeMention = getActiveMentionQuery(value, cursor);
     setActiveHashtagRange(activeQuery);
+    setActiveMentionRange(activeMention);
 
-    if (!activeQuery || !activeQuery.query) {
-      setShowHashtagSuggestions(false);
-      setHashtagSuggestions([]);
+    if (activeQuery?.query) {
+      await fetchHashtagSuggestions(activeQuery.query);
+      setShowHashtagSuggestions(true);
+      setShowMentionSuggestions(false);
       return;
     }
 
-    await fetchHashtagSuggestions(activeQuery.query);
-    setShowHashtagSuggestions(true);
+    if (activeMention?.query) {
+      await fetchMentionSuggestions(activeMention.query);
+      setShowMentionSuggestions(true);
+      setShowHashtagSuggestions(false);
+      return;
+    }
+
+    if (!activeQuery || !activeQuery.query) {
+      setShowHashtagSuggestions(false);
+      setShowMentionSuggestions(false);
+      setHashtagSuggestions([]);
+      setMentionSuggestions([]);
+      return;
+    }
   };
 
   const applyHashtagSuggestion = (tag) => {
@@ -171,6 +223,15 @@ export default function CreatePost() {
     setText(nextValue);
     setShowHashtagSuggestions(false);
     setHashtagSuggestions([]);
+  };
+
+  const applyMentionSuggestion = (username) => {
+    if (!activeMentionRange) return;
+
+    const nextValue = `${text.slice(0, activeMentionRange.start)}@${username} ${text.slice(activeMentionRange.end)}`;
+    setText(nextValue);
+    setShowMentionSuggestions(false);
+    setMentionSuggestions([]);
   };
 
   return (
@@ -208,15 +269,25 @@ export default function CreatePost() {
           value={text}
           onChange={(event) => handleCaptionChange(event.target.value)}
           onBlur={() => {
-            window.setTimeout(() => setShowHashtagSuggestions(false), 120);
+            window.setTimeout(() => {
+              setShowHashtagSuggestions(false);
+              setShowMentionSuggestions(false);
+            }, 120);
           }}
           onFocus={() => {
             const cursor = textareaRef.current?.selectionStart ?? text.length;
             const activeQuery = getActiveHashtagQuery(text, cursor);
+            const activeMention = getActiveMentionQuery(text, cursor);
             if (activeQuery?.query) {
               setActiveHashtagRange(activeQuery);
               fetchHashtagSuggestions(activeQuery.query);
               setShowHashtagSuggestions(true);
+              setShowMentionSuggestions(false);
+            } else if (activeMention?.query) {
+              setActiveMentionRange(activeMention);
+              fetchMentionSuggestions(activeMention.query);
+              setShowMentionSuggestions(true);
+              setShowHashtagSuggestions(false);
             }
           }}
         />
@@ -233,6 +304,23 @@ export default function CreatePost() {
               >
                 <strong>#{item.tag}</strong>
                 <span>{(item.post_count || 0).toLocaleString()} posts</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {showMentionSuggestions && mentionSuggestions.length > 0 && (
+          <div className="hashtag-suggest-dropdown">
+            {mentionSuggestions.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="hashtag-suggest-item"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyMentionSuggestion(item.username)}
+              >
+                <strong>@{item.username}</strong>
+                <span>Profile</span>
               </button>
             ))}
           </div>

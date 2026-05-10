@@ -8,6 +8,7 @@ import {
   removePostHashtags,
   syncPostHashtags,
 } from "../utils/hashtags.js";
+import { syncPostMentions } from "../utils/mentions.js";
 import { ensureRepostSchema } from "../utils/reposts.js";
 
 const router = express.Router();
@@ -342,6 +343,7 @@ router.put("/:postId", authenticateToken, async (req, res) => {
     );
 
     await syncPostHashtags(postId, caption ?? "");
+    await syncPostMentions(postId, caption ?? "", userId);
 
     return res.json({ post: rows[0] });
   } catch (err) {

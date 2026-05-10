@@ -29,6 +29,11 @@ const TYPE_COPY = {
     title: "Post reposted",
     body: (username) => `@${username} reposted your post.`,
   },
+  post_mention: {
+    icon: "@",
+    title: "Mentioned you",
+    body: (username) => `@${username} mentioned you in a post.`,
+  },
   new_follower: {
     icon: "F",
     title: "New follower",
