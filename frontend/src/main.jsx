@@ -113,6 +113,22 @@ if (typeof window !== "undefined" && window.localStorage && window.sessionStorag
   }
 
   const getScopedAuthKey = (key) => `__fruityger_auth__${tabId}__${String(key)}`;
+  const LOGOUT_MARKER_KEY = "fruitygerLoggedOut";
+  const shouldPurgeAuthStorage = nativeLocalGetItem(LOGOUT_MARKER_KEY) === "true";
+
+  if (shouldPurgeAuthStorage) {
+    for (const key of AUTH_STORAGE_KEYS) {
+      nativeSessionRemoveItem(String(key));
+      nativeLocalRemoveItem(String(key));
+    }
+
+    const localKeys = Object.keys(window.localStorage);
+    for (const key of localKeys) {
+      if (String(key || "").startsWith("__fruityger_auth__")) {
+        nativeLocalRemoveItem(String(key));
+      }
+    }
+  }
   const readScopedAuthValue = (key) => {
     if (shouldUseSharedAuthStorage) {
       const sharedLocalValue = nativeLocalGetItem(String(key));
@@ -163,6 +179,10 @@ if (typeof window !== "undefined" && window.localStorage && window.sessionStorag
     if (localValue != null && !shouldUseSharedAuthStorage) {
       nativeLocalRemoveItem(key);
     }
+  }
+
+  if (shouldPurgeAuthStorage) {
+    nativeLocalRemoveItem(LOGOUT_MARKER_KEY);
   }
 
   window.localStorage.getItem = (key) => {

@@ -1,4 +1,5 @@
 export const clearAuthStorage = () => {
+  localStorage.setItem("fruitygerLoggedOut", "true");
   localStorage.removeItem("token");
   localStorage.removeItem("userId");
   localStorage.removeItem("username");
@@ -11,6 +12,7 @@ export const clearAuthStorage = () => {
 };
 
 export const persistAuthSession = (data) => {
+  localStorage.removeItem("fruitygerLoggedOut");
   if (data?.token) {
     localStorage.setItem("token", data.token);
   }
