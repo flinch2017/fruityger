@@ -19,6 +19,7 @@ export default function Feed() {
   const dropdownRef = useRef(null);
   const repostDropdownRef = useRef(null);
   const gestureAxisRef = useRef(null);
+  const videoTapStartRef = useRef(null);
 
   const [posts, setPosts] = useState([]);
   const [activeIndexMap, setActiveIndexMap] = useState({});
@@ -593,6 +594,29 @@ export default function Feed() {
     });
   };
 
+  const handleVideoTapStart = (event) => {
+    const point = event.touches?.[0] || event;
+    videoTapStartRef.current = {
+      x: point.clientX,
+      y: point.clientY,
+      time: Date.now(),
+    };
+  };
+
+  const handleVideoTapEnd = (event, post) => {
+    const start = videoTapStartRef.current;
+    videoTapStartRef.current = null;
+    if (!start) return;
+
+    const point = event.changedTouches?.[0] || event;
+    const dx = Math.abs(point.clientX - start.x);
+    const dy = Math.abs(point.clientY - start.y);
+    const elapsed = Date.now() - start.time;
+
+    if (dx > 10 || dy > 10 || elapsed > 450) return;
+    handleOpenTapeFeed(post);
+  };
+
   return (
     <main className="feed-page">
       {deleteModal.visible && (
@@ -854,7 +878,10 @@ export default function Feed() {
                             muted={videoMutedMap[getVideoControlKey(post.post_id, index)] ?? true}
                             preload="metadata"
                             className="feed-auto-video"
-                            onClick={() => handleOpenTapeFeed(post)}
+                            onMouseDown={handleVideoTapStart}
+                            onMouseUp={(event) => handleVideoTapEnd(event, post)}
+                            onTouchStart={handleVideoTapStart}
+                            onTouchEnd={(event) => handleVideoTapEnd(event, post)}
                           />
                         </>
                       ) : (

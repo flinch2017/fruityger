@@ -688,6 +688,11 @@ router.get("/feed", authenticateToken, async (req, res) => {
           `
         : `COALESCE(latest_repost.reposted_at, p.date_posted) DESC`;
 
+    const queryParams =
+      surface === "tapes"
+        ? [userId, limit, offset, startPostId]
+        : [userId, limit, offset];
+
     const { rows } = await pool.query(
       `
       SELECT
@@ -820,7 +825,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
       ORDER BY ${orderClause}
       LIMIT $2 OFFSET $3
       `,
-      [userId, limit, offset, startPostId]
+      queryParams
     );
 
     res.json({ posts: rows, mode, surface });
