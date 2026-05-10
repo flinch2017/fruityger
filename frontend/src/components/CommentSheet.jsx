@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import AeroNotice from "./AeroNotice";
+import { FaUser } from "react-icons/fa";
 import "../css/CommentSheet.css";
 import { formatRelativeTime } from "../utils/timeFormatter";
 import supabase from "../lib/supabaseClient";
@@ -888,8 +889,17 @@ const loadMoreReplies = (commentId) => {
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => applyMentionSuggestion(item.username)}
                 >
-                  <strong>@{item.username}</strong>
-                  <span>Profile</span>
+                  <span className="comment-mention-avatar">
+                    {item.profile_pic ? (
+                      <img src={getSafeMediaUrl(item.profile_pic)} alt={item.username} />
+                    ) : (
+                      <FaUser />
+                    )}
+                  </span>
+                  <span className="comment-mention-copy">
+                    <strong>@{item.username}</strong>
+                    <span>Profile</span>
+                  </span>
                 </button>
               ))}
             </div>

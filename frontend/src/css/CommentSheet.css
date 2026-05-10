@@ -441,38 +441,78 @@
   left: 14px;
   right: 86px;
   bottom: calc(100% + 8px);
-  border-radius: 14px;
-  border: 1px solid rgba(0, 160, 220, 0.2);
-  background: linear-gradient(160deg, rgba(255,255,255,0.96), rgba(214,246,255,0.92));
-  box-shadow: 0 12px 30px rgba(0, 160, 220, 0.2);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.86);
+  background:
+    radial-gradient(circle at 18% 10%, rgba(255,255,255,0.92), rgba(255,255,255,0.28) 40%, transparent 62%),
+    linear-gradient(165deg, rgba(255,255,255,0.92), rgba(203,241,255,0.78));
+  box-shadow:
+    0 14px 28px rgba(0, 165, 220, 0.2),
+    inset 0 1px 0 rgba(255,255,255,0.95);
+  backdrop-filter: blur(14px);
   overflow: hidden;
   z-index: 5;
+  max-height: 190px;
+  overflow-y: auto;
 }
 
 .comment-mention-item {
   width: 100%;
   border: none;
   background: transparent;
-  padding: 10px 12px;
+  padding: 8px 10px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 9px;
   cursor: pointer;
-  color: #0077aa;
+  color: #0b6f95;
   text-align: left;
 }
 
 .comment-mention-item:hover {
-  background: rgba(0, 180, 255, 0.12);
+  background: linear-gradient(90deg, rgba(135, 229, 255, 0.2), rgba(97, 211, 247, 0.12));
 }
 
-.comment-mention-item strong {
-  font-size: 13px;
+.comment-mention-avatar {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.98), rgba(255,255,255,0.34) 36%, transparent 56%),
+    linear-gradient(180deg, rgba(152,236,255,0.98), rgba(29,181,229,0.9));
+  box-shadow:
+    0 8px 14px rgba(0, 170, 230, 0.16),
+    inset 0 1px 0 rgba(255,255,255,0.92);
 }
 
-.comment-mention-item span {
-  font-size: 12px;
-  color: #4e8fa8;
+.comment-mention-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.comment-mention-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.comment-mention-copy strong {
+  font-size: 12.5px;
+  line-height: 1.2;
+}
+
+.comment-mention-copy span {
+  font-size: 11px;
+  line-height: 1.2;
+  color: #4f8aa1;
 }
 
 .comment-input-wrapper input {
