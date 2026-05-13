@@ -238,16 +238,16 @@ export default function Header() {
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (profileRef.current && !profileRef.current.contains(e.target)) {
-        setDropdownOpen(false);
+        setDropdownOpen((prev) => (prev ? false : prev));
       }
 
       if (searchRef.current && !searchRef.current.contains(e.target)) {
-        setMobileSearchOpen(false);
-        setSearchFocused(false);
+        setMobileSearchOpen((prev) => (prev ? false : prev));
+        setSearchFocused((prev) => (prev ? false : prev));
       }
 
       if (feedMenuRef.current && !feedMenuRef.current.contains(e.target)) {
-        setFeedMenuOpen(false);
+        setFeedMenuOpen((prev) => (prev ? false : prev));
       }
 
       const clickedInsideDesktopCreateMenu =
@@ -256,14 +256,14 @@ export default function Header() {
         mobileCreateMenuRef.current && mobileCreateMenuRef.current.contains(e.target);
 
       if (!clickedInsideDesktopCreateMenu && !clickedInsideMobileCreateMenu) {
-        setCreateMenuOpen(false);
+        setCreateMenuOpen((prev) => (prev ? false : prev));
       }
     };
 
-    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("click", handleClickOutside);
 
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("click", handleClickOutside);
     };
   }, []);
 
