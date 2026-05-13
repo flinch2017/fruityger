@@ -237,11 +237,15 @@ export default function Header() {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
+      const clickedMobileSearchButton = Boolean(
+        e.target?.closest?.(".mobile-search-btn")
+      );
+
       if (profileRef.current && !profileRef.current.contains(e.target)) {
         setDropdownOpen((prev) => (prev ? false : prev));
       }
 
-      if (searchRef.current && !searchRef.current.contains(e.target)) {
+      if (!clickedMobileSearchButton && searchRef.current && !searchRef.current.contains(e.target)) {
         setMobileSearchOpen((prev) => (prev ? false : prev));
         setSearchFocused((prev) => (prev ? false : prev));
       }
