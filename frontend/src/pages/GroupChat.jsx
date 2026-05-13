@@ -1050,7 +1050,7 @@ export default function GroupChat() {
           <strong>{message.attachment_name || "Attachment"}</strong>
           <span>
             {getAttachmentKindLabel(message)}
-            {message.attachment_size ? ` Â· ${formatFileSize(message.attachment_size)}` : ""}
+            {message.attachment_size ? ` · ${formatFileSize(message.attachment_size)}` : ""}
           </span>
         </span>
       </a>
@@ -1097,7 +1097,7 @@ export default function GroupChat() {
           </div>
           <div className="chat-user-heading">
             <h3>{groupChat?.group_name || "Group chat"}</h3>
-            <span className="chat-user-status">{memberCount} members Â· {memberPreview}</span>
+            <span className="chat-user-status">{memberCount} members · {memberPreview}</span>
           </div>
         </div>
 

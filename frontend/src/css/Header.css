@@ -28,7 +28,7 @@
   /* box-shadow: 0 10px 30px rgba(0, 180, 255, 0.3); */
 }
 
-/* Add some spacing at the top of the page content so header doesnâ€™t overlap */
+/* Add some spacing at the top of the page content so header doesn’t overlap */
 body {
   padding-top: 70px; /* adjust to the height of your top-header */
   overflow-x: hidden;
