@@ -6,6 +6,7 @@ import { deleteR2Object } from "../utils/r2Delete.js";
 import { ensureUserOnboardingSchema, normalizeInterests } from "../utils/userOnboarding.js";
 import { ensureRepostSchema } from "../utils/reposts.js";
 import { ensurePushNotificationSubscriptionsTable } from "../utils/notifications.js";
+import { ensureTapeViewsSchema } from "../utils/tapeViews.js";
 
 const router = express.Router();
 
@@ -497,6 +498,7 @@ router.delete("/settings/push-token", authenticateToken, async (req, res) => {
 router.get("/post/:postId", authenticateToken, async (req, res) => {
   try {
     await ensureRepostSchema();
+    await ensureTapeViewsSchema();
     const userId = req.user.id;
     const { postId } = req.params;
 
@@ -535,7 +537,12 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
           SELECT COUNT(*)
           FROM comments c
           WHERE c.post_id = p.post_id
-        )::int AS comment_count
+        )::int AS comment_count,
+        (
+          SELECT COUNT(*)::int
+          FROM tape_views tv
+          WHERE tv.post_id = p.post_id
+        ) AS view_count
       FROM posts p
       JOIN users u
         ON u.id = p.user_id
@@ -615,6 +622,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
   try {
     await ensureBlockedUsersTable();
     await ensureRepostSchema();
+    await ensureTapeViewsSchema();
     const userId = req.user.id;
     const limit = parseInt(req.query.limit, 10) || 5;
     const offset = parseInt(req.query.offset, 10) || 0;
@@ -738,7 +746,12 @@ router.get("/feed", authenticateToken, async (req, res) => {
           SELECT COUNT(*)
           FROM comments c
           WHERE c.post_id = p.post_id
-        )::int AS comment_count
+        )::int AS comment_count,
+        (
+          SELECT COUNT(*)::int
+          FROM tape_views tv
+          WHERE tv.post_id = p.post_id
+        ) AS view_count
 
       FROM posts p
       JOIN users u
@@ -832,6 +845,64 @@ router.get("/feed", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/tapes/view", authenticateToken, async (req, res) => {
+  const { postId } = req.body || {};
+
+  if (!postId) {
+    return res.status(400).json({ error: "postId is required" });
+  }
+
+  try {
+    await ensureTapeViewsSchema();
+
+    const postResult = await pool.query(
+      `
+      SELECT p.post_id
+      FROM posts p
+      WHERE p.post_id = $1
+        AND EXISTS (
+          SELECT 1
+          FROM post_media pm
+          WHERE pm.post_id = p.post_id
+            AND pm.media_type = 'video'
+        )
+      LIMIT 1
+      `,
+      [postId]
+    );
+
+    if (!postResult.rows[0]) {
+      return res.status(404).json({ error: "Tape not found" });
+    }
+
+    await pool.query(
+      `
+      INSERT INTO tape_views (post_id, viewer_id, viewed_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (post_id, viewer_id) DO NOTHING
+      `,
+      [postId, req.user.id]
+    );
+
+    const countResult = await pool.query(
+      `
+      SELECT COUNT(*)::int AS view_count
+      FROM tape_views
+      WHERE post_id = $1
+      `,
+      [postId]
+    );
+
+    return res.json({
+      success: true,
+      view_count: countResult.rows[0]?.view_count || 0,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to record tape view" });
   }
 });
 

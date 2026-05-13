@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaArrowLeft,
   FaCommentDots,
+  FaEye,
   FaEllipsisV,
   FaHeart,
   FaRegHeart,
@@ -24,6 +25,7 @@ export default function TapesFeed() {
   const observerRef = useRef(null);
   const isFetchingRef = useRef(false);
   const lastScrollTopRef = useRef(0);
+  const recordedViewPostIdsRef = useRef(new Set());
 
   const [tapes, setTapes] = useState([]);
   const [offset, setOffset] = useState(0);
@@ -432,6 +434,45 @@ export default function TapesFeed() {
     setActiveMenuPostId((prev) => (prev === postId ? null : postId));
   };
 
+  const recordCompletedView = async (postId) => {
+    const token = localStorage.getItem("token");
+    if (!token || !postId || recordedViewPostIdsRef.current.has(postId)) return;
+
+    recordedViewPostIdsRef.current.add(postId);
+
+    try {
+      const res = await fetch("http://localhost:5000/api/main/tapes/view", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ postId }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to record tape view");
+      }
+
+      if (typeof data.view_count === "number") {
+        setTapes((prev) =>
+          prev.map((post) =>
+            post.post_id === postId
+              ? {
+                  ...post,
+                  view_count: data.view_count,
+                }
+              : post
+          )
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      recordedViewPostIdsRef.current.delete(postId);
+    }
+  };
+
   const promptDeletePost = (postId) => {
     setActiveMenuPostId(null);
     setDeleteModal({ visible: true, postId });
@@ -581,6 +622,7 @@ export default function TapesFeed() {
                   autoPlay
                   muted={videoMutedMap[tape.post_id] ?? true}
                   preload="auto"
+                  onEnded={() => recordCompletedView(tape.post_id)}
                 />
                 <div className="tape-gradient"></div>
                 {(videoMutedMap[tape.post_id] ?? true) && (
@@ -655,6 +697,11 @@ export default function TapesFeed() {
                     <FaRetweet />
                     <span>{tape.repost_count || 0}</span>
                   </button>
+
+                  <div className="tape-action-btn tape-action-static" aria-label="Views">
+                    <FaEye />
+                    <span>{tape.view_count || 0}</span>
+                  </div>
 
                   <div className="tape-more-wrapper">
                     <button

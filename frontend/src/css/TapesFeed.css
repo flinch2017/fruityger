@@ -341,6 +341,10 @@
   color: #78ffd1;
 }
 
+.tape-action-btn.tape-action-static {
+  cursor: default;
+}
+
 .tape-more-wrapper {
   position: relative;
   width: 44px;
