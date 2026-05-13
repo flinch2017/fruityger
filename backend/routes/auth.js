@@ -543,11 +543,6 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Invalid email or password" });
     }
 
-    if (!user.email_verified && user.email_verification_expires_at && new Date(user.email_verification_expires_at) <= new Date()) {
-      await cleanupExpiredUnverifiedUsers();
-      return res.status(400).json({ error: "This verification window expired. Please sign up again." });
-    }
-
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
       return res.status(400).json({ error: "Invalid email or password" });
@@ -898,7 +893,7 @@ router.post("/verify-email", authenticateTokenAllowUnverified, async (req, res) 
     new Date(user.email_verification_expires_at) <= new Date()
   ) {
     await cleanupExpiredUnverifiedUsers();
-    return res.status(400).json({ error: "This verification code expired. Please sign up again." });
+    return res.status(400).json({ error: "This verification code expired. Request a new code and try again." });
   }
 
   if (String(user.email_verification_code) !== String(code)) {

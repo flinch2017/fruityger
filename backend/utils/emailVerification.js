@@ -465,24 +465,19 @@ export const cleanupExpiredUnverifiedUsers = async () => {
   try {
     await client.query("BEGIN");
 
-    const { rows } = await client.query(
+    const { rowCount } = await client.query(
       `
-      SELECT id
-      FROM users
+      UPDATE users
+      SET email_verification_code = NULL,
+          email_verification_expires_at = NULL
       WHERE email_verified = FALSE
-        AND (
-          email_verification_expires_at IS NOT NULL
-          AND email_verification_expires_at <= NOW()
-        )
+        AND email_verification_expires_at IS NOT NULL
+        AND email_verification_expires_at <= NOW()
       `
     );
 
-    for (const row of rows) {
-      await deleteUserCompletely(client, row.id);
-    }
-
     await client.query("COMMIT");
-    return rows.length;
+    return rowCount || 0;
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
