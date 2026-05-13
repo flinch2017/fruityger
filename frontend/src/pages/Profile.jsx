@@ -34,6 +34,8 @@ export default function Profile() {
   const videoRefs = useRef({});
   const observerRef = useRef(null);
   const gestureAxisRef = useRef(null);
+  const videoTapStartRef = useRef(null);
+  const profileVideoWatchStateRef = useRef({});
   const [activeCommentPost, setActiveCommentPost] = useState(null);
 
   const [activeMenuPostId, setActiveMenuPostId] = useState(null);
@@ -542,6 +544,172 @@ export default function Profile() {
   const handlePointerEnd = () => {
     gestureAxisRef.current = null;
     setDragging(false);
+  };
+
+  const handleOpenTapeFeed = (post) => {
+    if (!post?.post_id) return;
+    const params = new URLSearchParams();
+    params.set("mode", "discover");
+    params.set("start", post.post_id);
+    navigate(`/tapes?${params.toString()}`, {
+      state: { seedTape: post },
+    });
+  };
+
+  const handleVideoTapStart = (event) => {
+    const point = event.touches?.[0] || event;
+    videoTapStartRef.current = {
+      x: point.clientX,
+      y: point.clientY,
+      time: Date.now(),
+    };
+  };
+
+  const handleVideoTapEnd = (event, post) => {
+    const start = videoTapStartRef.current;
+    videoTapStartRef.current = null;
+    if (!start) return;
+
+    const point = event.changedTouches?.[0] || event;
+    const dx = Math.abs(point.clientX - start.x);
+    const dy = Math.abs(point.clientY - start.y);
+    const elapsed = Date.now() - start.time;
+
+    if (dx > 10 || dy > 10 || elapsed > 450) return;
+    handleOpenTapeFeed(post);
+  };
+
+  const getProfileVideoWatchKey = (postId, mediaIndex) => `${postId}-${mediaIndex}`;
+
+  const recordProfileVideoCompletedView = async (postId) => {
+    const authToken = localStorage.getItem("token");
+    if (!authToken || !postId) return;
+
+    try {
+      const res = await fetch("http://localhost:5000/api/main/tapes/view", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ postId }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to record tape view");
+      }
+
+      if (typeof data.view_count === "number") {
+        setPosts((prev) =>
+          prev.map((post) =>
+            post.post_id === postId
+              ? {
+                  ...post,
+                  view_count: data.view_count,
+                }
+              : post
+          )
+        );
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleProfileVideoPlay = (postId, mediaIndex, event) => {
+    const video = event?.currentTarget;
+    if (!video) return;
+    const key = getProfileVideoWatchKey(postId, mediaIndex);
+    const state = profileVideoWatchStateRef.current[key] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
+    };
+
+    const isNearStart = video.currentTime <= 0.35;
+    const canStartCycle = state.completedCount === 0 || state.manualReplayArmed;
+    if (isNearStart && canStartCycle) {
+      state.startedFromBeginning = true;
+      state.completionSent = false;
+      state.startTimestampMs = Date.now();
+      if (state.completedCount > 0) {
+        state.manualReplayArmed = false;
+      }
+      profileVideoWatchStateRef.current[key] = state;
+    }
+  };
+
+  const handleProfileVideoProgress = (postId, mediaIndex, event) => {
+    const video = event?.currentTarget;
+    if (!video) return;
+
+    const duration = Number(video.duration);
+    const currentTime = Number(video.currentTime);
+    if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(currentTime)) return;
+
+    const key = getProfileVideoWatchKey(postId, mediaIndex);
+    const state = profileVideoWatchStateRef.current[key] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
+    };
+    const elapsedMs = state.startTimestampMs > 0 ? Date.now() - state.startTimestampMs : 0;
+    const minimumWatchMs = Math.max(duration * 500, 1500);
+
+    if (
+      currentTime >= duration - 0.2 &&
+      state.startedFromBeginning &&
+      !state.completionSent &&
+      elapsedMs >= minimumWatchMs
+    ) {
+      state.completionSent = true;
+      state.completedCount = Number(state.completedCount || 0) + 1;
+      profileVideoWatchStateRef.current[key] = state;
+      recordProfileVideoCompletedView(postId);
+    }
+  };
+
+  const handleProfileVideoEnded = (postId, mediaIndex, event) => {
+    const key = getProfileVideoWatchKey(postId, mediaIndex);
+    const state = profileVideoWatchStateRef.current[key] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
+    };
+    state.startedFromBeginning = false;
+    state.startTimestampMs = 0;
+    if (state.completedCount > 0) {
+      state.manualReplayArmed = false;
+    }
+    profileVideoWatchStateRef.current[key] = state;
+
+    const video = event?.currentTarget;
+    if (video) {
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    }
+  };
+
+  const handleProfileVideoManualReplayIntent = (postId, mediaIndex) => {
+    const key = getProfileVideoWatchKey(postId, mediaIndex);
+    const state = profileVideoWatchStateRef.current[key] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
+    };
+    if (state.completedCount > 0) {
+      state.manualReplayArmed = true;
+      profileVideoWatchStateRef.current[key] = state;
+    }
   };
 
   const toggleLike = async (postId) => {
@@ -1155,14 +1323,26 @@ export default function Profile() {
                             }}
                             src={getSafeMediaUrl(m.media_url)}
                             playsInline
-                            loop
                             muted={videoMutedMap[getVideoControlKey(post.post_id, i)] ?? true}
                             preload="metadata"
                             className="auto-video"
+                            onPlay={(event) => handleProfileVideoPlay(post.post_id, i, event)}
+                            onTimeUpdate={(event) => handleProfileVideoProgress(post.post_id, i, event)}
+                            onEnded={(event) => handleProfileVideoEnded(post.post_id, i, event)}
                             onLoadedData={(e) => {
                               if ((activeIndexMap[post.post_id] || 0) === i) {
                                 tryAutoplayProfileVideo(e.currentTarget);
                               }
+                            }}
+                            onMouseDown={handleVideoTapStart}
+                            onMouseUp={(event) => {
+                              handleProfileVideoManualReplayIntent(post.post_id, i);
+                              handleVideoTapEnd(event, post);
+                            }}
+                            onTouchStart={handleVideoTapStart}
+                            onTouchEnd={(event) => {
+                              handleProfileVideoManualReplayIntent(post.post_id, i);
+                              handleVideoTapEnd(event, post);
                             }}
                           />
                         </>
