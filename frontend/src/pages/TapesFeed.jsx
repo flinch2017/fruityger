@@ -473,6 +473,20 @@ export default function TapesFeed() {
     }
   };
 
+  const handleTapeProgress = (postId, event) => {
+    const video = event?.currentTarget;
+    if (!video) return;
+
+    const duration = Number(video.duration);
+    const currentTime = Number(video.currentTime);
+    if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(currentTime)) return;
+
+    // Count as a valid view once playback reaches the end threshold.
+    if (currentTime >= duration - 0.2) {
+      recordCompletedView(postId);
+    }
+  };
+
   const promptDeletePost = (postId) => {
     setActiveMenuPostId(null);
     setDeleteModal({ visible: true, postId });
@@ -622,7 +636,7 @@ export default function TapesFeed() {
                   autoPlay
                   muted={videoMutedMap[tape.post_id] ?? true}
                   preload="auto"
-                  onEnded={() => recordCompletedView(tape.post_id)}
+                  onTimeUpdate={(event) => handleTapeProgress(tape.post_id, event)}
                 />
                 <div className="tape-gradient"></div>
                 {(videoMutedMap[tape.post_id] ?? true) && (
