@@ -12,6 +12,7 @@ import {
   FaReply,
   FaTimes,
   FaUserCircle,
+  FaUserPlus,
   FaUsers,
 } from "react-icons/fa";
 import supabase from "../lib/supabaseClient";
@@ -57,6 +58,13 @@ export default function GroupChat() {
   const [membersTab, setMembersTab] = useState("members");
   const [membersPayload, setMembersPayload] = useState({ members: [], admins: [] });
   const [membersLoading, setMembersLoading] = useState(false);
+  const [addMembersModalOpen, setAddMembersModalOpen] = useState(false);
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const [memberSearchResults, setMemberSearchResults] = useState([]);
+  const [selectedNewMembers, setSelectedNewMembers] = useState([]);
+  const [searchingMembers, setSearchingMembers] = useState(false);
+  const [addingMembers, setAddingMembers] = useState(false);
+  const [savingGroupSettings, setSavingGroupSettings] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [selectedNextAdminId, setSelectedNextAdminId] = useState("");
@@ -68,6 +76,7 @@ export default function GroupChat() {
   const attachmentInputRef = useRef(null);
   const groupImageInputRef = useRef(null);
   const headerMenuRef = useRef(null);
+  const memberSearchTimeoutRef = useRef(null);
 
   const memberCount = groupChat?.members?.length || 0;
   const isAdmin = Array.isArray(groupChat?.admin_user_ids)
@@ -78,6 +87,8 @@ export default function GroupChat() {
     (member) => String(member.id) !== String(userId)
   );
   const requiresAdminTransferBeforeLeaving = isAdmin && adminCount === 1 && eligibleNextAdmins.length > 0;
+  const memberAddRequiresAdminApproval = Boolean(groupChat?.member_add_requires_admin_approval);
+  const canDirectlyAddMembers = isAdmin || !memberAddRequiresAdminApproval;
 
   const scrollToBottom = (behavior = "smooth") => {
     messagesContainerRef.current?.scrollTo({ top: 0, behavior });
@@ -245,6 +256,64 @@ export default function GroupChat() {
       supabase.removeChannel(channel);
     };
   }, [groupChatId, token]);
+
+  useEffect(() => {
+    if (!addMembersModalOpen) {
+      setMemberSearchQuery("");
+      setMemberSearchResults([]);
+      setSelectedNewMembers([]);
+      return;
+    }
+
+    const query = memberSearchQuery.trim();
+    if (!query) {
+      setMemberSearchResults([]);
+      return;
+    }
+
+    if (memberSearchTimeoutRef.current) {
+      clearTimeout(memberSearchTimeoutRef.current);
+    }
+
+    memberSearchTimeoutRef.current = setTimeout(async () => {
+      setSearchingMembers(true);
+
+      try {
+        const res = await fetch(
+          `http://localhost:5000/api/messages/search-users?q=${encodeURIComponent(query)}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to search users");
+        }
+
+        const selectedIds = new Set(selectedNewMembers.map((member) => String(member.id)));
+        const existingIds = new Set((groupChat?.members || []).map((member) => String(member.id)));
+
+        setMemberSearchResults(
+          (data.users || []).filter((user) => {
+            const id = String(user.id);
+            return !selectedIds.has(id) && !existingIds.has(id);
+          })
+        );
+      } catch (error) {
+        console.error(error);
+        setNotice({ type: "error", message: error.message || "Failed to search users." });
+      } finally {
+        setSearchingMembers(false);
+      }
+    }, 250);
+
+    return () => {
+      if (memberSearchTimeoutRef.current) {
+        clearTimeout(memberSearchTimeoutRef.current);
+      }
+    };
+  }, [addMembersModalOpen, memberSearchQuery, token, selectedNewMembers, groupChat?.members]);
 
   useEffect(() => {
     const updateKeyboardOffset = () => {
@@ -584,6 +653,15 @@ export default function GroupChat() {
     setHeaderMenuOpen(false);
   };
 
+  const openAddMembersModal = () => {
+    if (!canDirectlyAddMembers || actionLoading) return;
+    setAddMembersModalOpen(true);
+    setHeaderMenuOpen(false);
+    setMemberSearchQuery("");
+    setMemberSearchResults([]);
+    setSelectedNewMembers([]);
+  };
+
   const applyMembersPayload = (data) => {
     const nextMembers = data.members || [];
     const nextAdmins = data.admins || [];
@@ -632,6 +710,90 @@ export default function GroupChat() {
       setNotice({ type: "error", message: error.message || "Failed to change group name." });
     } finally {
       setSavingName(false);
+    }
+  };
+
+  const addMemberCandidate = (member) => {
+    setSelectedNewMembers((prev) =>
+      prev.some((entry) => String(entry.id) === String(member.id)) ? prev : [...prev, member]
+    );
+    setMemberSearchResults((prev) => prev.filter((entry) => String(entry.id) !== String(member.id)));
+    setMemberSearchQuery("");
+  };
+
+  const removeSelectedNewMember = (memberId) => {
+    setSelectedNewMembers((prev) => prev.filter((entry) => String(entry.id) !== String(memberId)));
+  };
+
+  const saveMemberAddSetting = async (value) => {
+    if (!isAdmin || savingGroupSettings) return;
+
+    setSavingGroupSettings(true);
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/settings`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ memberAddRequiresAdminApproval: value }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update group settings");
+      }
+
+      setGroupChat((prev) =>
+        prev
+          ? {
+              ...prev,
+              member_add_requires_admin_approval: Boolean(data.member_add_requires_admin_approval),
+            }
+          : prev
+      );
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: error.message || "Failed to update group settings." });
+    } finally {
+      setSavingGroupSettings(false);
+    }
+  };
+
+  const submitAddMembers = async () => {
+    if (!canDirectlyAddMembers || addingMembers || selectedNewMembers.length === 0) return;
+
+    setAddingMembers(true);
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/members`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          memberIds: selectedNewMembers.map((member) => member.id),
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to add members");
+      }
+
+      applyMembersPayload(data);
+      setAddMembersModalOpen(false);
+      setSelectedNewMembers([]);
+      setMemberSearchResults([]);
+      setMemberSearchQuery("");
+      dispatchMessagesRefresh();
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: error.message || "Failed to add members." });
+    } finally {
+      setAddingMembers(false);
     }
   };
 
@@ -908,6 +1070,13 @@ export default function GroupChat() {
               </button>
               <button className="chat-header-dropdown-item" onClick={openMembersModal}>
                 View members
+              </button>
+              <button
+                className="chat-header-dropdown-item"
+                onClick={openAddMembersModal}
+                disabled={!canDirectlyAddMembers || actionLoading}
+              >
+                Add members
               </button>
               <button className="chat-header-dropdown-item danger" onClick={handleLeaveGroup} disabled={actionLoading}>
                 Leave group
@@ -1353,6 +1522,111 @@ export default function GroupChat() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {addMembersModalOpen && (
+        <div className="message-reaction-modal-backdrop">
+          <div className="message-reaction-modal group-settings-modal members-settings-modal">
+            <div className="message-reaction-modal-header">
+              <div>
+                <h4>Add members</h4>
+                <p>Add people to this group chat.</p>
+              </div>
+              <button
+                type="button"
+                className="message-reaction-modal-close"
+                onClick={() => setAddMembersModalOpen(false)}
+                aria-label="Close add members modal"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            {isAdmin && (
+              <label className="group-member-approval-toggle">
+                <input
+                  type="checkbox"
+                  checked={memberAddRequiresAdminApproval}
+                  disabled={savingGroupSettings}
+                  onChange={(event) => saveMemberAddSetting(event.target.checked)}
+                />
+                <span>Require admin approval before adding members</span>
+              </label>
+            )}
+
+            <input
+              type="text"
+              className="group-settings-input"
+              placeholder="Search users to add..."
+              value={memberSearchQuery}
+              onChange={(event) => setMemberSearchQuery(event.target.value)}
+            />
+
+            {selectedNewMembers.length > 0 && (
+              <div className="group-member-chip-list">
+                {selectedNewMembers.map((member) => (
+                  <span key={member.id} className="group-member-chip">
+                    <span>{member.username}</span>
+                    <button type="button" onClick={() => removeSelectedNewMember(member.id)} aria-label={`Remove ${member.username}`}>
+                      <FaTimes />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="message-reaction-modal-list">
+              {searchingMembers ? (
+                <p className="message-reaction-modal-empty">Searching users...</p>
+              ) : memberSearchResults.length === 0 ? (
+                <p className="message-reaction-modal-empty">No users to add.</p>
+              ) : (
+                memberSearchResults.map((member) => (
+                  <button
+                    key={member.id}
+                    type="button"
+                    className="message-reaction-modal-item group-add-member-item"
+                    onClick={() => addMemberCandidate(member)}
+                  >
+                    <div className="message-reaction-modal-user">
+                      <div className="message-reaction-modal-avatar">
+                        {member.profile_pic ? (
+                          <img src={getSafeMediaUrl(member.profile_pic)} alt={member.username} />
+                        ) : (
+                          <FaUserCircle />
+                        )}
+                      </div>
+                      <div className="message-reaction-modal-copy">
+                        <strong>{member.username}</strong>
+                        <span>Tap to add</span>
+                      </div>
+                    </div>
+                    <FaUserPlus />
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="group-settings-actions">
+              <button
+                type="button"
+                className="messages-action-btn"
+                onClick={() => setAddMembersModalOpen(false)}
+                disabled={addingMembers}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="messages-action-btn primary"
+                onClick={submitAddMembers}
+                disabled={addingMembers || selectedNewMembers.length === 0}
+              >
+                {addingMembers ? "Adding..." : "Add selected members"}
+              </button>
+            </div>
           </div>
         </div>
       )}

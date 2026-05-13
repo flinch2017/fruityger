@@ -379,6 +379,10 @@ async function ensureGroupChatSchema() {
         ALTER TABLE group_chats
         ADD COLUMN IF NOT EXISTS admin_user_ids UUID[] NOT NULL DEFAULT ARRAY[]::uuid[]
       `).catch(() => null);
+      await pool.query(`
+        ALTER TABLE group_chats
+        ADD COLUMN IF NOT EXISTS member_add_requires_admin_approval BOOLEAN NOT NULL DEFAULT FALSE
+      `).catch(() => null);
 
       await pool.query(`
         CREATE TABLE IF NOT EXISTS group_chat_members (
@@ -1906,6 +1910,7 @@ router.get("/groups/chats/:groupChatId", authenticateToken, async (req, res) => 
         gc.created_at,
         gc.created_by,
         gc.admin_user_ids,
+        gc.member_add_requires_admin_approval,
         gcm.last_read_at
       FROM group_chats gc
       JOIN group_chat_members gcm
@@ -2014,6 +2019,7 @@ router.get("/groups/chats/:groupChatId", authenticateToken, async (req, res) => 
         created_at: groupChat.created_at,
         created_by: groupChat.created_by,
         admin_user_ids: groupChat.admin_user_ids || [],
+        member_add_requires_admin_approval: Boolean(groupChat.member_add_requires_admin_approval),
         members: membersResult.rows,
       },
       messages: messagesResult.rows,
@@ -2616,6 +2622,158 @@ router.get("/groups/chats/:groupChatId/members", authenticateToken, async (req, 
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to load group members" });
+  }
+});
+
+router.post("/groups/chats/:groupChatId/members", authenticateToken, async (req, res) => {
+  const { groupChatId } = req.params;
+  const userId = req.user.id;
+  const rawMemberIds = Array.isArray(req.body?.memberIds) ? req.body.memberIds : [];
+  const memberIds = Array.from(new Set(rawMemberIds.map((id) => String(id || "").trim()).filter(Boolean)));
+
+  if (memberIds.length === 0) {
+    return res.status(400).json({ error: "Choose at least one member to add" });
+  }
+
+  try {
+    await ensureGroupChatSchema();
+    await ensureBlockedUsersTable();
+
+    const groupResult = await pool.query(
+      `
+      SELECT admin_user_ids, member_add_requires_admin_approval
+      FROM group_chats
+      WHERE id = $1
+        AND EXISTS (
+          SELECT 1
+          FROM group_chat_members gcm
+          WHERE gcm.group_chat_id = group_chats.id
+            AND gcm.user_id = $2
+        )
+      LIMIT 1
+      `,
+      [groupChatId, userId]
+    );
+
+    if (groupResult.rows.length === 0) {
+      return res.status(404).json({ error: "Group chat not found" });
+    }
+
+    const group = groupResult.rows[0];
+    const adminUserIds = (group.admin_user_ids || []).map((id) => String(id));
+    const requesterIsAdmin = adminUserIds.includes(String(userId));
+    const requiresAdminApproval = Boolean(group.member_add_requires_admin_approval);
+
+    if (requiresAdminApproval && !requesterIsAdmin) {
+      return res.status(403).json({ error: "Only admins can add members when approval is required" });
+    }
+
+    const validUsersResult = await pool.query(
+      `
+      SELECT id
+      FROM users
+      WHERE id = ANY($1::uuid[])
+        AND deactivated_at IS NULL
+        AND deleted_at IS NULL
+      `,
+      [memberIds]
+    );
+    const validMemberIds = validUsersResult.rows.map((row) => String(row.id));
+
+    if (validMemberIds.length !== memberIds.length) {
+      return res.status(400).json({ error: "Some selected users are unavailable" });
+    }
+
+    const blockedResult = await pool.query(
+      `
+      SELECT target_id
+      FROM unnest($1::uuid[]) AS target_id
+      WHERE EXISTS (
+        SELECT 1
+        FROM blocked_users bu
+        WHERE (bu.blocker_id = $2 AND bu.blocked_id = target_id)
+           OR (bu.blocker_id = target_id AND bu.blocked_id = $2)
+      )
+      `,
+      [validMemberIds, userId]
+    );
+
+    if (blockedResult.rows.length > 0) {
+      return res.status(403).json({ error: "You cannot add blocked users" });
+    }
+
+    const insertResult = await pool.query(
+      `
+      INSERT INTO group_chat_members (group_chat_id, user_id, joined_at, last_read_at)
+      SELECT $1, member_id, NOW(), NOW()
+      FROM unnest($2::uuid[]) AS member_id
+      ON CONFLICT (group_chat_id, user_id) DO NOTHING
+      RETURNING user_id
+      `,
+      [groupChatId, validMemberIds]
+    );
+
+    const membersResult = await pool.query(
+      `
+      SELECT
+        u.id,
+        u.username,
+        u.profile_pic,
+        gcm.joined_at,
+        u.id = ANY($2::uuid[]) AS is_admin
+      FROM group_chat_members gcm
+      JOIN users u
+        ON u.id = gcm.user_id
+      WHERE gcm.group_chat_id = $1
+      ORDER BY LOWER(u.username) ASC
+      `,
+      [groupChatId, adminUserIds]
+    );
+
+    return res.json({
+      success: true,
+      addedCount: insertResult.rows.length,
+      members: membersResult.rows,
+      admins: membersResult.rows.filter((member) => member.is_admin),
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to add members" });
+  }
+});
+
+router.patch("/groups/chats/:groupChatId/settings", authenticateToken, async (req, res) => {
+  const { groupChatId } = req.params;
+  const userId = req.user.id;
+  const requiresApproval = Boolean(req.body?.memberAddRequiresAdminApproval);
+
+  try {
+    await ensureGroupChatSchema();
+
+    const updateResult = await pool.query(
+      `
+      UPDATE group_chats
+      SET member_add_requires_admin_approval = $3
+      WHERE id = $1
+        AND $2 = ANY(admin_user_ids)
+      RETURNING member_add_requires_admin_approval
+      `,
+      [groupChatId, userId, requiresApproval]
+    );
+
+    if (updateResult.rows.length === 0) {
+      return res.status(403).json({ error: "Only admins can change group settings" });
+    }
+
+    return res.json({
+      success: true,
+      member_add_requires_admin_approval: Boolean(
+        updateResult.rows[0].member_add_requires_admin_approval
+      ),
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to update group settings" });
   }
 });
 
