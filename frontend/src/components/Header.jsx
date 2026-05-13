@@ -51,6 +51,12 @@ export default function Header() {
     location.pathname.startsWith("/chat/") ||
     location.pathname === "/group-chat" ||
     location.pathname.startsWith("/group-chat/");
+  const isMessagingRoute =
+    location.pathname === "/messages" ||
+    location.pathname === "/chat" ||
+    location.pathname.startsWith("/chat/") ||
+    location.pathname === "/group-chat" ||
+    location.pathname.startsWith("/group-chat/");
   const isTapesRoute = location.pathname === "/tapes";
   const feedMode = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -459,7 +465,7 @@ export default function Header() {
 
   return (
     <>
-      <header className="top-header">
+      <header className={`top-header ${isMessagingRoute ? "top-header-messaging" : ""}`}>
         <div className="header-brand-cluster">
           <div
             className="logo fruityger-font"
@@ -469,6 +475,7 @@ export default function Header() {
             Fruityger
           </div>
 
+          {!isMessagingRoute && (
           <div className="feed-mode-switch" ref={feedMenuRef}>
             <div className="feed-mode-tabs" aria-label="Feed view">
               <button
@@ -515,6 +522,7 @@ export default function Header() {
               </div>
             )}
           </div>
+          )}
         </div>
 
         <div className="search-shell" ref={searchRef}>

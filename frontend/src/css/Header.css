@@ -66,12 +66,21 @@ body {
   position: relative;
   z-index: 1002;
   pointer-events: auto;
+  margin-left: auto;
 }
 
 .nav-items {
   position: relative;
   z-index: 1002;
   pointer-events: auto;
+}
+
+.top-header.top-header-messaging .header-brand-cluster {
+  flex: 0 1 auto;
+}
+
+.top-header.top-header-messaging .nav-row {
+  flex: 0 0 auto;
 }
 
 .header-brand-cluster {
