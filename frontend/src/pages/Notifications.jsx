@@ -322,7 +322,7 @@ export default function Notifications() {
           >
             {selectionMode && (
               <span className="selection-check">
-                {selectedSet.has(notification.notification_id) ? "OK" : ""}
+                {selectedSet.has(notification.notification_id) ? "\u2713" : ""}
               </span>
             )}
 

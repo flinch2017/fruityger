@@ -16,7 +16,7 @@ export default function Welcome() {
 
         <div className="welcome-card">
           <div className="welcome-hero-copy">
-            <p className="welcome-kicker">Daydream social</p>
+            <p className="welcome-kicker">DOSSIER CREATIVES</p>
             <h1>Fruityger</h1>
             <p className="welcome-description">
               Drift into a glossy little internet.
@@ -73,7 +73,7 @@ export default function Welcome() {
             <Link to="/about">About</Link>
           </div>
           <p className="welcome-copyright">
-            c 2026 DOSSIER SOFTWARE DEVELOPMENT SERVICES
+            c 2026 DOSSIER CREATIVES
           </p>
         </div>
       </div>

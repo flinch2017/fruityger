@@ -18,16 +18,15 @@ export default function AboutPage() {
         </section>
 
         <section className="legal-section">
-          <h2>Founder and Developer</h2>
+          <h2>Developer</h2>
           <p>
-            Fruityger was founded and developed by Iris Contado under DOSSIER SOFTWARE DEVELOPMENT
-            SERVICES.
+            Fruityger was developed by Iris Contado.
           </p>
         </section>
 
         <section className="legal-section">
           <h2>Contact</h2>
-          <p>Instagram: @iriscontado</p>
+          <p>Email: thedossiercreatives@gmail.com</p>
         </section>
       </div>
     </div>

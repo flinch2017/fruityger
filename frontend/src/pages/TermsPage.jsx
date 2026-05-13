@@ -45,8 +45,7 @@ export default function TermsPage() {
         <section className="legal-section">
           <h2>Contact</h2>
           <p>
-            Fruityger is developed by Iris Contado of DOSSIER SOFTWARE DEVELOPMENT SERVICES.
-            Instagram: @iriscontado
+            Email: thedossiercreatives@gmail.com
           </p>
         </section>
       </div>

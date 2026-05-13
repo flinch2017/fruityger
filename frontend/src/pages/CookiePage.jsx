@@ -32,14 +32,6 @@ export default function CookiePage() {
             Fruityger features may not work as expected if required storage is disabled.
           </p>
         </section>
-
-        <section className="legal-section">
-          <h2>Contact</h2>
-          <p>
-            Fruityger is developed by Iris Contado of DOSSIER SOFTWARE DEVELOPMENT SERVICES.
-            Instagram: @iriscontado
-          </p>
-        </section>
       </div>
     </div>
   );
