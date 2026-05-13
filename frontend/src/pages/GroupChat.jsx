@@ -297,8 +297,10 @@ export default function GroupChat() {
         const selectedIds = new Set(selectedNewMembers.map((member) => String(member.id)));
         const existingIds = new Set((groupChat?.members || []).map((member) => String(member.id)));
 
+        const users = Array.isArray(data) ? data : (data.users || []);
+
         setMemberSearchResults(
-          (data.users || []).filter((user) => {
+          users.filter((user) => {
             const id = String(user.id);
             return !selectedIds.has(id) && !existingIds.has(id);
           })
