@@ -25,7 +25,7 @@ export default function TapesFeed() {
   const observerRef = useRef(null);
   const isFetchingRef = useRef(false);
   const lastScrollTopRef = useRef(0);
-  const recordedViewPostIdsRef = useRef(new Set());
+  const watchCycleStateRef = useRef({});
 
   const [tapes, setTapes] = useState([]);
   const [offset, setOffset] = useState(0);
@@ -436,9 +436,7 @@ export default function TapesFeed() {
 
   const recordCompletedView = async (postId) => {
     const token = localStorage.getItem("token");
-    if (!token || !postId || recordedViewPostIdsRef.current.has(postId)) return;
-
-    recordedViewPostIdsRef.current.add(postId);
+    if (!token || !postId) return;
 
     try {
       const res = await fetch("http://localhost:5000/api/main/tapes/view", {
@@ -469,22 +467,64 @@ export default function TapesFeed() {
       }
     } catch (error) {
       console.error(error);
-      recordedViewPostIdsRef.current.delete(postId);
+    }
+  };
+
+  const handleTapePlay = (postId, event) => {
+    const video = event?.currentTarget;
+    if (!video) return;
+    const state = watchCycleStateRef.current[postId] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+    };
+
+    if (video.currentTime <= 0.35) {
+      state.startedFromBeginning = true;
+      state.completionSent = false;
+      state.startTimestampMs = Date.now();
+      watchCycleStateRef.current[postId] = state;
     }
   };
 
   const handleTapeProgress = (postId, event) => {
     const video = event?.currentTarget;
     if (!video) return;
+    if (video.loop) return;
 
     const duration = Number(video.duration);
     const currentTime = Number(video.currentTime);
     if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(currentTime)) return;
 
-    // Count as a valid view once playback reaches the end threshold.
-    if (currentTime >= duration - 0.2) {
+    const state = watchCycleStateRef.current[postId] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+    };
+    const elapsedMs = state.startTimestampMs > 0 ? Date.now() - state.startTimestampMs : 0;
+    const minimumWatchMs = Math.max(duration * 500, 1500);
+
+    if (
+      currentTime >= duration - 0.2 &&
+      state.startedFromBeginning &&
+      !state.completionSent &&
+      elapsedMs >= minimumWatchMs
+    ) {
+      state.completionSent = true;
+      watchCycleStateRef.current[postId] = state;
       recordCompletedView(postId);
     }
+  };
+
+  const handleTapeEnded = (postId) => {
+    const state = watchCycleStateRef.current[postId] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+    };
+    state.startedFromBeginning = false;
+    state.startTimestampMs = 0;
+    watchCycleStateRef.current[postId] = state;
   };
 
   const promptDeletePost = (postId) => {
@@ -631,12 +671,13 @@ export default function TapesFeed() {
                   }}
                   className="tape-video"
                   src={getSafeMediaUrl(tape.primaryVideo.media_url)}
-                  loop
                   playsInline
                   autoPlay
                   muted={videoMutedMap[tape.post_id] ?? true}
                   preload="auto"
+                  onPlay={(event) => handleTapePlay(tape.post_id, event)}
                   onTimeUpdate={(event) => handleTapeProgress(tape.post_id, event)}
+                  onEnded={() => handleTapeEnded(tape.post_id)}
                 />
                 <div className="tape-gradient"></div>
                 {(videoMutedMap[tape.post_id] ?? true) && (

@@ -6,7 +6,7 @@ import { deleteR2Object } from "../utils/r2Delete.js";
 import { ensureUserOnboardingSchema, normalizeInterests } from "../utils/userOnboarding.js";
 import { ensureRepostSchema } from "../utils/reposts.js";
 import { ensurePushNotificationSubscriptionsTable } from "../utils/notifications.js";
-import { ensureTapeViewsSchema } from "../utils/tapeViews.js";
+import { ensureTapeViewEventsSchema } from "../utils/tapeViewEvents.js";
 
 const router = express.Router();
 
@@ -498,7 +498,7 @@ router.delete("/settings/push-token", authenticateToken, async (req, res) => {
 router.get("/post/:postId", authenticateToken, async (req, res) => {
   try {
     await ensureRepostSchema();
-    await ensureTapeViewsSchema();
+    await ensureTapeViewEventsSchema();
     const userId = req.user.id;
     const { postId } = req.params;
 
@@ -540,7 +540,7 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
         )::int AS comment_count,
         (
           SELECT COUNT(*)::int
-          FROM tape_views tv
+          FROM tape_view_events tv
           WHERE tv.post_id = p.post_id
         ) AS view_count
       FROM posts p
@@ -622,7 +622,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
   try {
     await ensureBlockedUsersTable();
     await ensureRepostSchema();
-    await ensureTapeViewsSchema();
+    await ensureTapeViewEventsSchema();
     const userId = req.user.id;
     const limit = parseInt(req.query.limit, 10) || 5;
     const offset = parseInt(req.query.offset, 10) || 0;
@@ -749,7 +749,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
         )::int AS comment_count,
         (
           SELECT COUNT(*)::int
-          FROM tape_views tv
+          FROM tape_view_events tv
           WHERE tv.post_id = p.post_id
         ) AS view_count
 
@@ -856,7 +856,7 @@ router.post("/tapes/view", authenticateToken, async (req, res) => {
   }
 
   try {
-    await ensureTapeViewsSchema();
+    await ensureTapeViewEventsSchema();
 
     const postResult = await pool.query(
       `
@@ -880,9 +880,8 @@ router.post("/tapes/view", authenticateToken, async (req, res) => {
 
     await pool.query(
       `
-      INSERT INTO tape_views (post_id, viewer_id, viewed_at)
+      INSERT INTO tape_view_events (post_id, viewer_id, viewed_at)
       VALUES ($1, $2, NOW())
-      ON CONFLICT (post_id, viewer_id) DO NOTHING
       `,
       [postId, req.user.id]
     );
@@ -890,7 +889,7 @@ router.post("/tapes/view", authenticateToken, async (req, res) => {
     const countResult = await pool.query(
       `
       SELECT COUNT(*)::int AS view_count
-      FROM tape_views
+      FROM tape_view_events
       WHERE post_id = $1
       `,
       [postId]
