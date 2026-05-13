@@ -353,23 +353,19 @@ export default function GroupChat() {
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (headerMenuRef.current && !headerMenuRef.current.contains(event.target)) {
+      if (headerMenuOpen && headerMenuRef.current && !headerMenuRef.current.contains(event.target)) {
         setHeaderMenuOpen(false);
       }
 
-      if (!event.target.closest(".message-options-wrapper")) {
+      if (openMenuId && !event.target.closest(".message-options-wrapper")) {
         setOpenMenuId(null);
         setOpenMenuDirection("down");
-      }
-
-      if (!event.target.closest(".message-reaction-wrap")) {
-        return;
       }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [headerMenuOpen, openMenuId]);
 
   useEffect(() => {
     const closeOverlays = () => {
