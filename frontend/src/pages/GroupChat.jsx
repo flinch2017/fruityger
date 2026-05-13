@@ -58,6 +58,8 @@ export default function GroupChat() {
   const [membersTab, setMembersTab] = useState("members");
   const [membersPayload, setMembersPayload] = useState({ members: [], admins: [] });
   const [membersLoading, setMembersLoading] = useState(false);
+  const [pendingMemberAddRequests, setPendingMemberAddRequests] = useState([]);
+  const [pendingRequestsLoading, setPendingRequestsLoading] = useState(false);
   const [addMembersModalOpen, setAddMembersModalOpen] = useState(false);
   const [memberSearchQuery, setMemberSearchQuery] = useState("");
   const [memberSearchResults, setMemberSearchResults] = useState([]);
@@ -89,6 +91,7 @@ export default function GroupChat() {
   const requiresAdminTransferBeforeLeaving = isAdmin && adminCount === 1 && eligibleNextAdmins.length > 0;
   const memberAddRequiresAdminApproval = Boolean(groupChat?.member_add_requires_admin_approval);
   const canDirectlyAddMembers = isAdmin || !memberAddRequiresAdminApproval;
+  const canRequestAddMembers = !isAdmin && memberAddRequiresAdminApproval;
 
   const scrollToBottom = (behavior = "smooth") => {
     messagesContainerRef.current?.scrollTo({ top: 0, behavior });
@@ -625,25 +628,44 @@ export default function GroupChat() {
 
   const openMembersModal = async () => {
     setMembersLoading(true);
+    setPendingRequestsLoading(isAdmin);
     setMembersModalOpen(true);
     setHeaderMenuOpen(false);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/members`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to load group members");
-      }
+      const [membersRes, requestsRes] = await Promise.all([
+        fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/members`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        isAdmin
+          ? fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/member-add-requests`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+          : Promise.resolve(null),
+      ]);
 
-      applyMembersPayload(data);
+      const membersData = await membersRes.json().catch(() => ({}));
+      if (!membersRes.ok) {
+        throw new Error(membersData.error || "Failed to load group members");
+      }
+      applyMembersPayload(membersData);
+
+      if (isAdmin && requestsRes) {
+        const requestsData = await requestsRes.json().catch(() => ({}));
+        if (!requestsRes.ok) {
+          throw new Error(requestsData.error || "Failed to load member requests");
+        }
+        setPendingMemberAddRequests(Array.isArray(requestsData.requests) ? requestsData.requests : []);
+      } else {
+        setPendingMemberAddRequests([]);
+      }
     } catch (error) {
       console.error(error);
       setNotice({ type: "error", message: error.message || "Failed to load members." });
       setMembersModalOpen(false);
     } finally {
       setMembersLoading(false);
+      setPendingRequestsLoading(false);
     }
   };
 
@@ -654,7 +676,7 @@ export default function GroupChat() {
   };
 
   const openAddMembersModal = () => {
-    if (!canDirectlyAddMembers || actionLoading) return;
+    if ((!canDirectlyAddMembers && !canRequestAddMembers) || actionLoading) return;
     setAddMembersModalOpen(true);
     setHeaderMenuOpen(false);
     setMemberSearchQuery("");
@@ -762,12 +784,16 @@ export default function GroupChat() {
   };
 
   const submitAddMembers = async () => {
-    if (!canDirectlyAddMembers || addingMembers || selectedNewMembers.length === 0) return;
+    if ((!canDirectlyAddMembers && !canRequestAddMembers) || addingMembers || selectedNewMembers.length === 0) return;
 
     setAddingMembers(true);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/members`, {
+      const endpoint = canDirectlyAddMembers
+        ? `http://localhost:5000/api/messages/groups/chats/${groupChatId}/members`
+        : `http://localhost:5000/api/messages/groups/chats/${groupChatId}/member-add-requests`;
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -783,7 +809,11 @@ export default function GroupChat() {
         throw new Error(data.error || "Failed to add members");
       }
 
-      applyMembersPayload(data);
+      if (canDirectlyAddMembers) {
+        applyMembersPayload(data);
+      } else {
+        setNotice({ type: "success", message: "Request submitted. Admin approval is required." });
+      }
       setAddMembersModalOpen(false);
       setSelectedNewMembers([]);
       setMemberSearchResults([]);
@@ -794,6 +824,46 @@ export default function GroupChat() {
       setNotice({ type: "error", message: error.message || "Failed to add members." });
     } finally {
       setAddingMembers(false);
+    }
+  };
+
+  const reviewMemberAddRequest = async (requestId, action) => {
+    if (!isAdmin || actionLoading) return;
+
+    setActionLoading(true);
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/messages/groups/chats/${groupChatId}/member-add-requests/${requestId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ action }),
+        }
+      );
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to review member request");
+      }
+
+      setPendingMemberAddRequests((prev) => prev.filter((entry) => entry.id !== requestId));
+      const membersRes = await fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/members`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const membersData = await membersRes.json().catch(() => ({}));
+      if (membersRes.ok) {
+        applyMembersPayload(membersData);
+      }
+      dispatchMessagesRefresh();
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: error.message || "Failed to review member request." });
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -1074,9 +1144,9 @@ export default function GroupChat() {
               <button
                 className="chat-header-dropdown-item"
                 onClick={openAddMembersModal}
-                disabled={!canDirectlyAddMembers || actionLoading}
+                disabled={(!canDirectlyAddMembers && !canRequestAddMembers) || actionLoading}
               >
-                Add members
+                {canDirectlyAddMembers ? "Add members" : "Request add members"}
               </button>
               <button className="chat-header-dropdown-item danger" onClick={handleLeaveGroup} disabled={actionLoading}>
                 Leave group
@@ -1477,10 +1547,65 @@ export default function GroupChat() {
               >
                 Admins
               </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  className={`group-members-tab ${membersTab === "requests" ? "active" : ""}`}
+                  onClick={() => setMembersTab("requests")}
+                >
+                  Requests
+                </button>
+              )}
             </div>
 
             {membersLoading ? (
               <p className="message-reaction-modal-empty">Loading people...</p>
+            ) : membersTab === "requests" ? (
+              pendingRequestsLoading ? (
+                <p className="message-reaction-modal-empty">Loading requests...</p>
+              ) : pendingMemberAddRequests.length === 0 ? (
+                <p className="message-reaction-modal-empty">No pending member requests.</p>
+              ) : (
+                <div className="message-reaction-modal-list">
+                  {pendingMemberAddRequests.map((request) => (
+                    <div key={request.id} className="message-reaction-modal-item group-request-item">
+                      <div className="message-reaction-modal-user">
+                        <div className="message-reaction-modal-avatar">
+                          {request.requester?.profile_pic ? (
+                            <img src={getSafeMediaUrl(request.requester.profile_pic)} alt={request.requester.username} />
+                          ) : (
+                            <FaUserCircle />
+                          )}
+                        </div>
+                        <div className="message-reaction-modal-copy">
+                          <strong>{request.requester?.username || "Member"} requested</strong>
+                          <span>
+                            {(request.requested_members || []).map((member) => member.username).join(", ") || "No members"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="group-request-actions">
+                        <button
+                          type="button"
+                          className="message-reaction-remove-btn"
+                          onClick={() => reviewMemberAddRequest(request.id, "approve")}
+                          disabled={actionLoading}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          className="message-reaction-remove-btn"
+                          onClick={() => reviewMemberAddRequest(request.id, "reject")}
+                          disabled={actionLoading}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
             ) : (
               <div className="message-reaction-modal-list">
                 {(membersTab === "admins" ? membersPayload.admins : membersPayload.members).map((member) => (

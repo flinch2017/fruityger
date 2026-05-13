@@ -23,6 +23,7 @@ let deletedGroupChatsTableReadyPromise = null;
 let groupMessageRepliesSchemaReadyPromise = null;
 let groupMessageReactionsSchemaReadyPromise = null;
 let deletedGroupMessagesTableReadyPromise = null;
+let groupMemberAddRequestsSchemaReadyPromise = null;
 
 const CHAT_ATTACHMENT_MAX_SIZE = 5 * 1024 * 1024;
 const allowedDocumentExtensions = new Set([".pdf", ".docx"]);
@@ -465,6 +466,35 @@ async function ensureDeletedGroupMessagesTable() {
   }
 
   await deletedGroupMessagesTableReadyPromise;
+}
+
+async function ensureGroupMemberAddRequestsSchema() {
+  if (!groupMemberAddRequestsSchemaReadyPromise) {
+    groupMemberAddRequestsSchemaReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS group_member_add_requests (
+          id UUID PRIMARY KEY,
+          group_chat_id UUID NOT NULL REFERENCES group_chats(id) ON DELETE CASCADE,
+          requester_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          requested_member_ids UUID[] NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+          reviewed_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_group_member_add_requests_group_status
+        ON group_member_add_requests(group_chat_id, status, created_at DESC)
+      `);
+    })().catch((error) => {
+      groupMemberAddRequestsSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await groupMemberAddRequestsSchemaReadyPromise;
 }
 
 async function ensureGroupMessageRepliesSchema() {
@@ -2774,6 +2804,313 @@ router.patch("/groups/chats/:groupChatId/settings", authenticateToken, async (re
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Failed to update group settings" });
+  }
+});
+
+router.post("/groups/chats/:groupChatId/member-add-requests", authenticateToken, async (req, res) => {
+  const { groupChatId } = req.params;
+  const userId = req.user.id;
+  const rawMemberIds = Array.isArray(req.body?.memberIds) ? req.body.memberIds : [];
+  const memberIds = Array.from(new Set(rawMemberIds.map((id) => String(id || "").trim()).filter(Boolean)));
+
+  if (memberIds.length === 0) {
+    return res.status(400).json({ error: "Choose at least one member to request" });
+  }
+
+  try {
+    await ensureGroupChatSchema();
+    await ensureGroupMemberAddRequestsSchema();
+    await ensureBlockedUsersTable();
+
+    const groupResult = await pool.query(
+      `
+      SELECT admin_user_ids, member_add_requires_admin_approval
+      FROM group_chats
+      WHERE id = $1
+        AND EXISTS (
+          SELECT 1
+          FROM group_chat_members gcm
+          WHERE gcm.group_chat_id = group_chats.id
+            AND gcm.user_id = $2
+        )
+      LIMIT 1
+      `,
+      [groupChatId, userId]
+    );
+
+    if (groupResult.rows.length === 0) {
+      return res.status(404).json({ error: "Group chat not found" });
+    }
+
+    const group = groupResult.rows[0];
+    const requesterIsAdmin = (group.admin_user_ids || []).some(
+      (adminId) => String(adminId) === String(userId)
+    );
+
+    if (!group.member_add_requires_admin_approval) {
+      return res.status(400).json({ error: "Admin approval is not required for this group" });
+    }
+
+    if (requesterIsAdmin) {
+      return res.status(400).json({ error: "Admins can add members directly" });
+    }
+
+    const validUsersResult = await pool.query(
+      `
+      SELECT id
+      FROM users
+      WHERE id = ANY($1::uuid[])
+        AND deactivated_at IS NULL
+        AND deleted_at IS NULL
+      `,
+      [memberIds]
+    );
+    const validMemberIds = validUsersResult.rows.map((row) => String(row.id));
+
+    if (validMemberIds.length !== memberIds.length) {
+      return res.status(400).json({ error: "Some selected users are unavailable" });
+    }
+
+    const blockedResult = await pool.query(
+      `
+      SELECT target_id
+      FROM unnest($1::uuid[]) AS target_id
+      WHERE EXISTS (
+        SELECT 1
+        FROM blocked_users bu
+        WHERE (bu.blocker_id = $2 AND bu.blocked_id = target_id)
+           OR (bu.blocker_id = target_id AND bu.blocked_id = $2)
+      )
+      `,
+      [validMemberIds, userId]
+    );
+
+    if (blockedResult.rows.length > 0) {
+      return res.status(403).json({ error: "You cannot request blocked users" });
+    }
+
+    const requestId = uuidv4();
+
+    await pool.query(
+      `
+      INSERT INTO group_member_add_requests (
+        id,
+        group_chat_id,
+        requester_id,
+        requested_member_ids,
+        status,
+        created_at
+      )
+      VALUES ($1, $2, $3, $4::uuid[], 'pending', NOW())
+      `,
+      [requestId, groupChatId, userId, validMemberIds]
+    );
+
+    return res.status(201).json({ success: true, requestId });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to create add-member request" });
+  }
+});
+
+router.get("/groups/chats/:groupChatId/member-add-requests", authenticateToken, async (req, res) => {
+  const { groupChatId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await ensureGroupChatSchema();
+    await ensureGroupMemberAddRequestsSchema();
+
+    const groupResult = await pool.query(
+      `
+      SELECT admin_user_ids
+      FROM group_chats
+      WHERE id = $1
+        AND EXISTS (
+          SELECT 1
+          FROM group_chat_members gcm
+          WHERE gcm.group_chat_id = group_chats.id
+            AND gcm.user_id = $2
+        )
+      LIMIT 1
+      `,
+      [groupChatId, userId]
+    );
+
+    if (groupResult.rows.length === 0) {
+      return res.status(404).json({ error: "Group chat not found" });
+    }
+
+    const isAdmin = (groupResult.rows[0].admin_user_ids || []).some(
+      (adminId) => String(adminId) === String(userId)
+    );
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Only admins can view pending requests" });
+    }
+
+    const requestsResult = await pool.query(
+      `
+      SELECT
+        r.id,
+        r.requested_member_ids,
+        r.created_at,
+        requester.id AS requester_id,
+        requester.username AS requester_username,
+        requester.profile_pic AS requester_profile_pic
+      FROM group_member_add_requests r
+      JOIN users requester
+        ON requester.id = r.requester_id
+      WHERE r.group_chat_id = $1
+        AND r.status = 'pending'
+      ORDER BY r.created_at DESC
+      `,
+      [groupChatId]
+    );
+
+    const requests = [];
+
+    for (const row of requestsResult.rows) {
+      const requestedIds = Array.isArray(row.requested_member_ids) ? row.requested_member_ids : [];
+      const usersResult = await pool.query(
+        `
+        SELECT id, username, profile_pic
+        FROM users
+        WHERE id = ANY($1::uuid[])
+          AND deactivated_at IS NULL
+          AND deleted_at IS NULL
+        ORDER BY LOWER(username) ASC
+        `,
+        [requestedIds]
+      );
+
+      requests.push({
+        id: row.id,
+        created_at: row.created_at,
+        requester: {
+          id: row.requester_id,
+          username: row.requester_username,
+          profile_pic: row.requester_profile_pic,
+        },
+        requested_members: usersResult.rows,
+      });
+    }
+
+    return res.json({ requests });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to load add-member requests" });
+  }
+});
+
+router.patch("/groups/chats/:groupChatId/member-add-requests/:requestId", authenticateToken, async (req, res) => {
+  const { groupChatId, requestId } = req.params;
+  const userId = req.user.id;
+  const action = String(req.body?.action || "").toLowerCase();
+
+  if (!["approve", "reject"].includes(action)) {
+    return res.status(400).json({ error: "Invalid action" });
+  }
+
+  try {
+    await ensureGroupChatSchema();
+    await ensureGroupMemberAddRequestsSchema();
+    await ensureBlockedUsersTable();
+
+    const groupResult = await pool.query(
+      `
+      SELECT admin_user_ids
+      FROM group_chats
+      WHERE id = $1
+        AND EXISTS (
+          SELECT 1
+          FROM group_chat_members gcm
+          WHERE gcm.group_chat_id = group_chats.id
+            AND gcm.user_id = $2
+        )
+      LIMIT 1
+      `,
+      [groupChatId, userId]
+    );
+
+    if (groupResult.rows.length === 0) {
+      return res.status(404).json({ error: "Group chat not found" });
+    }
+
+    const isAdmin = (groupResult.rows[0].admin_user_ids || []).some(
+      (adminId) => String(adminId) === String(userId)
+    );
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Only admins can review requests" });
+    }
+
+    const requestResult = await pool.query(
+      `
+      SELECT requested_member_ids
+      FROM group_member_add_requests
+      WHERE id = $1
+        AND group_chat_id = $2
+        AND status = 'pending'
+      LIMIT 1
+      `,
+      [requestId, groupChatId]
+    );
+
+    if (requestResult.rows.length === 0) {
+      return res.status(404).json({ error: "Pending request not found" });
+    }
+
+    const requestedMemberIds = Array.isArray(requestResult.rows[0].requested_member_ids)
+      ? requestResult.rows[0].requested_member_ids.map((id) => String(id))
+      : [];
+
+    if (action === "approve" && requestedMemberIds.length > 0) {
+      const blockedResult = await pool.query(
+        `
+        SELECT target_id
+        FROM unnest($1::uuid[]) AS target_id
+        WHERE EXISTS (
+          SELECT 1
+          FROM blocked_users bu
+          WHERE (bu.blocker_id = $2 AND bu.blocked_id = target_id)
+             OR (bu.blocker_id = target_id AND bu.blocked_id = $2)
+        )
+        `,
+        [requestedMemberIds, userId]
+      );
+
+      if (blockedResult.rows.length > 0) {
+        return res.status(403).json({ error: "Cannot approve request containing blocked users" });
+      }
+
+      await pool.query(
+        `
+        INSERT INTO group_chat_members (group_chat_id, user_id, joined_at, last_read_at)
+        SELECT $1, member_id, NOW(), NOW()
+        FROM unnest($2::uuid[]) AS member_id
+        ON CONFLICT (group_chat_id, user_id) DO NOTHING
+        `,
+        [groupChatId, requestedMemberIds]
+      );
+    }
+
+    await pool.query(
+      `
+      UPDATE group_member_add_requests
+      SET status = $3,
+          reviewed_by = $4,
+          reviewed_at = NOW()
+      WHERE id = $1
+        AND group_chat_id = $2
+      `,
+      [requestId, groupChatId, action === "approve" ? "approved" : "rejected", userId]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to review request" });
   }
 });
 
