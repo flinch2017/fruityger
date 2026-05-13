@@ -20,6 +20,7 @@ export default function Feed() {
   const repostDropdownRef = useRef(null);
   const gestureAxisRef = useRef(null);
   const videoTapStartRef = useRef(null);
+  const feedVideoWatchStateRef = useRef({});
 
   const [posts, setPosts] = useState([]);
   const [activeIndexMap, setActiveIndexMap] = useState({});
@@ -617,6 +618,139 @@ export default function Feed() {
     handleOpenTapeFeed(post);
   };
 
+  const getFeedVideoWatchKey = (postId, mediaIndex) => `${postId}-${mediaIndex}`;
+
+  const recordFeedVideoCompletedView = async (postId) => {
+    const token = localStorage.getItem("token");
+    if (!token || !postId) return;
+
+    try {
+      const res = await fetch("http://localhost:5000/api/main/tapes/view", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ postId }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to record tape view");
+      }
+
+      if (typeof data.view_count === "number") {
+        setPosts((prev) =>
+          prev.map((post) =>
+            post.post_id === postId
+              ? {
+                  ...post,
+                  view_count: data.view_count,
+                }
+              : post
+          )
+        );
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleFeedVideoPlay = (postId, mediaIndex, event) => {
+    const video = event?.currentTarget;
+    if (!video) return;
+    const key = getFeedVideoWatchKey(postId, mediaIndex);
+    const state = feedVideoWatchStateRef.current[key] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
+    };
+
+    const isNearStart = video.currentTime <= 0.35;
+    const canStartCycle = state.completedCount === 0 || state.manualReplayArmed;
+    if (isNearStart && canStartCycle) {
+      state.startedFromBeginning = true;
+      state.completionSent = false;
+      state.startTimestampMs = Date.now();
+      if (state.completedCount > 0) {
+        state.manualReplayArmed = false;
+      }
+      feedVideoWatchStateRef.current[key] = state;
+    }
+  };
+
+  const handleFeedVideoProgress = (postId, mediaIndex, event) => {
+    const video = event?.currentTarget;
+    if (!video) return;
+
+    const duration = Number(video.duration);
+    const currentTime = Number(video.currentTime);
+    if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(currentTime)) return;
+
+    const key = getFeedVideoWatchKey(postId, mediaIndex);
+    const state = feedVideoWatchStateRef.current[key] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
+    };
+    const elapsedMs = state.startTimestampMs > 0 ? Date.now() - state.startTimestampMs : 0;
+    const minimumWatchMs = Math.max(duration * 500, 1500);
+
+    if (
+      currentTime >= duration - 0.2 &&
+      state.startedFromBeginning &&
+      !state.completionSent &&
+      elapsedMs >= minimumWatchMs
+    ) {
+      state.completionSent = true;
+      state.completedCount = Number(state.completedCount || 0) + 1;
+      feedVideoWatchStateRef.current[key] = state;
+      recordFeedVideoCompletedView(postId);
+    }
+  };
+
+  const handleFeedVideoEnded = (postId, mediaIndex, event) => {
+    const key = getFeedVideoWatchKey(postId, mediaIndex);
+    const state = feedVideoWatchStateRef.current[key] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
+    };
+    state.startedFromBeginning = false;
+    state.startTimestampMs = 0;
+    if (state.completedCount > 0) {
+      state.manualReplayArmed = false;
+    }
+    feedVideoWatchStateRef.current[key] = state;
+
+    const video = event?.currentTarget;
+    if (video) {
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    }
+  };
+
+  const handleFeedVideoManualReplayIntent = (postId, mediaIndex) => {
+    const key = getFeedVideoWatchKey(postId, mediaIndex);
+    const state = feedVideoWatchStateRef.current[key] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
+    };
+    if (state.completedCount > 0) {
+      state.manualReplayArmed = true;
+      feedVideoWatchStateRef.current[key] = state;
+    }
+  };
+
   return (
     <main className="feed-page">
       {deleteModal.visible && (
@@ -874,14 +1008,22 @@ export default function Feed() {
                             }}
                             src={getSafeMediaUrl(media.media_url)}
                             playsInline
-                            loop
                             muted={videoMutedMap[getVideoControlKey(post.post_id, index)] ?? true}
                             preload="metadata"
                             className="feed-auto-video"
+                            onPlay={(event) => handleFeedVideoPlay(post.post_id, index, event)}
+                            onTimeUpdate={(event) => handleFeedVideoProgress(post.post_id, index, event)}
+                            onEnded={(event) => handleFeedVideoEnded(post.post_id, index, event)}
                             onMouseDown={handleVideoTapStart}
-                            onMouseUp={(event) => handleVideoTapEnd(event, post)}
+                            onMouseUp={(event) => {
+                              handleFeedVideoManualReplayIntent(post.post_id, index);
+                              handleVideoTapEnd(event, post);
+                            }}
                             onTouchStart={handleVideoTapStart}
-                            onTouchEnd={(event) => handleVideoTapEnd(event, post)}
+                            onTouchEnd={(event) => {
+                              handleFeedVideoManualReplayIntent(post.post_id, index);
+                              handleVideoTapEnd(event, post);
+                            }}
                           />
                         </>
                       ) : (
