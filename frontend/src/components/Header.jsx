@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   FaBell,
   FaCog,
@@ -571,20 +571,32 @@ export default function Header() {
               )}
             </div>
 
-            <button
-              className={`nav-button ${location.pathname === "/feed" ? "active" : ""}`}
-              onClick={handleFeedNav}
+            <NavLink
+              to={`/feed?mode=${feedMode}`}
+              className={({ isActive }) => `nav-button ${isActive ? "active" : ""}`}
+              onClick={(event) => {
+                if (location.pathname === "/feed") {
+                  event.preventDefault();
+                  handleFeedNav();
+                }
+              }}
             >
               <FaHome />
-            </button>
+            </NavLink>
 
-            <button
-              className={`nav-button nav-button-tapes ${location.pathname === "/tapes" ? "active" : ""}`}
-              onClick={handleTapesNav}
+            <NavLink
+              to={`/tapes?mode=${feedMode}`}
+              className={({ isActive }) => `nav-button nav-button-tapes ${isActive ? "active" : ""}`}
+              onClick={(event) => {
+                if (location.pathname === "/tapes") {
+                  event.preventDefault();
+                  handleTapesNav();
+                }
+              }}
               title="Tapes"
             >
               <FaPlayCircle />
-            </button>
+            </NavLink>
 
             <button
               className="nav-button mobile-search-btn"
@@ -593,9 +605,9 @@ export default function Header() {
               <FaSearch />
             </button>
 
-            <button
-              className={`nav-button nav-button-bell ${location.pathname === "/notifications" ? "active" : ""}`}
-              onClick={() => navigate("/notifications")}
+            <NavLink
+              to="/notifications"
+              className={({ isActive }) => `nav-button nav-button-bell ${isActive ? "active" : ""}`}
             >
               <FaBell />
               {notificationUnreadCount > 0 && (
@@ -603,11 +615,11 @@ export default function Header() {
                   {notificationUnreadCount > 9 ? "9+" : notificationUnreadCount}
                 </span>
               )}
-            </button>
+            </NavLink>
 
-            <button
-              className={`nav-button nav-button-message ${location.pathname === "/messages" ? "active" : ""}`}
-              onClick={() => navigate("/messages")}
+            <NavLink
+              to="/messages"
+              className={({ isActive }) => `nav-button nav-button-message ${isActive ? "active" : ""}`}
             >
               <FaEnvelope />
               {messageUnreadCount > 0 && (
@@ -615,7 +627,7 @@ export default function Header() {
                   {messageUnreadCount > 9 ? "9+" : messageUnreadCount}
                 </span>
               )}
-            </button>
+            </NavLink>
 
             <div className="profile-container" ref={profileRef}>
               <div className="profile-placeholder" onClick={toggleDropdown}>
