@@ -477,12 +477,21 @@ export default function TapesFeed() {
       startedFromBeginning: false,
       completionSent: false,
       startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
     };
 
-    if (video.currentTime <= 0.35) {
+    const isNearStart = video.currentTime <= 0.35;
+    const canStartCycle =
+      state.completedCount === 0 || state.manualReplayArmed;
+
+    if (isNearStart && canStartCycle) {
       state.startedFromBeginning = true;
       state.completionSent = false;
       state.startTimestampMs = Date.now();
+      if (state.completedCount > 0) {
+        state.manualReplayArmed = false;
+      }
       watchCycleStateRef.current[postId] = state;
     }
   };
@@ -500,6 +509,8 @@ export default function TapesFeed() {
       startedFromBeginning: false,
       completionSent: false,
       startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
     };
     const elapsedMs = state.startTimestampMs > 0 ? Date.now() - state.startTimestampMs : 0;
     const minimumWatchMs = Math.max(duration * 500, 1500);
@@ -511,6 +522,7 @@ export default function TapesFeed() {
       elapsedMs >= minimumWatchMs
     ) {
       state.completionSent = true;
+      state.completedCount = Number(state.completedCount || 0) + 1;
       watchCycleStateRef.current[postId] = state;
       recordCompletedView(postId);
     }
@@ -521,10 +533,30 @@ export default function TapesFeed() {
       startedFromBeginning: false,
       completionSent: false,
       startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
     };
     state.startedFromBeginning = false;
     state.startTimestampMs = 0;
+    // After first completion, replays must be explicitly user-initiated.
+    if (state.completedCount > 0) {
+      state.manualReplayArmed = false;
+    }
     watchCycleStateRef.current[postId] = state;
+  };
+
+  const handleTapeManualReplayIntent = (postId) => {
+    const state = watchCycleStateRef.current[postId] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
+    };
+    if (state.completedCount > 0) {
+      state.manualReplayArmed = true;
+      watchCycleStateRef.current[postId] = state;
+    }
   };
 
   const promptDeletePost = (postId) => {
@@ -678,6 +710,7 @@ export default function TapesFeed() {
                   onPlay={(event) => handleTapePlay(tape.post_id, event)}
                   onTimeUpdate={(event) => handleTapeProgress(tape.post_id, event)}
                   onEnded={() => handleTapeEnded(tape.post_id)}
+                  onClick={() => handleTapeManualReplayIntent(tape.post_id)}
                 />
                 <div className="tape-gradient"></div>
                 {(videoMutedMap[tape.post_id] ?? true) && (
