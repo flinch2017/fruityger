@@ -528,7 +528,7 @@ export default function TapesFeed() {
     }
   };
 
-  const handleTapeEnded = (postId) => {
+  const handleTapeEnded = (postId, event) => {
     const state = watchCycleStateRef.current[postId] || {
       startedFromBeginning: false,
       completionSent: false,
@@ -543,6 +543,13 @@ export default function TapesFeed() {
       state.manualReplayArmed = false;
     }
     watchCycleStateRef.current[postId] = state;
+
+    // Keep tape playback continuous without treating autoplay repeats as valid views.
+    const video = event?.currentTarget;
+    if (video) {
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    }
   };
 
   const handleTapeManualReplayIntent = (postId) => {
@@ -709,7 +716,7 @@ export default function TapesFeed() {
                   preload="auto"
                   onPlay={(event) => handleTapePlay(tape.post_id, event)}
                   onTimeUpdate={(event) => handleTapeProgress(tape.post_id, event)}
-                  onEnded={() => handleTapeEnded(tape.post_id)}
+                  onEnded={(event) => handleTapeEnded(tape.post_id, event)}
                   onClick={() => handleTapeManualReplayIntent(tape.post_id)}
                 />
                 <div className="tape-gradient"></div>
