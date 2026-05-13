@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+ï»¿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   FaArrowLeft,
@@ -1050,7 +1050,7 @@ export default function GroupChat() {
           <strong>{message.attachment_name || "Attachment"}</strong>
           <span>
             {getAttachmentKindLabel(message)}
-            {message.attachment_size ? ` · ${formatFileSize(message.attachment_size)}` : ""}
+            {message.attachment_size ? ` Â· ${formatFileSize(message.attachment_size)}` : ""}
           </span>
         </span>
       </a>
@@ -1097,7 +1097,7 @@ export default function GroupChat() {
           </div>
           <div className="chat-user-heading">
             <h3>{groupChat?.group_name || "Group chat"}</h3>
-            <span className="chat-user-status">{memberCount} members · {memberPreview}</span>
+            <span className="chat-user-status">{memberCount} members Â· {memberPreview}</span>
           </div>
         </div>
 
@@ -1194,27 +1194,31 @@ export default function GroupChat() {
                     </div>
                   )}
 
-                  <button
-                    type="button"
-                    className="message-reply-btn"
-                    onClick={() => setReplyingTo(msg)}
-                    aria-label="Reply to message"
-                    title="Reply"
-                  >
-                    <FaReply />
-                  </button>
-
-                  <div className="message-reaction-wrap">
+                  {isMine && (
                     <button
                       type="button"
-                      className="message-reaction-trigger"
-                      onClick={() => setReactionTargetMessage(msg)}
-                      aria-label="React to message"
-                      title="React"
+                      className="message-reply-btn"
+                      onClick={() => setReplyingTo(msg)}
+                      aria-label="Reply to message"
+                      title="Reply"
                     >
-                      <FaRegSmileBeam />
+                      <FaReply />
                     </button>
-                  </div>
+                  )}
+
+                  {isMine && (
+                    <div className="message-reaction-wrap">
+                      <button
+                        type="button"
+                        className="message-reaction-trigger"
+                        onClick={() => setReactionTargetMessage(msg)}
+                        aria-label="React to message"
+                        title="React"
+                      >
+                        <FaRegSmileBeam />
+                      </button>
+                    </div>
+                  )}
 
                   <div className={bubbleClass}>
                     {!isMine && (
@@ -1241,6 +1245,32 @@ export default function GroupChat() {
                     {renderMessageAttachment(msg)}
                     {msg.content ? <div className="message-bubble-text">{msg.content}</div> : null}
                   </div>
+
+                  {!isMine && (
+                    <div className="message-reaction-wrap">
+                      <button
+                        type="button"
+                        className="message-reaction-trigger"
+                        onClick={() => setReactionTargetMessage(msg)}
+                        aria-label="React to message"
+                        title="React"
+                      >
+                        <FaRegSmileBeam />
+                      </button>
+                    </div>
+                  )}
+
+                  {!isMine && (
+                    <button
+                      type="button"
+                      className="message-reply-btn"
+                      onClick={() => setReplyingTo(msg)}
+                      aria-label="Reply to message"
+                      title="Reply"
+                    >
+                      <FaReply />
+                    </button>
+                  )}
 
                   {!isMine && (
                     <div className="message-options-wrapper">
@@ -1826,3 +1856,4 @@ export default function GroupChat() {
     </div>
   );
 }
+
