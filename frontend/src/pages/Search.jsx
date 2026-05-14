@@ -23,6 +23,8 @@ export default function Search() {
   const dropdownRef = useRef(null);
   const repostDropdownRef = useRef(null);
   const gestureAxisRef = useRef(null);
+  const videoTapStartRef = useRef(null);
+  const searchVideoWatchStateRef = useRef({});
   const currentUserId = localStorage.getItem("userId");
 
   const [activeTab, setActiveTab] = useState("profiles");
@@ -168,6 +170,173 @@ export default function Search() {
   const handlePointerEnd = () => {
     gestureAxisRef.current = null;
     setDragging(false);
+  };
+
+  const handleOpenTapeFeed = (post) => {
+    if (!post?.post_id) return;
+    const params = new URLSearchParams();
+    params.set("mode", "discover");
+    params.set("start", post.post_id);
+    navigate(`/tapes?${params.toString()}`, {
+      state: { seedTape: post },
+    });
+  };
+
+  const handleVideoTapStart = (event) => {
+    const point = event.touches?.[0] || event;
+    videoTapStartRef.current = {
+      x: point.clientX,
+      y: point.clientY,
+      time: Date.now(),
+    };
+  };
+
+  const handleVideoTapEnd = (event, post) => {
+    const start = videoTapStartRef.current;
+    videoTapStartRef.current = null;
+    if (!start) return;
+
+    const point = event.changedTouches?.[0] || event;
+    const dx = Math.abs(point.clientX - start.x);
+    const dy = Math.abs(point.clientY - start.y);
+    const elapsed = Date.now() - start.time;
+
+    if (dx > 10 || dy > 10 || elapsed > 450) return;
+    handleOpenTapeFeed(post);
+  };
+
+  const getSearchVideoWatchKey = (postId, mediaIndex) => `${postId}-${mediaIndex}`;
+
+  const recordSearchVideoCompletedView = async (postId) => {
+    const token = localStorage.getItem("token");
+    if (!token || !postId) return;
+
+    try {
+      const res = await fetch("http://localhost:5000/api/main/tapes/view", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ postId })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to record tape view");
+      }
+
+      if (typeof data.view_count === "number") {
+        setResult((prev) => ({
+          ...prev,
+          posts: prev.posts.map((post) =>
+            post.post_id === postId
+              ? {
+                  ...post,
+                  view_count: data.view_count
+                }
+              : post
+          )
+        }));
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleSearchVideoPlay = (postId, mediaIndex, event) => {
+    const video = event?.currentTarget;
+    if (!video) return;
+    const key = getSearchVideoWatchKey(postId, mediaIndex);
+    const state = searchVideoWatchStateRef.current[key] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
+    };
+
+    const isNearStart = video.currentTime <= 0.35;
+    const canStartCycle = state.completedCount === 0 || state.manualReplayArmed;
+    if (isNearStart && canStartCycle) {
+      state.startedFromBeginning = true;
+      state.completionSent = false;
+      state.startTimestampMs = Date.now();
+      if (state.completedCount > 0) {
+        state.manualReplayArmed = false;
+      }
+      searchVideoWatchStateRef.current[key] = state;
+    }
+  };
+
+  const handleSearchVideoProgress = (postId, mediaIndex, event) => {
+    const video = event?.currentTarget;
+    if (!video) return;
+
+    const duration = Number(video.duration);
+    const currentTime = Number(video.currentTime);
+    if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(currentTime)) return;
+
+    const key = getSearchVideoWatchKey(postId, mediaIndex);
+    const state = searchVideoWatchStateRef.current[key] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
+    };
+    const elapsedMs = state.startTimestampMs > 0 ? Date.now() - state.startTimestampMs : 0;
+    const minimumWatchMs = Math.max(duration * 500, 1500);
+
+    if (
+      currentTime >= duration - 0.2 &&
+      state.startedFromBeginning &&
+      !state.completionSent &&
+      elapsedMs >= minimumWatchMs
+    ) {
+      state.completionSent = true;
+      state.completedCount = Number(state.completedCount || 0) + 1;
+      searchVideoWatchStateRef.current[key] = state;
+      recordSearchVideoCompletedView(postId);
+    }
+  };
+
+  const handleSearchVideoEnded = (postId, mediaIndex, event) => {
+    const key = getSearchVideoWatchKey(postId, mediaIndex);
+    const state = searchVideoWatchStateRef.current[key] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
+    };
+    state.startedFromBeginning = false;
+    state.startTimestampMs = 0;
+    if (state.completedCount > 0) {
+      state.manualReplayArmed = false;
+    }
+    searchVideoWatchStateRef.current[key] = state;
+
+    const video = event?.currentTarget;
+    if (video) {
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    }
+  };
+
+  const handleSearchVideoManualReplayIntent = (postId, mediaIndex) => {
+    const key = getSearchVideoWatchKey(postId, mediaIndex);
+    const state = searchVideoWatchStateRef.current[key] || {
+      startedFromBeginning: false,
+      completionSent: false,
+      startTimestampMs: 0,
+      completedCount: 0,
+      manualReplayArmed: false,
+    };
+    if (state.completedCount > 0) {
+      state.manualReplayArmed = true;
+      searchVideoWatchStateRef.current[key] = state;
+    }
   };
 
   useEffect(() => {
@@ -719,10 +888,22 @@ export default function Search() {
                                       }}
                                       src={getSafeMediaUrl(media.media_url)}
                                       playsInline
-                                      loop
                                       muted={videoMutedMap[getVideoControlKey(p.post_id, index)] ?? true}
                                       preload="metadata"
                                       className="search-post-video"
+                                      onPlay={(event) => handleSearchVideoPlay(p.post_id, index, event)}
+                                      onTimeUpdate={(event) => handleSearchVideoProgress(p.post_id, index, event)}
+                                      onEnded={(event) => handleSearchVideoEnded(p.post_id, index, event)}
+                                      onMouseDown={handleVideoTapStart}
+                                      onMouseUp={(event) => {
+                                        handleSearchVideoManualReplayIntent(p.post_id, index);
+                                        handleVideoTapEnd(event, p);
+                                      }}
+                                      onTouchStart={handleVideoTapStart}
+                                      onTouchEnd={(event) => {
+                                        handleSearchVideoManualReplayIntent(p.post_id, index);
+                                        handleVideoTapEnd(event, p);
+                                      }}
                                     />
                                   </>
                                 ) : (
