@@ -67,6 +67,7 @@ html, body {
   font-weight: 500;
   padding: 4px 8px;
   border-radius: 12px;
+  cursor: pointer;
   transition: all 0.2s ease;
 }
 
@@ -130,6 +131,7 @@ html, body {
   color: #0077aa;
   text-decoration: none;
   font-weight: 500;
+  cursor: pointer;
 }
 
 .welcome-drawer-links a:hover {

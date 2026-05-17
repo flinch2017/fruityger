@@ -24,18 +24,13 @@ export default function Welcome() {
 
             <div className="welcome-buttons">
               <button className="welcome-primary-btn" onClick={() => navigate("/signup")}>
-                Start your glow
+                Sign up now
               </button>
               <button className="welcome-secondary-btn" onClick={() => navigate("/login")}>
                 I already have an account
               </button>
             </div>
 
-            <div className="welcome-feature-row">
-              <div className="welcome-feature-pill">Glassy profiles</div>
-              <div className="welcome-feature-pill">Soft motion</div>
-              <div className="welcome-feature-pill">Cute communities</div>
-            </div>
           </div>
 
           <div className="welcome-scene" aria-hidden="true">
@@ -56,11 +51,6 @@ export default function Welcome() {
               <span className="character-mouth smile"></span>
               <span className="character-cheek cheek-left"></span>
               <span className="character-cheek cheek-right"></span>
-            </div>
-            <div className="welcome-mini-bubbles">
-              <span></span>
-              <span></span>
-              <span></span>
             </div>
           </div>
         </div>
