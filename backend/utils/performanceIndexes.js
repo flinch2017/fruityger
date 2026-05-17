@@ -31,7 +31,13 @@ export async function ensurePerformanceIndexes() {
         `CREATE INDEX IF NOT EXISTS idx_blocked_users_blocked_blocker ON blocked_users(blocked_id, blocker_id)`,
         `CREATE INDEX IF NOT EXISTS idx_hashtags_tag ON hashtags(tag)`,
         `CREATE INDEX IF NOT EXISTS idx_post_hashtags_post_id ON post_hashtags(post_id)`,
-        `CREATE INDEX IF NOT EXISTS idx_post_hashtags_hashtag_id ON post_hashtags(hashtag_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_post_hashtags_tag ON post_hashtags(tag)`,
+        `CREATE INDEX IF NOT EXISTS idx_post_hashtags_tag_post_id ON post_hashtags(tag, post_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_likes_liker ON likes(liker)`,
+        `CREATE INDEX IF NOT EXISTS idx_comments_user_id_post_id ON comments(user_id, post_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_reposts_user_id_post_id ON reposts(user_id, post_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_users_active_interest_rows ON users(id) WHERE deactivated_at IS NULL AND deleted_at IS NULL`,
+        `CREATE INDEX IF NOT EXISTS idx_users_interests_gin ON users USING GIN (interests)`,
       ];
 
       for (const statement of statements) {

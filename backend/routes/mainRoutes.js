@@ -7,6 +7,7 @@ import { ensureUserOnboardingSchema, normalizeInterests } from "../utils/userOnb
 import { ensureRepostSchema } from "../utils/reposts.js";
 import { ensurePushNotificationSubscriptionsTable } from "../utils/notifications.js";
 import { ensureTapeViewEventsSchema } from "../utils/tapeViewEvents.js";
+import { ensureHashtagSchema } from "../utils/hashtags.js";
 
 const router = express.Router();
 
@@ -623,6 +624,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
     await ensureBlockedUsersTable();
     await ensureRepostSchema();
     await ensureTapeViewEventsSchema();
+    await ensureHashtagSchema();
     const userId = req.user.id;
     const limit = parseInt(req.query.limit, 10) || 5;
     const offset = parseInt(req.query.offset, 10) || 0;
@@ -694,7 +696,172 @@ router.get("/feed", authenticateToken, async (req, res) => {
       ) DESC,
       COALESCE(latest_repost.reposted_at, p.date_posted) DESC
           `
-        : `COALESCE(latest_repost.reposted_at, p.date_posted) DESC`;
+        : mode === "discover"
+          ? `
+      (
+        (CASE
+          WHEN p.user_id IN (
+            SELECT following_id
+            FROM follows
+            WHERE follower_id = $1
+          ) THEN 8
+          ELSE 0
+        END)
+        + (
+          LEAST((
+            SELECT COUNT(*)::numeric
+            FROM likes l2
+            WHERE l2.post_id = p.post_id
+          ), 250) * 0.28
+        )
+        + (
+          LEAST((
+            SELECT COUNT(*)::numeric
+            FROM comments c2
+            WHERE c2.post_id = p.post_id
+          ), 140) * 0.62
+        )
+        + (
+          LEAST((
+            SELECT COUNT(*)::numeric
+            FROM reposts r2
+            WHERE r2.post_id = p.post_id
+          ), 100) * 0.95
+        )
+        + (
+          (
+            SELECT COUNT(*)::numeric
+            FROM post_hashtags ph
+            JOIN LATERAL (
+              SELECT LOWER(TRIM(value)) AS term
+              FROM jsonb_array_elements_text(
+                COALESCE((SELECT interests FROM users WHERE id = $1), '[]'::jsonb)
+              ) AS value
+            ) user_interest_terms
+              ON ph.tag = REPLACE(user_interest_terms.term, ' ', '_')
+            WHERE ph.post_id = p.post_id
+          ) * 3.2
+        )
+        + (
+          (
+            SELECT COUNT(*)::numeric
+            FROM LATERAL (
+              SELECT LOWER(TRIM(value)) AS term
+              FROM jsonb_array_elements_text(
+                COALESCE((SELECT interests FROM users WHERE id = $1), '[]'::jsonb)
+              ) AS value
+            ) user_interest_terms
+            WHERE user_interest_terms.term <> ''
+              AND POSITION(user_interest_terms.term IN LOWER(COALESCE(p.caption, ''))) > 0
+          ) * 1.8
+        )
+        + (
+          (
+            SELECT COUNT(*)::numeric
+            FROM likes l3
+            JOIN posts p3 ON p3.post_id = l3.post_id
+            WHERE l3.liker = $1
+              AND p3.user_id = p.user_id
+          ) * 0.9
+        )
+        + (
+          (
+            SELECT COUNT(*)::numeric
+            FROM comments c3
+            JOIN posts p4 ON p4.post_id = c3.post_id
+            WHERE c3.user_id = $1
+              AND p4.user_id = p.user_id
+          ) * 0.9
+        )
+        + (
+          (
+            SELECT COUNT(*)::numeric
+            FROM reposts r3
+            JOIN posts p5 ON p5.post_id = r3.post_id
+            WHERE r3.user_id = $1
+              AND p5.user_id = p.user_id
+          ) * 1.1
+        )
+        + (
+          (
+            SELECT COUNT(*)::numeric
+            FROM likes l4
+            WHERE l4.post_id = p.post_id
+              AND l4.liker IN (
+                SELECT DISTINCT u2.id
+                FROM users u2
+                WHERE u2.id <> $1
+                  AND u2.deactivated_at IS NULL
+                  AND u2.deleted_at IS NULL
+                  AND EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements_text(COALESCE(u2.interests, '[]'::jsonb)) i2(value)
+                    WHERE LOWER(TRIM(i2.value)) IN (
+                      SELECT LOWER(TRIM(i1.value))
+                      FROM jsonb_array_elements_text(
+                        COALESCE((SELECT interests FROM users WHERE id = $1), '[]'::jsonb)
+                      ) i1(value)
+                    )
+                  )
+              )
+          ) * 0.34
+        )
+        + (
+          (
+            SELECT COUNT(*)::numeric
+            FROM comments c4
+            WHERE c4.post_id = p.post_id
+              AND c4.user_id IN (
+                SELECT DISTINCT u2.id
+                FROM users u2
+                WHERE u2.id <> $1
+                  AND u2.deactivated_at IS NULL
+                  AND u2.deleted_at IS NULL
+                  AND EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements_text(COALESCE(u2.interests, '[]'::jsonb)) i2(value)
+                    WHERE LOWER(TRIM(i2.value)) IN (
+                      SELECT LOWER(TRIM(i1.value))
+                      FROM jsonb_array_elements_text(
+                        COALESCE((SELECT interests FROM users WHERE id = $1), '[]'::jsonb)
+                      ) i1(value)
+                    )
+                  )
+              )
+          ) * 0.34
+        )
+        + (
+          (
+            SELECT COUNT(*)::numeric
+            FROM reposts r4
+            WHERE r4.post_id = p.post_id
+              AND r4.user_id IN (
+                SELECT DISTINCT u2.id
+                FROM users u2
+                WHERE u2.id <> $1
+                  AND u2.deactivated_at IS NULL
+                  AND u2.deleted_at IS NULL
+                  AND EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements_text(COALESCE(u2.interests, '[]'::jsonb)) i2(value)
+                    WHERE LOWER(TRIM(i2.value)) IN (
+                      SELECT LOWER(TRIM(i1.value))
+                      FROM jsonb_array_elements_text(
+                        COALESCE((SELECT interests FROM users WHERE id = $1), '[]'::jsonb)
+                      ) i1(value)
+                    )
+                  )
+              )
+          ) * 0.5
+        )
+        - (
+          EXTRACT(EPOCH FROM (NOW() - COALESCE(latest_repost.reposted_at, p.date_posted))) / 21600.0
+        )
+        + (RANDOM() * 0.42)
+      ) DESC,
+      COALESCE(latest_repost.reposted_at, p.date_posted) DESC
+          `
+          : `COALESCE(latest_repost.reposted_at, p.date_posted) DESC`;
 
     const queryParams =
       surface === "tapes"
