@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/CreateTape.css";
 import { useUploadManager } from "../context/UploadManagerContext";
+import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 const MAX_HASHTAGS = 5;
 const HASHTAG_MATCHER = /#[A-Za-z0-9_]+/g;
