@@ -26,8 +26,8 @@ export default function CommentSheet({
   const navigate = useNavigate();
   const historyMarkerRef = useRef(`comment-sheet-${postId}-${Date.now()}`);
   const closeHandledRef = useRef(false);
-  const closeFallbackTimerRef = useRef(null);
   const overlayHashRef = useRef(`#comments-${postId}`);
+  const baseUrlRef = useRef(`${window.location.pathname}${window.location.search}`);
 
   const [comments, setComments] = useState([]);
   const [text, setText] = useState("");
@@ -82,6 +82,7 @@ export default function CommentSheet({
 
   useEffect(() => {
     const currentUrl = `${window.location.pathname}${window.location.search}`;
+    baseUrlRef.current = currentUrl;
     const nextState = {
       ...(window.history.state || {}),
       __commentSheet: historyMarkerRef.current,
@@ -98,35 +99,25 @@ export default function CommentSheet({
 
     return () => {
       window.removeEventListener("popstate", handlePopState);
-      if (closeFallbackTimerRef.current) {
-        window.clearTimeout(closeFallbackTimerRef.current);
-        closeFallbackTimerRef.current = null;
-      }
     };
   }, [onClose]);
 
   const requestClose = () => {
     if (closeHandledRef.current) {
-      onClose();
-      return;
-    }
-
-    const currentState = window.history.state || {};
-
-    if (
-      currentState.__commentSheet === historyMarkerRef.current ||
-      window.location.hash === overlayHashRef.current
-    ) {
-      closeHandledRef.current = true;
-      window.history.back();
-      closeFallbackTimerRef.current = window.setTimeout(() => {
-        onClose();
-      }, 120);
       return;
     }
 
     closeHandledRef.current = true;
+
+    // Close immediately for first tap reliability on mobile.
     onClose();
+
+    // Keep URL clean without requiring history.back() timing.
+    if (window.location.hash === overlayHashRef.current) {
+      const nextState = { ...(window.history.state || {}) };
+      delete nextState.__commentSheet;
+      window.history.replaceState(nextState, "", baseUrlRef.current);
+    }
   };
 
 
