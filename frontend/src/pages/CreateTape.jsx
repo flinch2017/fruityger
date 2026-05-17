@@ -366,7 +366,16 @@ export default function CreateTape() {
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => applyMentionSuggestion(item.username)}
                       >
-                        <strong>@{item.username}</strong>
+                        <span className="mention-suggest-main">
+                          <span className="mention-suggest-avatar" aria-hidden="true">
+                            {item.profile_pic ? (
+                              <img src={getSafeMediaUrl(item.profile_pic)} alt="" />
+                            ) : (
+                              (item.username || "?").slice(0, 1).toUpperCase()
+                            )}
+                          </span>
+                          <strong>@{item.username}</strong>
+                        </span>
                         <span>Profile</span>
                       </button>
                     ))}

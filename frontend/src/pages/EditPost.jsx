@@ -1,17 +1,32 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import "../css/EditProfile.css";
 import "../css/EditPost.css";
+import { getSafeMediaUrl } from "../utils/mediaUrl";
+
+const getActiveMentionQuery = (text = "", cursor = 0) => {
+  const uptoCursor = String(text).slice(0, cursor);
+  const match = uptoCursor.match(/(?:^|\s)@([A-Za-z0-9._]*)$/);
+  if (!match) return null;
+
+  const query = match[1] || "";
+  const start = uptoCursor.length - query.length - 1;
+  return { query: query.toLowerCase(), start, end: cursor };
+};
 
 export default function EditPost() {
   const navigate = useNavigate();
   const location = useLocation();
   const { postId } = useParams();
+  const textareaRef = useRef(null);
 
   const [caption, setCaption] = useState(location.state?.post?.caption || "");
   const [loading, setLoading] = useState(!location.state?.post);
   const [saving, setSaving] = useState(false);
   const [alert, setAlert] = useState({ message: "", type: "" });
+  const [mentionSuggestions, setMentionSuggestions] = useState([]);
+  const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+  const [activeMentionRange, setActiveMentionRange] = useState(null);
 
   const showAlert = (message, type = "success", duration = 3000) => {
     setAlert({ message, type });
@@ -51,6 +66,54 @@ export default function EditPost() {
 
     fetchPost();
   }, [location.state, postId]);
+
+  const fetchMentionSuggestions = async (query) => {
+    const token = localStorage.getItem("token");
+    if (!token || !query) {
+      setMentionSuggestions([]);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setMentionSuggestions([]);
+        return;
+      }
+
+      setMentionSuggestions((data.users || []).slice(0, 6));
+    } catch {
+      setMentionSuggestions([]);
+    }
+  };
+
+  const handleCaptionChange = async (value) => {
+    setCaption(value);
+    const cursor = textareaRef.current?.selectionStart ?? value.length;
+    const activeMention = getActiveMentionQuery(value, cursor);
+    setActiveMentionRange(activeMention);
+
+    if (activeMention?.query) {
+      await fetchMentionSuggestions(activeMention.query);
+      setShowMentionSuggestions(true);
+      return;
+    }
+
+    setShowMentionSuggestions(false);
+    setMentionSuggestions([]);
+  };
+
+  const applyMentionSuggestion = (username) => {
+    if (!activeMentionRange) return;
+    const nextValue = `${caption.slice(0, activeMentionRange.start)}@${username} ${caption.slice(activeMentionRange.end)}`;
+    setCaption(nextValue);
+    setShowMentionSuggestions(false);
+    setMentionSuggestions([]);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -120,12 +183,53 @@ export default function EditPost() {
           <label>
             Caption
             <textarea
+              ref={textareaRef}
               className="edit-post-textarea"
               value={caption}
-              onChange={(e) => setCaption(e.target.value)}
+              onChange={(e) => handleCaptionChange(e.target.value)}
               placeholder="Write a caption..."
               rows={6}
+              onBlur={() => {
+                window.setTimeout(() => {
+                  setShowMentionSuggestions(false);
+                }, 120);
+              }}
+              onFocus={() => {
+                const cursor = textareaRef.current?.selectionStart ?? caption.length;
+                const activeMention = getActiveMentionQuery(caption, cursor);
+                if (activeMention?.query) {
+                  setActiveMentionRange(activeMention);
+                  fetchMentionSuggestions(activeMention.query);
+                  setShowMentionSuggestions(true);
+                }
+              }}
             />
+
+            {showMentionSuggestions && mentionSuggestions.length > 0 && (
+              <div className="hashtag-suggest-dropdown">
+                {mentionSuggestions.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="hashtag-suggest-item"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => applyMentionSuggestion(item.username)}
+                  >
+                    <span className="mention-suggest-main">
+                      <span className="mention-suggest-avatar" aria-hidden="true">
+                        {item.profile_pic ? (
+                          <img src={getSafeMediaUrl(item.profile_pic)} alt="" />
+                        ) : (
+                          (item.username || "?").slice(0, 1).toUpperCase()
+                        )}
+                      </span>
+                      <strong>@{item.username}</strong>
+                    </span>
+                    <span>Profile</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </label>
 
           <button type="submit" disabled={saving}>
