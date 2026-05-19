@@ -40,7 +40,7 @@ export default function AdminUsers() {
   }, []);
 
   const handleBanToggle = async (user) => {
-    const isBanned = Boolean(user.deactivated_at);
+    const isBanned = Boolean(user.admin_banned_at);
     const endpoint = isBanned ? "unban" : "ban";
     setBusyUserId(user.id);
     setError("");
@@ -59,7 +59,11 @@ export default function AdminUsers() {
       setUsers((prev) =>
         prev.map((item) =>
           item.id === user.id
-            ? { ...item, deactivated_at: isBanned ? null : new Date().toISOString() }
+            ? {
+                ...item,
+                deactivated_at: data.user?.deactivated_at || (isBanned ? null : new Date().toISOString()),
+                admin_banned_at: data.user?.admin_banned_at || (isBanned ? null : new Date().toISOString()),
+              }
             : item
         )
       );
@@ -112,7 +116,13 @@ export default function AdminUsers() {
                   <td>{user.email}</td>
                   <td>{user.email_verified ? "Yes" : "No"}</td>
                   <td>{user.is_admin ? "Yes" : "No"}</td>
-                  <td>{user.deactivated_at ? "Banned" : "Active"}</td>
+                  <td>
+                    {user.admin_banned_at
+                      ? "Banned"
+                      : user.deactivated_at
+                        ? "Deactivated"
+                        : "Active"}
+                  </td>
                   <td>{formatCreatedAt(user.created_at)}</td>
                   <td>
                     <button
@@ -123,7 +133,7 @@ export default function AdminUsers() {
                     >
                       {busyUserId === user.id
                         ? "Saving..."
-                        : user.deactivated_at
+                        : user.admin_banned_at
                           ? "Unban"
                           : "Ban"}
                     </button>

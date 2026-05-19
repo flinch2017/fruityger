@@ -16,6 +16,11 @@ const ensureAccountStatusSchema = async () => {
         ALTER TABLE users
         ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ
       `);
+
+      await pool.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS admin_banned_at TIMESTAMPTZ
+      `);
     })().catch((error) => {
       accountStatusSchemaReadyPromise = null;
       throw error;
@@ -40,7 +45,7 @@ const resolveAuth = async (req, res, next, { requireVerified }) => {
 
     const { rows } = await pool.query(
       `
-      SELECT id, username, email, email_verified, deactivated_at, deleted_at
+      SELECT id, username, email, email_verified, deactivated_at, deleted_at, admin_banned_at
       FROM users
       WHERE id = $1
       LIMIT 1
@@ -51,6 +56,10 @@ const resolveAuth = async (req, res, next, { requireVerified }) => {
     const user = rows[0];
     if (!user) {
       return res.status(401).json({ error: "User not found" });
+    }
+
+    if (user.admin_banned_at) {
+      return res.status(403).json({ error: "This account has been banned for violating community rules." });
     }
 
     if (user.deactivated_at || user.deleted_at) {

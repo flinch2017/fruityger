@@ -162,6 +162,11 @@ const getNotificationPushCopy = (type, actorUsername = "Someone") => {
         title: "New reaction",
         body: `@${actorUsername} reacted to your message.`,
       };
+    case "content_removed":
+      return {
+        title: "Content removed",
+        body: "One of your content violated our community rules and was removed.",
+      };
     default:
       return {
         title: "Fruityger",

@@ -5,15 +5,20 @@ let adminSchemaReadyPromise = null;
 
 const ensureAdminSchema = async () => {
   if (!adminSchemaReadyPromise) {
-    adminSchemaReadyPromise = pool
-      .query(`
+    adminSchemaReadyPromise = (async () => {
+      await pool.query(`
         ALTER TABLE users
         ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE
-      `)
-      .catch((error) => {
-        adminSchemaReadyPromise = null;
-        throw error;
-      });
+      `);
+
+      await pool.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS admin_banned_at TIMESTAMPTZ
+      `);
+    })().catch((error) => {
+      adminSchemaReadyPromise = null;
+      throw error;
+    });
   }
 
   await adminSchemaReadyPromise;
@@ -33,7 +38,7 @@ export const authenticateAdmin = async (req, res, next) => {
 
     const { rows } = await pool.query(
       `
-      SELECT id, username, email, is_admin, deactivated_at, deleted_at
+      SELECT id, username, email, is_admin, deactivated_at, deleted_at, admin_banned_at
       FROM users
       WHERE id = $1
       LIMIT 1
@@ -47,7 +52,7 @@ export const authenticateAdmin = async (req, res, next) => {
       return res.status(401).json({ error: "User not found" });
     }
 
-    if (admin.deactivated_at || admin.deleted_at) {
+    if (admin.admin_banned_at || admin.deactivated_at || admin.deleted_at) {
       return res.status(403).json({ error: "Account unavailable" });
     }
 

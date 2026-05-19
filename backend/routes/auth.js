@@ -117,6 +117,11 @@ const ensureAccountStatusSchema = async () => {
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS deletion_recovery_expires_at TIMESTAMPTZ
   `);
+
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS admin_banned_at TIMESTAMPTZ
+  `);
 };
 
 const ensureUserCreatedAtSchema = async () => {
@@ -187,6 +192,7 @@ const reactivateUserAccount = async (userId) => {
         deleted_at = NULL,
         deletion_recovery_expires_at = NULL
     WHERE id = $1
+      AND admin_banned_at IS NULL
     RETURNING id, username, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, created_at
     `,
     [userId]
@@ -583,10 +589,16 @@ router.post("/login", async (req, res) => {
       sessionUser = restoredUser;
     } else if (user.deleted_at) {
       return res.status(403).json({ error: "This account can no longer be recovered" });
+    } else if (user.admin_banned_at) {
+      return res.status(403).json({
+        error: "This account has been banned for violating community rules.",
+      });
     } else if (user.deactivated_at) {
       const reactivatedUser = await reactivateUserAccount(user.id);
       if (!reactivatedUser) {
-        return res.status(404).json({ error: "Account not found" });
+        return res.status(403).json({
+          error: "This account has been banned for violating community rules.",
+        });
       }
       sessionUser = reactivatedUser;
     }
@@ -849,7 +861,7 @@ router.get("/session", authenticateTokenAllowUnverified, async (req, res) => {
 
   const { rows } = await pool.query(
     `
-    SELECT id, username, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, email_verification_expires_at, created_at, deactivated_at, deleted_at
+    SELECT id, username, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, email_verification_expires_at, created_at, deactivated_at, deleted_at, admin_banned_at
     FROM users
     WHERE id = $1
     LIMIT 1
@@ -860,6 +872,10 @@ router.get("/session", authenticateTokenAllowUnverified, async (req, res) => {
   const user = rows[0];
   if (!user) {
     return res.status(401).json({ error: "User not found" });
+  }
+
+  if (user.admin_banned_at) {
+    return res.status(403).json({ error: "This account has been banned for violating community rules." });
   }
 
   if (user.deactivated_at || user.deleted_at) {

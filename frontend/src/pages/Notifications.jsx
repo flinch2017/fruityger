@@ -64,6 +64,11 @@ const TYPE_COPY = {
     title: "Message reaction",
     body: (username) => `@${username} reacted to your message.`,
   },
+  content_removed: {
+    icon: "!",
+    title: "Content removed",
+    body: () => "One of your content violated our community rules and was removed.",
+  },
 };
 
 export default function Notifications() {
@@ -154,6 +159,10 @@ export default function Notifications() {
 
     if (notification.group_chat_id) {
       navigate(`/group-chat/${notification.group_chat_id}`);
+      return;
+    }
+
+    if (notification.type === "content_removed") {
       return;
     }
 

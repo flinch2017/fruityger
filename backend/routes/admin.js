@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import pool from "../db.js";
 import { authenticateAdmin, ensureAdminSchema } from "../middleware/adminAuth.js";
+import { createNotification } from "../utils/notifications.js";
 
 const router = express.Router();
 
@@ -53,6 +54,13 @@ const ensureReportModerationSchema = async () => {
   await pool.query(`
     ALTER TABLE reports
     ADD COLUMN IF NOT EXISTS resolution_action TEXT
+  `);
+};
+
+const ensureAdminBanSchema = async () => {
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS admin_banned_at TIMESTAMPTZ
   `);
 };
 
@@ -387,9 +395,10 @@ router.post("/login", async (req, res) => {
   await ensureConfiguredAdmins();
 
   try {
+    await ensureAdminBanSchema();
     const { rows } = await pool.query(
       `
-      SELECT id, username, email, password, is_admin, deactivated_at, deleted_at
+      SELECT id, username, email, password, is_admin, deactivated_at, deleted_at, admin_banned_at
       FROM users
       WHERE LOWER(email) = $1 OR LOWER(username) = $1
       LIMIT 1
@@ -402,7 +411,7 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Invalid credentials" });
     }
 
-    if (user.deactivated_at || user.deleted_at) {
+    if (user.admin_banned_at || user.deactivated_at || user.deleted_at) {
       return res.status(403).json({ error: "Account unavailable" });
     }
 
@@ -450,6 +459,7 @@ router.get("/session", authenticateAdmin, async (req, res) => {
 
 router.get("/dashboard", authenticateAdmin, async (req, res) => {
   try {
+    await ensureAdminBanSchema();
     const usersCreatedColumn = await resolveUsersCreatedColumn();
     const usersCreatedSelect = usersCreatedColumn
       ? `${usersCreatedColumn} AS created_at`
@@ -490,6 +500,7 @@ router.get("/users", authenticateAdmin, async (req, res) => {
   const query = String(req.query.q || "").trim().toLowerCase();
 
   try {
+    await ensureAdminBanSchema();
     const usersCreatedColumn = await resolveUsersCreatedColumn();
     const usersCreatedSelect = usersCreatedColumn
       ? `${usersCreatedColumn} AS created_at`
@@ -499,7 +510,7 @@ router.get("/users", authenticateAdmin, async (req, res) => {
     const { rows } = await pool.query(
       `
       SELECT id, username, email, ${usersCreatedSelect}, email_verified, is_admin
-           , deactivated_at
+           , deactivated_at, admin_banned_at
       FROM users
       WHERE deleted_at IS NULL
         AND (
@@ -641,12 +652,14 @@ router.patch("/users/:userId/ban", authenticateAdmin, async (req, res) => {
   }
 
   try {
+    await ensureAdminBanSchema();
     const { rows } = await pool.query(
       `
       UPDATE users
-      SET deactivated_at = NOW()
+      SET deactivated_at = NOW(),
+          admin_banned_at = NOW()
       WHERE id = $1
-      RETURNING id, username, email, is_admin, deactivated_at
+      RETURNING id, username, email, is_admin, deactivated_at, admin_banned_at
       `,
       [userId]
     );
@@ -677,12 +690,14 @@ router.patch("/users/:userId/unban", authenticateAdmin, async (req, res) => {
   }
 
   try {
+    await ensureAdminBanSchema();
     const { rows } = await pool.query(
       `
       UPDATE users
-      SET deactivated_at = NULL
+      SET deactivated_at = NULL,
+          admin_banned_at = NULL
       WHERE id = $1
-      RETURNING id, username, email, is_admin, deactivated_at
+      RETURNING id, username, email, is_admin, deactivated_at, admin_banned_at
       `,
       [userId]
     );
@@ -756,11 +771,12 @@ router.delete("/posts/:postId", authenticateAdmin, async (req, res) => {
   const client = await pool.connect();
 
   try {
+    await ensureReportModerationSchema();
     await client.query("BEGIN");
 
     const postResult = await client.query(
       `
-      SELECT post_id
+      SELECT post_id, user_id, caption
       FROM posts
       WHERE post_id = $1
       LIMIT 1
@@ -773,16 +789,45 @@ router.delete("/posts/:postId", authenticateAdmin, async (req, res) => {
       return res.status(404).json({ error: "Post not found" });
     }
 
+    const deletedPost = postResult.rows[0];
+
     await client.query("DELETE FROM post_media WHERE post_id = $1", [postId]);
-    await client.query("DELETE FROM reports WHERE content_type = 'post' AND content_id = $1", [postId]);
+    await client.query(
+      `
+      UPDATE reports
+      SET resolved_at = COALESCE(resolved_at, NOW()),
+          resolved_by = COALESCE(resolved_by, $2),
+          resolution_action = 'deleted_post'
+      WHERE LOWER(content_type) = 'post'
+        AND content_id::text = $1
+      `,
+      [postId, req.admin.id]
+    );
     await client.query("DELETE FROM posts WHERE post_id = $1", [postId]);
 
     await client.query("COMMIT");
+
+    await createNotification({
+      recipientId: deletedPost.user_id,
+      actorId: req.admin.id,
+      type: "content_removed",
+      pushTitle: "Content removed",
+      pushBody: "One of your content violated our community rules and was removed.",
+      pushData: {
+        type: "notification",
+        notificationType: "content_removed",
+      },
+    });
+
     await logAdminActivity({
       adminId: req.admin.id,
       actionType: "delete_post",
       targetType: "post",
       targetId: postId,
+      metadata: {
+        owner_id: deletedPost.user_id,
+        caption: deletedPost.caption || "",
+      },
     });
     return res.json({ success: true, deletedPostId: postId });
   } catch (error) {
