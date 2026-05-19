@@ -1673,10 +1673,7 @@ router.post("/report", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Message not found" });
     }
 
-    const message = messageResult.rows[0];
-    const reportDetails = details
-      ? `${details}\nReported message ID: ${messageId}`
-      : `Reported message ID: ${messageId}`;
+    const reportDetails = String(details || "").trim() || null;
 
     const { rows } = await pool.query(
       `
@@ -1684,7 +1681,7 @@ router.post("/report", authenticateToken, async (req, res) => {
       VALUES ($1, $2, $3, $4, $5)
       RETURNING *
       `,
-      [reporterId, "message", message.chat_id, reason, reportDetails]
+      [reporterId, "message", messageId, reason, reportDetails]
     );
 
     return res.status(201).json({ success: true, report: rows[0] });
@@ -2483,10 +2480,7 @@ router.post("/groups/messages/report", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Message not found" });
     }
 
-    const message = messageResult.rows[0];
-    const reportDetails = details
-      ? `${details}\nReported group message ID: ${messageId}`
-      : `Reported group message ID: ${messageId}`;
+    const reportDetails = String(details || "").trim() || null;
 
     const { rows } = await pool.query(
       `
@@ -2494,7 +2488,7 @@ router.post("/groups/messages/report", authenticateToken, async (req, res) => {
       VALUES ($1, $2, $3, $4, $5)
       RETURNING *
       `,
-      [reporterId, "group_message", message.group_chat_id, reason, reportDetails]
+      [reporterId, "group_message", messageId, reason, reportDetails]
     );
 
     return res.status(201).json({ success: true, report: rows[0] });
