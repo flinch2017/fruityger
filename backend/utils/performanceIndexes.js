@@ -41,7 +41,11 @@ export async function ensurePerformanceIndexes() {
       ];
 
       for (const statement of statements) {
-        await pool.query(statement);
+        try {
+          await pool.query(statement);
+        } catch (error) {
+          console.warn("Skipped performance index statement:", statement, error?.message || error);
+        }
       }
     })().catch((error) => {
       performanceIndexesReadyPromise = null;

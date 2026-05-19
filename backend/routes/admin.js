@@ -91,6 +91,15 @@ const getTableColumns = async (tableName) => {
   return new Set(rows.map((row) => String(row.column_name)));
 };
 
+const resolveUsersCreatedColumn = async () => {
+  const columns = await getTableColumns("users");
+  if (columns.has("created_at")) return "created_at";
+  if (columns.has("date_created")) return "date_created";
+  if (columns.has("date_joined")) return "date_joined";
+  if (columns.has("joined_at")) return "joined_at";
+  return null;
+};
+
 const getReportIdColumn = (columns) => {
   if (columns.has("id")) return "id";
   if (columns.has("report_id")) return "report_id";
@@ -391,16 +400,22 @@ router.get("/session", authenticateAdmin, async (req, res) => {
 
 router.get("/dashboard", authenticateAdmin, async (req, res) => {
   try {
+    const usersCreatedColumn = await resolveUsersCreatedColumn();
+    const usersCreatedSelect = usersCreatedColumn
+      ? `${usersCreatedColumn} AS created_at`
+      : "NULL::timestamptz AS created_at";
+    const usersOrderBy = usersCreatedColumn ? usersCreatedColumn : "id";
+
     const [usersResult, postsResult, reportsResult, latestUsersResult] = await Promise.all([
       pool.query("SELECT COUNT(*)::int AS total FROM users WHERE deleted_at IS NULL"),
       pool.query("SELECT COUNT(*)::int AS total FROM posts"),
       pool.query("SELECT COUNT(*)::int AS total FROM reports"),
       pool.query(
         `
-        SELECT id, username, email, created_at, email_verified
+        SELECT id, username, email, ${usersCreatedSelect}, email_verified
         FROM users
         WHERE deleted_at IS NULL
-        ORDER BY created_at DESC
+        ORDER BY ${usersOrderBy} DESC
         LIMIT 8
         `
       ),
@@ -424,9 +439,15 @@ router.get("/users", authenticateAdmin, async (req, res) => {
   const query = String(req.query.q || "").trim().toLowerCase();
 
   try {
+    const usersCreatedColumn = await resolveUsersCreatedColumn();
+    const usersCreatedSelect = usersCreatedColumn
+      ? `${usersCreatedColumn} AS created_at`
+      : "NULL::timestamptz AS created_at";
+    const usersOrderBy = usersCreatedColumn ? usersCreatedColumn : "id";
+
     const { rows } = await pool.query(
       `
-      SELECT id, username, email, created_at, email_verified, is_admin
+      SELECT id, username, email, ${usersCreatedSelect}, email_verified, is_admin
            , deactivated_at
       FROM users
       WHERE deleted_at IS NULL
@@ -435,7 +456,7 @@ router.get("/users", authenticateAdmin, async (req, res) => {
           OR LOWER(username) LIKE $2
           OR LOWER(email) LIKE $2
         )
-      ORDER BY created_at DESC
+      ORDER BY ${usersOrderBy} DESC
       LIMIT 100
       `,
       [query, `%${query}%`]
