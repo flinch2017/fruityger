@@ -143,6 +143,7 @@ export default function AdminReports() {
                 <th>Type</th>
                 <th>Content ID</th>
                 <th>Reason</th>
+                <th>Preview</th>
                 <th>Details</th>
                 <th>Status</th>
                 <th>Created</th>
@@ -156,6 +157,36 @@ export default function AdminReports() {
                   <td>{report.content_type}</td>
                   <td>{report.content_id}</td>
                   <td>{report.reason}</td>
+                  <td>
+                    <div className="admin-preview-cell">
+                      <div>{report.preview?.text || "(Content unavailable or deleted)"}</div>
+                      {report.preview?.media_url && (
+                        <a
+                          href={report.preview.media_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="admin-media-link"
+                        >
+                          Open media
+                        </a>
+                      )}
+                      {report.preview?.media_url && report.preview?.media_type === "image" && (
+                        <img
+                          src={report.preview.media_url}
+                          alt="Reported media preview"
+                          className="admin-media-thumb"
+                        />
+                      )}
+                      {report.preview?.media_url && report.preview?.media_type === "video" && (
+                        <video
+                          src={report.preview.media_url}
+                          className="admin-media-thumb"
+                          controls
+                          preload="metadata"
+                        />
+                      )}
+                    </div>
+                  </td>
                   <td>{report.details || "-"}</td>
                   <td>{report.resolved_at ? `Resolved (${report.resolution_action || "resolved"})` : "Open"}</td>
                   <td>{new Date(report.created_at).toLocaleString()}</td>

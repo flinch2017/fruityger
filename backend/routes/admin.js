@@ -84,6 +84,100 @@ const getReportIdColumn = (columns) => {
   return null;
 };
 
+const buildReportPreview = async (report) => {
+  const contentType = String(report?.content_type || "").toLowerCase();
+  const contentId = String(report?.content_id || "").trim();
+
+  if (!contentType || !contentId) {
+    return null;
+  }
+
+  try {
+    if (contentType === "post") {
+      const { rows } = await pool.query(
+        `
+        SELECT
+          p.caption,
+          pm.media_url,
+          pm.media_type
+        FROM posts
+        p
+        LEFT JOIN LATERAL (
+          SELECT media_url, media_type
+          FROM post_media
+          WHERE post_id = p.post_id
+          ORDER BY media_order ASC
+          LIMIT 1
+        ) pm ON TRUE
+        WHERE p.post_id::text = $1
+        LIMIT 1
+        `,
+        [contentId]
+      );
+      return {
+        text: rows[0]?.caption || null,
+        media_url: rows[0]?.media_url || null,
+        media_type: rows[0]?.media_type || null,
+      };
+    }
+
+    if (contentType === "comment") {
+      const { rows } = await pool.query(
+        `
+        SELECT content
+        FROM comments
+        WHERE comment_id::text = $1
+        LIMIT 1
+        `,
+        [contentId]
+      );
+      return {
+        text: rows[0]?.content || null,
+        media_url: null,
+        media_type: null,
+      };
+    }
+
+    if (contentType === "message") {
+      const { rows } = await pool.query(
+        `
+        SELECT message, attachment_url, attachment_type
+        FROM messages
+        WHERE id::text = $1
+        LIMIT 1
+        `,
+        [contentId]
+      );
+      return {
+        text: rows[0]?.message || null,
+        media_url: rows[0]?.attachment_url || null,
+        media_type: rows[0]?.attachment_type || null,
+      };
+    }
+
+    if (contentType === "group_message") {
+      const { rows } = await pool.query(
+        `
+        SELECT message, attachment_url, attachment_type
+        FROM group_messages
+        WHERE id::text = $1
+        LIMIT 1
+        `,
+        [contentId]
+      );
+      return {
+        text: rows[0]?.message || null,
+        media_url: rows[0]?.attachment_url || null,
+        media_type: rows[0]?.attachment_type || null,
+      };
+    }
+  } catch (error) {
+    console.error("Failed to build report preview:", error?.message || error);
+  }
+
+  return { text: null, media_url: null, media_type: null };
+};
+
 const ensureAdminActivitySchema = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_activity_logs (
@@ -328,8 +422,15 @@ router.get("/reports", authenticateAdmin, async (req, res) => {
           [limit, offset]
         );
 
+    const reports = await Promise.all(
+      rows.map(async (row) => ({
+        ...row,
+        preview: await buildReportPreview(row),
+      }))
+    );
+
     return res.json({
-      reports: rows,
+      reports,
       pagination: {
         page,
         limit,
