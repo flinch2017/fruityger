@@ -104,10 +104,12 @@ function ProfileLayout({ children }) {
 }
 
 function App() {
+  const location = useLocation();
+
   return (
     <>
       <ScrollToTop />
-      <Routes>
+      <Routes location={location} key={`${location.pathname}${location.search}`}>
         {/* Public pages: welcome, login, signup */}
         <Route
           path="/"
