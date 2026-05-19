@@ -42,6 +42,11 @@ import PrivacyPage from "./pages/PrivacyPage";
 import CookiePage from "./pages/CookiePage";
 import AboutPage from "./pages/AboutPage";
 import ShareProfile from "./pages/ShareProfile";
+import AdminRoute from "./components/AdminRoute";
+import AdminLogin from "./pages/AdminLogin";
+import AdminDashboard from "./pages/AdminDashboard";
+import AdminUsers from "./pages/AdminUsers";
+import AdminReports from "./pages/AdminReports";
 
 
 import "./css/App.css";
@@ -121,6 +126,31 @@ function App() {
                 <Login />
               </StandaloneLayout>
             </PublicRoute>
+          }
+        />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <AdminRoute>
+              <AdminUsers />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/reports"
+          element={
+            <AdminRoute>
+              <AdminReports />
+            </AdminRoute>
           }
         />
         <Route

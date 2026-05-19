@@ -1,0 +1,126 @@
+.admin-shell {
+  min-height: 100vh;
+  padding: 24px;
+  background: linear-gradient(180deg, #e8f6ff 0%, #f7efe5 100%);
+}
+
+.admin-card {
+  max-width: 1100px;
+  margin: 0 auto;
+  background: #ffffff;
+  border: 1px solid #d5e8f5;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 16px 40px rgba(18, 56, 94, 0.08);
+}
+
+.admin-login-card {
+  max-width: 460px;
+}
+
+.admin-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.admin-links {
+  display: flex;
+  gap: 10px;
+}
+
+.admin-links a,
+.admin-link {
+  color: #0f5f99;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.admin-form,
+.admin-search {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  margin-bottom: 14px;
+}
+
+.admin-form {
+  flex-direction: column;
+}
+
+.admin-form input,
+.admin-search input {
+  border: 1px solid #bbd5e9;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.admin-form button,
+.admin-search button {
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #1a87cf, #275dc3);
+  color: #fff;
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.admin-stat {
+  border: 1px solid #cde1f0;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-stat strong {
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 10px;
+  border-bottom: 1px solid #e3eff7;
+  text-align: left;
+  font-size: 14px;
+}
+
+.admin-error {
+  background: #ffe7e7;
+  color: #8b1d1d;
+  border: 1px solid #f6b2b2;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 740px) {
+  .admin-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
