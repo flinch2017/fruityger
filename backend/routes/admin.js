@@ -91,12 +91,46 @@ const getTableColumns = async (tableName) => {
   return new Set(rows.map((row) => String(row.column_name)));
 };
 
+const getTableColumnMetadata = async (tableName) => {
+  const { rows } = await pool.query(
+    `
+    SELECT column_name, data_type
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = $1
+    `,
+    [String(tableName)]
+  );
+  return rows.map((row) => ({
+    name: String(row.column_name),
+    type: String(row.data_type || "").toLowerCase(),
+  }));
+};
+
 const resolveUsersCreatedColumn = async () => {
-  const columns = await getTableColumns("users");
-  if (columns.has("created_at")) return "created_at";
-  if (columns.has("date_created")) return "date_created";
-  if (columns.has("date_joined")) return "date_joined";
-  if (columns.has("joined_at")) return "joined_at";
+  const metadata = await getTableColumnMetadata("users");
+  const names = new Set(metadata.map((item) => item.name));
+
+  if (names.has("created_at")) return "created_at";
+  if (names.has("date_created")) return "date_created";
+  if (names.has("date_joined")) return "date_joined";
+  if (names.has("joined_at")) return "joined_at";
+  if (names.has("registered_at")) return "registered_at";
+  if (names.has("signup_at")) return "signup_at";
+  if (names.has("signed_up_at")) return "signed_up_at";
+
+  const dateLike = metadata.filter((item) =>
+    item.type.includes("timestamp") || item.type === "date"
+  );
+
+  const preferred = dateLike.find((item) =>
+    /(created|joined|register|signup|signed)/i.test(item.name)
+  );
+
+  if (preferred) {
+    return preferred.name;
+  }
+
   return null;
 };
 
@@ -427,6 +461,7 @@ router.get("/dashboard", authenticateAdmin, async (req, res) => {
         posts: postsResult.rows[0]?.total || 0,
         reports: reportsResult.rows[0]?.total || 0,
       },
+      createdAtSource: usersCreatedColumn || null,
       latestUsers: latestUsersResult.rows,
     });
   } catch (error) {
@@ -462,7 +497,7 @@ router.get("/users", authenticateAdmin, async (req, res) => {
       [query, `%${query}%`]
     );
 
-    return res.json({ users: rows });
+    return res.json({ users: rows, createdAtSource: usersCreatedColumn || null });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to load users" });
