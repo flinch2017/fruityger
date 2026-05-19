@@ -58,6 +58,9 @@ export default function Header() {
     location.pathname === "/group-chat" ||
     location.pathname.startsWith("/group-chat/");
   const isTapesRoute = location.pathname === "/tapes";
+  const isGroupChatRoute =
+    location.pathname === "/group-chat" ||
+    location.pathname.startsWith("/group-chat/");
   const feedMode = useMemo(() => {
     const params = new URLSearchParams(location.search);
     return params.get("mode") === "following" ? "following" : "discover";
@@ -81,15 +84,23 @@ export default function Header() {
   const toggleDropdown = () => setDropdownOpen((prev) => !prev);
   const toggleCreateMenu = () => setCreateMenuOpen((prev) => !prev);
 
+  const goTo = (path) => {
+    if (isGroupChatRoute) {
+      window.location.assign(path);
+      return;
+    }
+    navigate(path);
+  };
+
   const openCreateFlow = (type) => {
     const nextType = type === "tape" ? "tape" : "post";
-    navigate(nextType === "tape" ? "/create-tape" : "/create");
+    goTo(nextType === "tape" ? "/create-tape" : "/create");
     setCreateMenuOpen(false);
   };
 
   const updateFeedMode = (mode) => {
     const nextMode = mode === "following" ? "following" : "discover";
-    navigate(`${isTapesRoute ? "/tapes" : "/feed"}?mode=${nextMode}`);
+    goTo(`${isTapesRoute ? "/tapes" : "/feed"}?mode=${nextMode}`);
     setFeedMenuOpen(false);
   };
 
@@ -100,7 +111,7 @@ export default function Header() {
       return;
     }
 
-    navigate(`/feed?mode=${feedMode}`);
+    goTo(`/feed?mode=${feedMode}`);
   };
 
   const handleTapesNav = () => {
@@ -110,7 +121,7 @@ export default function Header() {
       return;
     }
 
-    navigate(`/tapes?mode=${feedMode}`);
+    goTo(`/tapes?mode=${feedMode}`);
   };
 
   useEffect(() => {
@@ -352,7 +363,7 @@ export default function Header() {
       return;
     }
 
-    navigate(`/search?q=${encoded}`);
+    goTo(`/search?q=${encoded}`);
     setSearchQuery("");
     setSearchSuggestions({ users: [], hashtags: [], posts: [] });
     setSearchFocused(false);
@@ -391,7 +402,7 @@ export default function Header() {
               type="button"
               className="search-suggestion-item"
               onClick={() => {
-                navigate(`/profile/${user.username}`);
+                goTo(`/profile/${user.username}`);
                 setSearchQuery("");
                 setSearchFocused(false);
                 setMobileSearchOpen(false);
@@ -422,7 +433,7 @@ export default function Header() {
               type="button"
               className="search-suggestion-item"
               onClick={() => {
-                navigate(`/hashtag/${hashtag.tag}`);
+                goTo(`/hashtag/${hashtag.tag}`);
                 setSearchQuery("");
                 setSearchFocused(false);
                 setMobileSearchOpen(false);
@@ -447,7 +458,7 @@ export default function Header() {
               type="button"
               className="search-suggestion-item"
               onClick={() => {
-                navigate(`/post/${post.post_id}`);
+                goTo(`/post/${post.post_id}`);
                 setSearchQuery("");
                 setSearchFocused(false);
                 setMobileSearchOpen(false);
@@ -579,6 +590,11 @@ export default function Header() {
               to={`/feed?mode=${feedMode}`}
               className={({ isActive }) => `nav-button ${isActive ? "active" : ""}`}
               onClick={(event) => {
+                if (isGroupChatRoute) {
+                  event.preventDefault();
+                  window.location.assign(`/feed?mode=${feedMode}`);
+                  return;
+                }
                 if (location.pathname === "/feed") {
                   event.preventDefault();
                   handleFeedNav();
@@ -592,6 +608,11 @@ export default function Header() {
               to={`/tapes?mode=${feedMode}`}
               className={({ isActive }) => `nav-button nav-button-tapes ${isActive ? "active" : ""}`}
               onClick={(event) => {
+                if (isGroupChatRoute) {
+                  event.preventDefault();
+                  window.location.assign(`/tapes?mode=${feedMode}`);
+                  return;
+                }
                 if (location.pathname === "/tapes") {
                   event.preventDefault();
                   handleTapesNav();
@@ -612,6 +633,12 @@ export default function Header() {
             <NavLink
               to="/notifications"
               className={({ isActive }) => `nav-button nav-button-bell ${isActive ? "active" : ""}`}
+              onClick={(event) => {
+                if (isGroupChatRoute) {
+                  event.preventDefault();
+                  window.location.assign("/notifications");
+                }
+              }}
             >
               <FaBell />
               {notificationUnreadCount > 0 && (
@@ -624,6 +651,12 @@ export default function Header() {
             <NavLink
               to="/messages"
               className={({ isActive }) => `nav-button nav-button-message ${isActive ? "active" : ""}`}
+              onClick={(event) => {
+                if (isGroupChatRoute) {
+                  event.preventDefault();
+                  window.location.assign("/messages");
+                }
+              }}
             >
               <FaEnvelope />
               {messageUnreadCount > 0 && (
@@ -673,7 +706,7 @@ export default function Header() {
                     className="profile-dropdown-action"
                     onClick={() => {
                       const username = localStorage.getItem("username");
-                      navigate(username ? `/profile/${username}` : "/feed");
+                      goTo(username ? `/profile/${username}` : "/feed");
                       setDropdownOpen(false);
                     }}
                   >
@@ -686,7 +719,7 @@ export default function Header() {
                   <button
                     className="profile-dropdown-action"
                     onClick={() => {
-                      navigate("/settings");
+                      goTo("/settings");
                       setDropdownOpen(false);
                     }}
                   >
@@ -701,7 +734,7 @@ export default function Header() {
                     onClick={() => {
                       clearAuthStorage();
                       setDropdownOpen(false);
-                      navigate("/login");
+                      goTo("/login");
                     }}
                   >
                     <span className="profile-dropdown-icon">
