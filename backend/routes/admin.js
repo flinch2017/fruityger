@@ -40,6 +40,21 @@ const ensureConfiguredAdmins = async () => {
   );
 };
 
+const ensureReportModerationSchema = async () => {
+  await pool.query(`
+    ALTER TABLE reports
+    ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ
+  `);
+  await pool.query(`
+    ALTER TABLE reports
+    ADD COLUMN IF NOT EXISTS resolved_by UUID
+  `);
+  await pool.query(`
+    ALTER TABLE reports
+    ADD COLUMN IF NOT EXISTS resolution_action TEXT
+  `);
+};
+
 router.post("/login", async (req, res) => {
   const { email, password } = req.body || {};
   const identifier = String(email || "").trim().toLowerCase();
@@ -151,6 +166,7 @@ router.get("/users", authenticateAdmin, async (req, res) => {
     const { rows } = await pool.query(
       `
       SELECT id, username, email, created_at, email_verified, is_admin
+           , deactivated_at
       FROM users
       WHERE deleted_at IS NULL
         AND (
@@ -172,10 +188,22 @@ router.get("/users", authenticateAdmin, async (req, res) => {
 });
 
 router.get("/reports", authenticateAdmin, async (req, res) => {
+  await ensureReportModerationSchema();
+
   try {
     const { rows } = await pool.query(
       `
-      SELECT id, reporter_id, content_type, content_id, reason, details, created_at
+      SELECT
+        id,
+        reporter_id,
+        content_type,
+        content_id,
+        reason,
+        details,
+        created_at,
+        resolved_at,
+        resolved_by,
+        resolution_action
       FROM reports
       ORDER BY created_at DESC
       LIMIT 100
@@ -186,6 +214,131 @@ router.get("/reports", authenticateAdmin, async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to load reports" });
+  }
+});
+
+router.patch("/users/:userId/ban", authenticateAdmin, async (req, res) => {
+  const { userId } = req.params;
+
+  if (!userId) {
+    return res.status(400).json({ error: "User id is required" });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `
+      UPDATE users
+      SET deactivated_at = NOW()
+      WHERE id = $1
+      RETURNING id, username, email, is_admin, deactivated_at
+      `,
+      [userId]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    return res.json({ user: rows[0] });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to ban user" });
+  }
+});
+
+router.patch("/users/:userId/unban", authenticateAdmin, async (req, res) => {
+  const { userId } = req.params;
+
+  if (!userId) {
+    return res.status(400).json({ error: "User id is required" });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `
+      UPDATE users
+      SET deactivated_at = NULL
+      WHERE id = $1
+      RETURNING id, username, email, is_admin, deactivated_at
+      `,
+      [userId]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    return res.json({ user: rows[0] });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to unban user" });
+  }
+});
+
+router.patch("/reports/:reportId/resolve", authenticateAdmin, async (req, res) => {
+  const { reportId } = req.params;
+  const action = String(req.body?.action || "resolved").trim().toLowerCase();
+
+  await ensureReportModerationSchema();
+
+  try {
+    const { rows } = await pool.query(
+      `
+      UPDATE reports
+      SET resolved_at = NOW(),
+          resolved_by = $2,
+          resolution_action = $3
+      WHERE id = $1
+      RETURNING id, resolved_at, resolved_by, resolution_action
+      `,
+      [reportId, req.admin.id, action]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ error: "Report not found" });
+    }
+
+    return res.json({ report: rows[0] });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to resolve report" });
+  }
+});
+
+router.delete("/posts/:postId", authenticateAdmin, async (req, res) => {
+  const { postId } = req.params;
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const postResult = await client.query(
+      `
+      SELECT post_id
+      FROM posts
+      WHERE post_id = $1
+      LIMIT 1
+      `,
+      [postId]
+    );
+
+    if (!postResult.rows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    await client.query("DELETE FROM post_media WHERE post_id = $1", [postId]);
+    await client.query("DELETE FROM reports WHERE content_type = 'post' AND content_id = $1", [postId]);
+    await client.query("DELETE FROM posts WHERE post_id = $1", [postId]);
+
+    await client.query("COMMIT");
+    return res.json({ success: true, deletedPostId: postId });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => null);
+    console.error(error);
+    return res.status(500).json({ error: "Failed to delete post" });
+  } finally {
+    client.release();
   }
 });
 

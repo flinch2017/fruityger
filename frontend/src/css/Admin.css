@@ -114,6 +114,22 @@
   margin-bottom: 12px;
 }
 
+.admin-inline-btn {
+  border: 1px solid #b7d4e8;
+  border-radius: 8px;
+  background: #f2f8fd;
+  color: #174c73;
+  padding: 6px 10px;
+  margin-right: 8px;
+  cursor: pointer;
+}
+
+.admin-danger-btn {
+  background: #ffecec;
+  border-color: #f3bcbc;
+  color: #8a1f1f;
+}
+
 @media (max-width: 740px) {
   .admin-stats {
     grid-template-columns: 1fr;
