@@ -1076,12 +1076,16 @@ export default function GroupChat() {
     return names || "Group conversation";
   }, [groupChat]);
 
+  const handleBackNavigation = () => {
+    navigate("/messages");
+  };
+
   return (
     <div className="chat-window" style={{ "--chat-keyboard-offset": `${keyboardOffset}px` }}>
       <AeroNotice notice={notice ? { ...notice, inline: true } : null} onClose={() => setNotice(null)} />
 
       <div className="chat-header">
-        <button className="back-btn" onClick={() => navigate(-1)} aria-label="Go back">
+        <button className="back-btn" onClick={handleBackNavigation} aria-label="Go back">
           <FaArrowLeft />
         </button>
 
