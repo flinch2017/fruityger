@@ -56,6 +56,16 @@ const ensureReportModerationSchema = async () => {
   `);
 };
 
+const getReportModerationColumnsReady = async () => {
+  try {
+    await ensureReportModerationSchema();
+    return true;
+  } catch (error) {
+    console.error("Report moderation schema setup failed:", error?.message || error);
+    return false;
+  }
+};
+
 const ensureAdminActivitySchema = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_activity_logs (
@@ -214,7 +224,7 @@ router.get("/users", authenticateAdmin, async (req, res) => {
 });
 
 router.get("/reports", authenticateAdmin, async (req, res) => {
-  await ensureReportModerationSchema();
+  const moderationColumnsReady = await getReportModerationColumnsReady();
   const unresolvedOnly = String(req.query.unresolved || "").toLowerCase() === "true";
   const page = Math.max(Number.parseInt(String(req.query.page || "1"), 10) || 1, 1);
   const limitRaw = Number.parseInt(String(req.query.limit || "20"), 10) || 20;
@@ -222,35 +232,59 @@ router.get("/reports", authenticateAdmin, async (req, res) => {
   const offset = (page - 1) * limit;
 
   try {
-    const countResult = await pool.query(
-      `
-      SELECT COUNT(*)::int AS total
-      FROM reports
-      WHERE ($1::boolean = FALSE OR resolved_at IS NULL)
-      `,
-      [unresolvedOnly]
-    );
-    const { rows } = await pool.query(
-      `
-      SELECT
-        id,
-        reporter_id,
-        content_type,
-        content_id,
-        reason,
-        details,
-        created_at,
-        resolved_at,
-        resolved_by,
-        resolution_action
-      FROM reports
-      WHERE ($1::boolean = FALSE OR resolved_at IS NULL)
-      ORDER BY created_at DESC
-      LIMIT $2
-      OFFSET $3
-      `,
-      [unresolvedOnly, limit, offset]
-    );
+    const countResult = moderationColumnsReady
+      ? await pool.query(
+          `
+          SELECT COUNT(*)::int AS total
+          FROM reports
+          WHERE ($1::boolean = FALSE OR resolved_at IS NULL)
+          `,
+          [unresolvedOnly]
+        )
+      : await pool.query(`SELECT COUNT(*)::int AS total FROM reports`);
+
+    const { rows } = moderationColumnsReady
+      ? await pool.query(
+          `
+          SELECT
+            id,
+            reporter_id,
+            content_type,
+            content_id,
+            reason,
+            details,
+            created_at,
+            resolved_at,
+            resolved_by,
+            resolution_action
+          FROM reports
+          WHERE ($1::boolean = FALSE OR resolved_at IS NULL)
+          ORDER BY created_at DESC
+          LIMIT $2
+          OFFSET $3
+          `,
+          [unresolvedOnly, limit, offset]
+        )
+      : await pool.query(
+          `
+          SELECT
+            id,
+            reporter_id,
+            content_type,
+            content_id,
+            reason,
+            details,
+            created_at,
+            NULL::timestamptz AS resolved_at,
+            NULL::uuid AS resolved_by,
+            NULL::text AS resolution_action
+          FROM reports
+          ORDER BY created_at DESC
+          LIMIT $1
+          OFFSET $2
+          `,
+          [limit, offset]
+        );
 
     return res.json({
       reports: rows,
@@ -261,7 +295,8 @@ router.get("/reports", authenticateAdmin, async (req, res) => {
         totalPages: Math.max(Math.ceil((countResult.rows[0]?.total || 0) / limit), 1),
       },
       filters: {
-        unresolvedOnly,
+        unresolvedOnly: moderationColumnsReady ? unresolvedOnly : false,
+        moderationColumnsReady,
       },
     });
   } catch (error) {
@@ -346,7 +381,10 @@ router.patch("/reports/:reportId/resolve", authenticateAdmin, async (req, res) =
   const { reportId } = req.params;
   const action = String(req.body?.action || "resolved").trim().toLowerCase();
 
-  await ensureReportModerationSchema();
+  const moderationColumnsReady = await getReportModerationColumnsReady();
+  if (!moderationColumnsReady) {
+    return res.status(503).json({ error: "Report moderation columns are not available yet" });
+  }
 
   try {
     const { rows } = await pool.query(
