@@ -1,6 +1,7 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { v4 as uuidv4 } from "uuid";
 import pool from "../db.js";
 import { authenticateAdmin, ensureAdminSchema } from "../middleware/adminAuth.js";
 
@@ -53,6 +54,31 @@ const ensureReportModerationSchema = async () => {
     ALTER TABLE reports
     ADD COLUMN IF NOT EXISTS resolution_action TEXT
   `);
+};
+
+const ensureAdminActivitySchema = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_activity_logs (
+      id UUID PRIMARY KEY,
+      admin_id UUID NOT NULL,
+      action_type TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+};
+
+const logAdminActivity = async ({ adminId, actionType, targetType, targetId, metadata = {} }) => {
+  await ensureAdminActivitySchema();
+  await pool.query(
+    `
+    INSERT INTO admin_activity_logs (id, admin_id, action_type, target_type, target_id, metadata)
+    VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+    `,
+    [uuidv4(), adminId, actionType, targetType, String(targetId), JSON.stringify(metadata)]
+  );
 };
 
 router.post("/login", async (req, res) => {
@@ -189,8 +215,21 @@ router.get("/users", authenticateAdmin, async (req, res) => {
 
 router.get("/reports", authenticateAdmin, async (req, res) => {
   await ensureReportModerationSchema();
+  const unresolvedOnly = String(req.query.unresolved || "").toLowerCase() === "true";
+  const page = Math.max(Number.parseInt(String(req.query.page || "1"), 10) || 1, 1);
+  const limitRaw = Number.parseInt(String(req.query.limit || "20"), 10) || 20;
+  const limit = Math.min(Math.max(limitRaw, 1), 100);
+  const offset = (page - 1) * limit;
 
   try {
+    const countResult = await pool.query(
+      `
+      SELECT COUNT(*)::int AS total
+      FROM reports
+      WHERE ($1::boolean = FALSE OR resolved_at IS NULL)
+      `,
+      [unresolvedOnly]
+    );
     const { rows } = await pool.query(
       `
       SELECT
@@ -205,12 +244,26 @@ router.get("/reports", authenticateAdmin, async (req, res) => {
         resolved_by,
         resolution_action
       FROM reports
+      WHERE ($1::boolean = FALSE OR resolved_at IS NULL)
       ORDER BY created_at DESC
-      LIMIT 100
-      `
+      LIMIT $2
+      OFFSET $3
+      `,
+      [unresolvedOnly, limit, offset]
     );
 
-    return res.json({ reports: rows });
+    return res.json({
+      reports: rows,
+      pagination: {
+        page,
+        limit,
+        total: countResult.rows[0]?.total || 0,
+        totalPages: Math.max(Math.ceil((countResult.rows[0]?.total || 0) / limit), 1),
+      },
+      filters: {
+        unresolvedOnly,
+      },
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to load reports" });
@@ -238,6 +291,13 @@ router.patch("/users/:userId/ban", authenticateAdmin, async (req, res) => {
     if (!rows[0]) {
       return res.status(404).json({ error: "User not found" });
     }
+    await logAdminActivity({
+      adminId: req.admin.id,
+      actionType: "ban_user",
+      targetType: "user",
+      targetId: userId,
+      metadata: { username: rows[0].username },
+    });
 
     return res.json({ user: rows[0] });
   } catch (error) {
@@ -267,6 +327,13 @@ router.patch("/users/:userId/unban", authenticateAdmin, async (req, res) => {
     if (!rows[0]) {
       return res.status(404).json({ error: "User not found" });
     }
+    await logAdminActivity({
+      adminId: req.admin.id,
+      actionType: "unban_user",
+      targetType: "user",
+      targetId: userId,
+      metadata: { username: rows[0].username },
+    });
 
     return res.json({ user: rows[0] });
   } catch (error) {
@@ -297,6 +364,13 @@ router.patch("/reports/:reportId/resolve", authenticateAdmin, async (req, res) =
     if (!rows[0]) {
       return res.status(404).json({ error: "Report not found" });
     }
+    await logAdminActivity({
+      adminId: req.admin.id,
+      actionType: "resolve_report",
+      targetType: "report",
+      targetId: reportId,
+      metadata: { resolution_action: action },
+    });
 
     return res.json({ report: rows[0] });
   } catch (error) {
@@ -332,6 +406,12 @@ router.delete("/posts/:postId", authenticateAdmin, async (req, res) => {
     await client.query("DELETE FROM posts WHERE post_id = $1", [postId]);
 
     await client.query("COMMIT");
+    await logAdminActivity({
+      adminId: req.admin.id,
+      actionType: "delete_post",
+      targetType: "post",
+      targetId: postId,
+    });
     return res.json({ success: true, deletedPostId: postId });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => null);
@@ -339,6 +419,52 @@ router.delete("/posts/:postId", authenticateAdmin, async (req, res) => {
     return res.status(500).json({ error: "Failed to delete post" });
   } finally {
     client.release();
+  }
+});
+
+router.get("/activity", authenticateAdmin, async (req, res) => {
+  const page = Math.max(Number.parseInt(String(req.query.page || "1"), 10) || 1, 1);
+  const limitRaw = Number.parseInt(String(req.query.limit || "20"), 10) || 20;
+  const limit = Math.min(Math.max(limitRaw, 1), 100);
+  const offset = (page - 1) * limit;
+
+  await ensureAdminActivitySchema();
+
+  try {
+    const countResult = await pool.query("SELECT COUNT(*)::int AS total FROM admin_activity_logs");
+    const { rows } = await pool.query(
+      `
+      SELECT
+        l.id,
+        l.admin_id,
+        u.username AS admin_username,
+        u.email AS admin_email,
+        l.action_type,
+        l.target_type,
+        l.target_id,
+        l.metadata,
+        l.created_at
+      FROM admin_activity_logs l
+      LEFT JOIN users u ON u.id = l.admin_id
+      ORDER BY l.created_at DESC
+      LIMIT $1
+      OFFSET $2
+      `,
+      [limit, offset]
+    );
+
+    return res.json({
+      logs: rows,
+      pagination: {
+        page,
+        limit,
+        total: countResult.rows[0]?.total || 0,
+        totalPages: Math.max(Math.ceil((countResult.rows[0]?.total || 0) / limit), 1),
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to load activity logs" });
   }
 });
 

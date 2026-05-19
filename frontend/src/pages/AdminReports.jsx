@@ -8,26 +8,37 @@ export default function AdminReports() {
   const [reports, setReports] = useState([]);
   const [error, setError] = useState("");
   const [busyReportId, setBusyReportId] = useState("");
+  const [unresolvedOnly, setUnresolvedOnly] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ totalPages: 1, total: 0 });
+
+  const loadReports = async (nextPage = 1, nextUnresolvedOnly = unresolvedOnly) => {
+    setError("");
+    try {
+      const params = new URLSearchParams({
+        page: String(nextPage),
+        limit: "20",
+        unresolved: String(nextUnresolvedOnly),
+      });
+      const res = await fetch(`http://localhost:5000/api/admin/reports?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${getAdminToken()}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Failed to load reports");
+        return;
+      }
+      setReports(data.reports || []);
+      setPagination(data.pagination || { totalPages: 1, total: 0 });
+      setPage(nextPage);
+    } catch {
+      setError("Failed to load reports");
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      setError("");
-      try {
-        const res = await fetch("http://localhost:5000/api/admin/reports", {
-          headers: { Authorization: `Bearer ${getAdminToken()}` },
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          setError(data.error || "Failed to load reports");
-          return;
-        }
-        setReports(data.reports || []);
-      } catch {
-        setError("Failed to load reports");
-      }
-    };
-    load();
-  }, []);
+    loadReports(1, unresolvedOnly);
+  }, [unresolvedOnly]);
 
   const resolveReport = async (reportId, action = "resolved") => {
     setBusyReportId(reportId);
@@ -59,6 +70,7 @@ export default function AdminReports() {
             : item
         )
       );
+      loadReports(page, unresolvedOnly);
     } catch {
       setError("Failed to resolve report");
     } finally {
@@ -86,6 +98,7 @@ export default function AdminReports() {
       }
 
       await resolveReport(report.id, "deleted_post");
+      loadReports(page, unresolvedOnly);
     } catch {
       setError("Failed to delete post");
     } finally {
@@ -101,7 +114,23 @@ export default function AdminReports() {
           <div className="admin-links">
             <Link to="/admin">Dashboard</Link>
             <Link to="/admin/users">Users</Link>
+            <Link to="/admin/activity">Activity</Link>
           </div>
+        </div>
+
+        <div className="admin-toolbar">
+          <label className="admin-filter">
+            <input
+              type="checkbox"
+              checked={unresolvedOnly}
+              onChange={(event) => {
+                setPage(1);
+                setUnresolvedOnly(event.target.checked);
+              }}
+            />
+            Unresolved only
+          </label>
+          <span>{`Total: ${pagination.total || 0}`}</span>
         </div>
 
         {error && <div className="admin-error">{error}</div>}
@@ -158,6 +187,19 @@ export default function AdminReports() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="admin-pagination">
+          <button type="button" disabled={page <= 1} onClick={() => loadReports(page - 1, unresolvedOnly)}>
+            Previous
+          </button>
+          <span>{`Page ${page} of ${pagination.totalPages || 1}`}</span>
+          <button
+            type="button"
+            disabled={page >= (pagination.totalPages || 1)}
+            onClick={() => loadReports(page + 1, unresolvedOnly)}
+          >
+            Next
+          </button>
         </div>
       </div>
     </div>

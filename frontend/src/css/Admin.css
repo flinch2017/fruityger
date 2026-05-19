@@ -130,6 +130,41 @@
   color: #8a1f1f;
 }
 
+.admin-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.admin-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.admin-pagination {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-pagination button {
+  border: 1px solid #b7d4e8;
+  border-radius: 8px;
+  background: #f2f8fd;
+  color: #174c73;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.admin-pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (max-width: 740px) {
   .admin-stats {
     grid-template-columns: 1fr;

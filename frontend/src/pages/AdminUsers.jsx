@@ -72,6 +72,7 @@ export default function AdminUsers() {
           <div className="admin-links">
             <Link to="/admin">Dashboard</Link>
             <Link to="/admin/reports">Reports</Link>
+            <Link to="/admin/activity">Activity</Link>
           </div>
         </div>
 

@@ -37,6 +37,7 @@ export default function AdminDashboard() {
           <div className="admin-links">
             <Link to="/admin/users">Users</Link>
             <Link to="/admin/reports">Reports</Link>
+            <Link to="/admin/activity">Activity</Link>
           </div>
         </div>
 
