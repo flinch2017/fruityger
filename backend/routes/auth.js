@@ -119,6 +119,24 @@ const ensureAccountStatusSchema = async () => {
   `);
 };
 
+const ensureUserCreatedAtSchema = async () => {
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ
+  `);
+
+  await pool.query(`
+    ALTER TABLE users
+    ALTER COLUMN created_at SET DEFAULT NOW()
+  `);
+
+  await pool.query(`
+    UPDATE users
+    SET created_at = NOW()
+    WHERE created_at IS NULL
+  `);
+};
+
 const quoteIdentifier = (value) => `"${String(value).replace(/"/g, '""')}"`;
 
 const cleanupUserDependencies = async (client, userId) => {
@@ -416,6 +434,7 @@ router.post("/signup", async (req, res) => {
   await ensureUserOnboardingSchema();
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
+  await ensureUserCreatedAtSchema();
   await cleanupExpiredUnverifiedUsers();
   await cleanupExpiredDeletedUsers();
 
@@ -462,13 +481,14 @@ router.post("/signup", async (req, res) => {
         password,
         profile_pic,
         birth_date,
+        created_at,
         email_verified,
         email_verification_code,
         email_verification_expires_at,
         interests,
         interests_completed
       )
-      VALUES ($1, $2, $3, $4, $5, FALSE, $6, $7, '[]'::jsonb, FALSE)
+      VALUES ($1, $2, $3, $4, $5, NOW(), FALSE, $6, $7, '[]'::jsonb, FALSE)
       RETURNING id, username, email, profile_pic, birth_date, email_verified, interests, interests_completed, created_at
       `,
       [normalizedUsername, email, password_hash, profile_pic || null, birthDate, verificationCode, verificationExpiry]
@@ -514,6 +534,7 @@ router.post("/login", async (req, res) => {
   await ensureUserOnboardingSchema();
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
+  await ensureUserCreatedAtSchema();
   await cleanupExpiredUnverifiedUsers();
   await cleanupExpiredDeletedUsers();
 
