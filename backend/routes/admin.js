@@ -78,6 +78,12 @@ const getReportsTableColumns = async () => {
   return new Set(rows.map((row) => String(row.column_name)));
 };
 
+const getReportIdColumn = (columns) => {
+  if (columns.has("id")) return "id";
+  if (columns.has("report_id")) return "report_id";
+  return null;
+};
+
 const ensureAdminActivitySchema = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_activity_logs (
@@ -254,6 +260,10 @@ router.get("/reports", authenticateAdmin, async (req, res) => {
     }
 
     const reportColumns = await getReportsTableColumns();
+    const reportIdColumn = getReportIdColumn(reportColumns);
+    if (!reportIdColumn) {
+      return res.status(500).json({ error: "Reports table is missing a primary id column" });
+    }
     const hasReporterId = reportColumns.has("reporter_id");
     const hasContentType = reportColumns.has("content_type");
     const hasContentId = reportColumns.has("content_id");
@@ -279,7 +289,7 @@ router.get("/reports", authenticateAdmin, async (req, res) => {
       ? await pool.query(
           `
           SELECT
-            id,
+            ${reportIdColumn}::text AS id,
             ${hasReporterId ? "reporter_id" : "NULL::uuid AS reporter_id"},
             ${hasContentType ? "content_type" : "NULL::text AS content_type"},
             ${hasContentId ? "content_id" : "NULL::text AS content_id"},
@@ -291,7 +301,7 @@ router.get("/reports", authenticateAdmin, async (req, res) => {
             ${hasResolutionAction ? "resolution_action" : "NULL::text AS resolution_action"}
           FROM reports
           WHERE ($1::boolean = FALSE OR ${hasResolvedAt ? "resolved_at IS NULL" : "TRUE"})
-          ORDER BY ${hasCreatedAt ? "created_at" : "id"} DESC
+          ORDER BY ${hasCreatedAt ? "created_at" : reportIdColumn} DESC
           LIMIT $2
           OFFSET $3
           `,
@@ -300,7 +310,7 @@ router.get("/reports", authenticateAdmin, async (req, res) => {
       : await pool.query(
           `
           SELECT
-            id,
+            ${reportIdColumn}::text AS id,
             ${hasReporterId ? "reporter_id" : "NULL::uuid AS reporter_id"},
             ${hasContentType ? "content_type" : "NULL::text AS content_type"},
             ${hasContentId ? "content_id" : "NULL::text AS content_id"},
@@ -311,7 +321,7 @@ router.get("/reports", authenticateAdmin, async (req, res) => {
             NULL::uuid AS resolved_by,
             NULL::text AS resolution_action
           FROM reports
-          ORDER BY ${hasCreatedAt ? "created_at" : "id"} DESC
+          ORDER BY ${hasCreatedAt ? "created_at" : reportIdColumn} DESC
           LIMIT $1
           OFFSET $2
           `,
@@ -419,14 +429,20 @@ router.patch("/reports/:reportId/resolve", authenticateAdmin, async (req, res) =
   }
 
   try {
+    const reportColumns = await getReportsTableColumns();
+    const reportIdColumn = getReportIdColumn(reportColumns);
+    if (!reportIdColumn) {
+      return res.status(500).json({ error: "Reports table is missing a primary id column" });
+    }
+
     const { rows } = await pool.query(
       `
       UPDATE reports
       SET resolved_at = NOW(),
           resolved_by = $2,
           resolution_action = $3
-      WHERE id = $1
-      RETURNING id, resolved_at, resolved_by, resolution_action
+      WHERE ${reportIdColumn}::text = $1
+      RETURNING ${reportIdColumn}::text AS id, resolved_at, resolved_by, resolution_action
       `,
       [reportId, req.admin.id, action]
     );
