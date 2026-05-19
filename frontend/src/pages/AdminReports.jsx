@@ -3,6 +3,13 @@ import { Link } from "react-router-dom";
 import "../css/Admin.css";
 
 const getAdminToken = () => localStorage.getItem("adminToken");
+const formatBytes = (value) => {
+  const size = Number(value);
+  if (!Number.isFinite(size) || size <= 0) return "";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 export default function AdminReports() {
   const [reports, setReports] = useState([]);
@@ -169,6 +176,13 @@ export default function AdminReports() {
                         >
                           Open media
                         </a>
+                      )}
+                      {report.preview?.attachment_name && (
+                        <div className="admin-file-meta">
+                          {report.preview.attachment_name}
+                          {report.preview.attachment_mime ? ` (${report.preview.attachment_mime})` : ""}
+                          {report.preview.attachment_size ? ` • ${formatBytes(report.preview.attachment_size)}` : ""}
+                        </div>
                       )}
                       {report.preview?.media_url && report.preview?.media_type === "image" && (
                         <img

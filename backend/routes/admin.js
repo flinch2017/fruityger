@@ -84,6 +84,13 @@ const getReportIdColumn = (columns) => {
   return null;
 };
 
+const extractLegacyMessageIdFromDetails = (details, label) => {
+  const text = String(details || "");
+  const regex = new RegExp(`${label}\\s*:\\s*([0-9a-fA-F-]{36})`, "i");
+  const match = text.match(regex);
+  return match?.[1] || null;
+};
+
 const buildReportPreview = async (report) => {
   const contentType = String(report?.content_type || "").toLowerCase();
   const contentId = String(report?.content_id || "").trim();
@@ -139,43 +146,66 @@ const buildReportPreview = async (report) => {
     }
 
     if (contentType === "message") {
+      const fallbackMessageId = extractLegacyMessageIdFromDetails(
+        report?.details,
+        "Reported message ID"
+      );
+      const lookupId = fallbackMessageId || contentId;
       const { rows } = await pool.query(
         `
-        SELECT message, attachment_url, attachment_type
+        SELECT message, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
         FROM messages
         WHERE id::text = $1
         LIMIT 1
         `,
-        [contentId]
+        [lookupId]
       );
       return {
         text: rows[0]?.message || null,
         media_url: rows[0]?.attachment_url || null,
         media_type: rows[0]?.attachment_type || null,
+        attachment_name: rows[0]?.attachment_name || null,
+        attachment_mime: rows[0]?.attachment_mime || null,
+        attachment_size: rows[0]?.attachment_size || null,
       };
     }
 
     if (contentType === "group_message") {
+      const fallbackMessageId = extractLegacyMessageIdFromDetails(
+        report?.details,
+        "Reported group message ID"
+      );
+      const lookupId = fallbackMessageId || contentId;
       const { rows } = await pool.query(
         `
-        SELECT message, attachment_url, attachment_type
+        SELECT message, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
         FROM group_messages
         WHERE id::text = $1
         LIMIT 1
         `,
-        [contentId]
+        [lookupId]
       );
       return {
         text: rows[0]?.message || null,
         media_url: rows[0]?.attachment_url || null,
         media_type: rows[0]?.attachment_type || null,
+        attachment_name: rows[0]?.attachment_name || null,
+        attachment_mime: rows[0]?.attachment_mime || null,
+        attachment_size: rows[0]?.attachment_size || null,
       };
     }
   } catch (error) {
     console.error("Failed to build report preview:", error?.message || error);
   }
 
-  return { text: null, media_url: null, media_type: null };
+  return {
+    text: null,
+    media_url: null,
+    media_type: null,
+    attachment_name: null,
+    attachment_mime: null,
+    attachment_size: null,
+  };
 };
 
 const ensureAdminActivitySchema = async () => {

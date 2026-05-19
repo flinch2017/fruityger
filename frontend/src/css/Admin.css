@@ -188,6 +188,12 @@
   background: #f8fbfe;
 }
 
+.admin-file-meta {
+  font-size: 12px;
+  color: #4d6b84;
+  word-break: break-word;
+}
+
 @media (max-width: 740px) {
   .admin-stats {
     grid-template-columns: 1fr;
