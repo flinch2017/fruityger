@@ -48,6 +48,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import AdminUsers from "./pages/AdminUsers";
 import AdminReports from "./pages/AdminReports";
 import AdminActivity from "./pages/AdminActivity";
+import AdminHelpCenter from "./pages/AdminHelpCenter";
 
 
 import "./css/App.css";
@@ -161,6 +162,14 @@ function App() {
           element={
             <AdminRoute>
               <AdminActivity />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/help-center"
+          element={
+            <AdminRoute>
+              <AdminHelpCenter />
             </AdminRoute>
           }
         />

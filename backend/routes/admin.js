@@ -348,6 +348,22 @@ const ensureAdminActivitySchema = async () => {
   `);
 };
 
+const ensureHelpRequestsTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS help_requests (
+      id UUID PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      subject TEXT NOT NULL,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      admin_response TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      responded_at TIMESTAMPTZ
+    )
+  `);
+};
+
 const logAdminActivity = async ({ adminId, actionType, targetType, targetId, metadata = {} }) => {
   await ensureAdminActivitySchema();
   await pool.query(
@@ -821,6 +837,94 @@ router.get("/activity", authenticateAdmin, async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to load activity logs" });
+  }
+});
+
+router.get("/help-requests", authenticateAdmin, async (req, res) => {
+  const statusFilter = String(req.query.status || "").trim().toLowerCase();
+
+  try {
+    await ensureHelpRequestsTable();
+    const { rows } = await pool.query(
+      `
+      SELECT
+        hr.id,
+        hr.user_id,
+        u.username,
+        u.email,
+        hr.subject,
+        hr.message,
+        hr.status,
+        hr.admin_response,
+        hr.created_at,
+        hr.updated_at,
+        hr.responded_at
+      FROM help_requests hr
+      JOIN users u ON u.id = hr.user_id
+      WHERE ($1 = '' OR LOWER(hr.status) = $1)
+      ORDER BY hr.created_at DESC
+      LIMIT 200
+      `,
+      [statusFilter]
+    );
+
+    return res.json({ requests: rows });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to load help requests" });
+  }
+});
+
+router.patch("/help-requests/:requestId", authenticateAdmin, async (req, res) => {
+  const { requestId } = req.params;
+  const nextStatus = String(req.body?.status || "").trim().toLowerCase();
+  const adminResponse = String(req.body?.adminResponse || "").trim();
+  const allowedStatus = new Set(["open", "in_progress", "resolved"]);
+
+  if (!allowedStatus.has(nextStatus)) {
+    return res.status(400).json({ error: "Invalid status value" });
+  }
+
+  try {
+    await ensureHelpRequestsTable();
+    const { rows } = await pool.query(
+      `
+      UPDATE help_requests
+      SET status = $2,
+          admin_response = CASE
+            WHEN $3 = '' THEN admin_response
+            ELSE $3
+          END,
+          updated_at = NOW(),
+          responded_at = CASE
+            WHEN $3 = '' THEN responded_at
+            ELSE NOW()
+          END
+      WHERE id::text = $1
+      RETURNING id, status, admin_response, updated_at, responded_at
+      `,
+      [requestId, nextStatus, adminResponse]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ error: "Help request not found" });
+    }
+
+    await logAdminActivity({
+      adminId: req.admin.id,
+      actionType: "update_help_request",
+      targetType: "help_request",
+      targetId: requestId,
+      metadata: {
+        status: nextStatus,
+        responded: Boolean(adminResponse),
+      },
+    });
+
+    return res.json({ request: rows[0] });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to update help request" });
   }
 });
 

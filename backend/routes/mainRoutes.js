@@ -1,6 +1,7 @@
 
 import express from "express";
 import pool from "../db.js";
+import { v4 as uuidv4 } from "uuid";
 import { authenticateToken } from "../middleware/auth.js";
 import { deleteR2Object } from "../utils/r2Delete.js";
 import { ensureUserOnboardingSchema, normalizeInterests } from "../utils/userOnboarding.js";
@@ -15,6 +16,7 @@ let blockedUsersTableReadyPromise = null;
 let userProfileSchemaReadyPromise = null;
 let notificationPreferencesSchemaReadyPromise = null;
 let accountStatusSchemaReadyPromise = null;
+let helpRequestsTableReadyPromise = null;
 
 const normalizeUsername = (value = "") =>
   String(value)
@@ -150,6 +152,31 @@ async function ensureAccountStatusSchema() {
   }
 
   await accountStatusSchemaReadyPromise;
+}
+
+async function ensureHelpRequestsTable() {
+  if (!helpRequestsTableReadyPromise) {
+    helpRequestsTableReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS help_requests (
+          id UUID PRIMARY KEY,
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          subject TEXT NOT NULL,
+          message TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'open',
+          admin_response TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          responded_at TIMESTAMPTZ
+        )
+      `);
+    })().catch((error) => {
+      helpRequestsTableReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await helpRequestsTableReadyPromise;
 }
 
 
@@ -1012,6 +1039,57 @@ router.get("/feed", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/settings/help-requests", authenticateToken, async (req, res) => {
+  const subject = String(req.body?.subject || "").trim();
+  const message = String(req.body?.message || "").trim();
+
+  if (!subject || subject.length < 3) {
+    return res.status(400).json({ error: "Subject must be at least 3 characters" });
+  }
+
+  if (!message || message.length < 8) {
+    return res.status(400).json({ error: "Message must be at least 8 characters" });
+  }
+
+  try {
+    await ensureHelpRequestsTable();
+    const { rows } = await pool.query(
+      `
+      INSERT INTO help_requests (id, user_id, subject, message)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, subject, message, status, created_at
+      `,
+      [uuidv4(), req.user.id, subject, message]
+    );
+
+    res.status(201).json({ request: rows[0] });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to submit help request" });
+  }
+});
+
+router.get("/settings/help-requests", authenticateToken, async (req, res) => {
+  try {
+    await ensureHelpRequestsTable();
+    const { rows } = await pool.query(
+      `
+      SELECT id, subject, message, status, admin_response, created_at, updated_at, responded_at
+      FROM help_requests
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 20
+      `,
+      [req.user.id]
+    );
+
+    res.json({ requests: rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to load help requests" });
   }
 });
 

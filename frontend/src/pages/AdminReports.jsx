@@ -122,6 +122,7 @@ export default function AdminReports() {
             <Link to="/admin">Dashboard</Link>
             <Link to="/admin/users">Users</Link>
             <Link to="/admin/activity">Activity</Link>
+            <Link to="/admin/help-center">Help Center</Link>
           </div>
         </div>
 

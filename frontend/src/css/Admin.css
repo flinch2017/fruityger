@@ -194,6 +194,24 @@
   word-break: break-word;
 }
 
+.admin-select {
+  margin-left: 10px;
+  border: 1px solid #bbd5e9;
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #fff;
+}
+
+.admin-response-input {
+  width: 260px;
+  max-width: 100%;
+  min-height: 72px;
+  border: 1px solid #bbd5e9;
+  border-radius: 8px;
+  padding: 8px;
+  resize: vertical;
+}
+
 @media (max-width: 740px) {
   .admin-stats {
     grid-template-columns: 1fr;

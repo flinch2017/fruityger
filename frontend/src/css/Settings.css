@@ -355,6 +355,45 @@
   transform: translateX(28px);
 }
 
+.settings-help-form {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-help-input,
+.settings-help-textarea {
+  border: 1px solid rgba(82, 140, 164, 0.3);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #245567;
+  font-size: 0.95rem;
+}
+
+.settings-help-textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.settings-help-history {
+  margin-top: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.settings-help-row {
+  align-items: flex-start;
+}
+
+.settings-help-response {
+  color: #1c93b5;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
 @media (max-width: 700px) {
   .settings-page {
     width: calc(100% - 20px);
