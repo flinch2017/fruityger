@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import {
   FaArrowLeft,
   FaCog,
@@ -30,7 +30,6 @@ export default function GroupChat() {
   ];
 
   const { groupChatId } = useParams();
-  const navigate = useNavigate();
   const token = localStorage.getItem("token");
   const userId = localStorage.getItem("userId");
 
@@ -106,6 +105,10 @@ export default function GroupChat() {
 
   const dispatchMessagesRefresh = () => {
     window.dispatchEvent(new CustomEvent("fruityger:messages-refresh"));
+  };
+
+  const redirectTo = (path) => {
+    window.location.assign(path);
   };
 
   const toggleMessageMenu = (messageId, event) => {
@@ -521,7 +524,7 @@ export default function GroupChat() {
 
   const handleReport = (msg) => {
     setOpenMenuId(null);
-    navigate(`/report?type=group-message&id=${msg.id}`);
+    redirectTo(`/report?type=group-message&id=${msg.id}`);
   };
 
   const handleReact = async (message, reactionKey) => {
@@ -989,7 +992,7 @@ export default function GroupChat() {
       setLeaveModalOpen(false);
       setSelectedNextAdminId("");
       dispatchMessagesRefresh();
-      navigate("/messages");
+      redirectTo("/messages");
     } catch (error) {
       console.error(error);
       setNotice({ type: "error", message: error.message || "Failed to leave group." });
@@ -1018,7 +1021,7 @@ export default function GroupChat() {
       }
 
       dispatchMessagesRefresh();
-      navigate("/messages");
+      redirectTo("/messages");
     } catch (error) {
       console.error(error);
       setNotice({ type: "error", message: error.message || "Failed to delete group chat." });
@@ -1094,7 +1097,7 @@ export default function GroupChat() {
   }, [groupChat]);
 
   const handleBackNavigation = () => {
-    navigate("/messages");
+    redirectTo("/messages");
   };
 
   return (
@@ -1246,7 +1249,7 @@ export default function GroupChat() {
                       <button
                         type="button"
                         className="group-message-sender"
-                        onClick={() => navigate(`/profile/${msg.sender_username}`)}
+                        onClick={() => redirectTo(`/profile/${msg.sender_username}`)}
                       >
                         {msg.sender_username || "Member"}
                       </button>
