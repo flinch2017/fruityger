@@ -8,6 +8,7 @@ import {
   FaHome,
   FaPlayCircle,
   FaPlus,
+  FaQuestionCircle,
   FaSearch,
   FaSignOutAlt,
   FaUser,
@@ -727,6 +728,19 @@ export default function Header() {
                       <FaCog />
                     </span>
                     <span>Settings</span>
+                  </button>
+
+                  <button
+                    className="profile-dropdown-action"
+                    onClick={() => {
+                      goTo("/help-center");
+                      setDropdownOpen(false);
+                    }}
+                  >
+                    <span className="profile-dropdown-icon">
+                      <FaQuestionCircle />
+                    </span>
+                    <span>Help Center</span>
                   </button>
 
                   <button

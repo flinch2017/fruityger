@@ -3,6 +3,7 @@ import Header from "./components/Header";
 import Feed from "./components/Feed";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
+import HelpCenter from "./pages/HelpCenter";
 import VerifyCurrentPassword from "./pages/VerifyCurrentPassword";
 import ChangeEmail from "./pages/ChangeEmail";
 import ChangePassword from "./pages/ChangePassword";
@@ -288,6 +289,16 @@ function App() {
             <PrivateRoute>
               <MainLayout>
                 <Settings />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/help-center"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <HelpCenter />
               </MainLayout>
             </PrivateRoute>
           }

@@ -379,9 +379,12 @@
 }
 
 .settings-help-history {
-  margin-top: 16px;
   position: relative;
   z-index: 1;
+}
+
+.settings-help-actions {
+  margin-top: 2px;
 }
 
 .settings-help-row {
@@ -392,6 +395,20 @@
   color: #1c93b5;
   font-size: 0.86rem;
   font-weight: 700;
+}
+
+.settings-empty-state {
+  position: relative;
+  z-index: 1;
+  padding: 16px 18px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #587b89;
+  font-size: 0.92rem;
+  font-weight: 700;
+  box-shadow:
+    0 10px 22px rgba(0, 169, 255, 0.1),
+    inset 0 1px 0 rgba(255,255,255,0.96);
 }
 
 @media (max-width: 700px) {
