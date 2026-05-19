@@ -28,6 +28,8 @@
 
 .admin-links {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -36,6 +38,16 @@
   color: #0f5f99;
   text-decoration: none;
   font-weight: 600;
+}
+
+.admin-logout-btn {
+  border: 1px solid #f3bcbc;
+  border-radius: 10px;
+  background: #ffecec;
+  color: #8a1f1f;
+  padding: 8px 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .admin-form,

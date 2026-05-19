@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import AdminNav from "../components/AdminNav";
 import "../css/Admin.css";
 
 const getAdminToken = () => localStorage.getItem("adminToken");
@@ -37,14 +37,7 @@ export default function AdminActivity() {
   return (
     <div className="admin-shell">
       <div className="admin-card">
-        <div className="admin-topbar">
-          <h1>Admin Activity</h1>
-          <div className="admin-links">
-            <Link to="/admin">Dashboard</Link>
-            <Link to="/admin/reports">Reports</Link>
-            <Link to="/admin/help-center">Help Center</Link>
-          </div>
-        </div>
+        <AdminNav title="Admin Activity" />
 
         {error && <div className="admin-error">{error}</div>}
 
