@@ -79,6 +79,7 @@ export default function GroupChat() {
   const groupImageInputRef = useRef(null);
   const headerMenuRef = useRef(null);
   const memberSearchTimeoutRef = useRef(null);
+  const isMountedRef = useRef(true);
 
   const memberCount = groupChat?.members?.length || 0;
   const isAdmin = Array.isArray(groupChat?.admin_user_ids)
@@ -182,7 +183,7 @@ export default function GroupChat() {
   );
 
   const fetchGroupChatSnapshot = async ({ showLoading = false } = {}) => {
-    if (!token) return;
+    if (!token || !isMountedRef.current) return;
 
     if (showLoading) {
       setLoading(true);
@@ -198,14 +199,16 @@ export default function GroupChat() {
         throw new Error(data.error || "Failed to fetch group chat");
       }
 
+      if (!isMountedRef.current) return;
       setGroupChat(data.groupChat || null);
       setMessages([...(data.messages || [])].reverse());
       dispatchMessagesRefresh();
     } catch (error) {
       console.error(error);
+      if (!isMountedRef.current) return;
       setNotice({ type: "error", message: error.message || "Failed to load group chat." });
     } finally {
-      if (showLoading) {
+      if (showLoading && isMountedRef.current) {
         setLoading(false);
       }
     }
@@ -226,6 +229,8 @@ export default function GroupChat() {
   }, [messages, userId]);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     const init = async () => {
       await fetchGroupChatSnapshot({ showLoading: true });
       scrollToBottom("auto");
@@ -253,10 +258,15 @@ export default function GroupChat() {
       .subscribe();
 
     return () => {
+      isMountedRef.current = false;
       if (refreshTimeoutRef.current) {
         clearTimeout(refreshTimeoutRef.current);
       }
-      supabase.removeChannel(channel);
+      try {
+        supabase.removeChannel(channel);
+      } catch (error) {
+        console.error("Failed to cleanup group chat realtime channel:", error);
+      }
     };
   }, [groupChatId, token]);
 
