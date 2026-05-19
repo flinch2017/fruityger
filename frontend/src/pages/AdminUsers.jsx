@@ -10,6 +10,12 @@ const formatCreatedAt = (value) => {
   return `${date.toISOString()} (UTC)`;
 };
 
+const formatBirthDate = (value) => {
+  if (!value) return "-";
+  const normalized = String(value);
+  return normalized.includes("T") ? normalized.split("T")[0] : normalized;
+};
+
 export default function AdminUsers() {
   const [q, setQ] = useState("");
   const [users, setUsers] = useState([]);
@@ -100,8 +106,10 @@ export default function AdminUsers() {
           <table className="admin-table">
             <thead>
               <tr>
+                <th>User ID</th>
                 <th>Username</th>
                 <th>Email</th>
+                <th>Birthdate</th>
                 <th>Verified</th>
                 <th>Admin</th>
                 <th>Status</th>
@@ -112,8 +120,10 @@ export default function AdminUsers() {
             <tbody>
               {users.map((user) => (
                 <tr key={user.id}>
+                  <td>{user.id}</td>
                   <td>{user.username}</td>
                   <td>{user.email}</td>
+                  <td>{formatBirthDate(user.birth_date)}</td>
                   <td>{user.email_verified ? "Yes" : "No"}</td>
                   <td>{user.is_admin ? "Yes" : "No"}</td>
                   <td>

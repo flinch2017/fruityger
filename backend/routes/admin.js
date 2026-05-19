@@ -64,6 +64,14 @@ const ensureAdminBanSchema = async () => {
   `);
 };
 
+const ensureAdminUserMetadataSchema = async () => {
+  await ensureAdminBanSchema();
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS birth_date DATE
+  `);
+};
+
 const getReportModerationColumnsReady = async () => {
   try {
     await ensureReportModerationSchema();
@@ -459,7 +467,7 @@ router.get("/session", authenticateAdmin, async (req, res) => {
 
 router.get("/dashboard", authenticateAdmin, async (req, res) => {
   try {
-    await ensureAdminBanSchema();
+    await ensureAdminUserMetadataSchema();
     const usersCreatedColumn = await resolveUsersCreatedColumn();
     const usersCreatedSelect = usersCreatedColumn
       ? `${usersCreatedColumn} AS created_at`
@@ -472,7 +480,7 @@ router.get("/dashboard", authenticateAdmin, async (req, res) => {
       pool.query("SELECT COUNT(*)::int AS total FROM reports"),
       pool.query(
         `
-        SELECT id, username, email, ${usersCreatedSelect}, email_verified
+        SELECT id, username, email, birth_date, ${usersCreatedSelect}, email_verified
         FROM users
         WHERE deleted_at IS NULL
         ORDER BY ${usersOrderBy} DESC
@@ -500,7 +508,7 @@ router.get("/users", authenticateAdmin, async (req, res) => {
   const query = String(req.query.q || "").trim().toLowerCase();
 
   try {
-    await ensureAdminBanSchema();
+    await ensureAdminUserMetadataSchema();
     const usersCreatedColumn = await resolveUsersCreatedColumn();
     const usersCreatedSelect = usersCreatedColumn
       ? `${usersCreatedColumn} AS created_at`
@@ -509,7 +517,7 @@ router.get("/users", authenticateAdmin, async (req, res) => {
 
     const { rows } = await pool.query(
       `
-      SELECT id, username, email, ${usersCreatedSelect}, email_verified, is_admin
+      SELECT id, username, email, birth_date, ${usersCreatedSelect}, email_verified, is_admin
            , deactivated_at, admin_banned_at
       FROM users
       WHERE deleted_at IS NULL

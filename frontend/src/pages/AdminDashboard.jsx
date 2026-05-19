@@ -10,6 +10,12 @@ const formatCreatedAt = (value) => {
   return `${date.toISOString()} (UTC)`;
 };
 
+const formatBirthDate = (value) => {
+  if (!value) return "-";
+  const normalized = String(value);
+  return normalized.includes("T") ? normalized.split("T")[0] : normalized;
+};
+
 export default function AdminDashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -62,8 +68,10 @@ export default function AdminDashboard() {
           <table className="admin-table">
             <thead>
               <tr>
+                <th>User ID</th>
                 <th>Username</th>
                 <th>Email</th>
+                <th>Birthdate</th>
                 <th>Verified</th>
                 <th>Created</th>
               </tr>
@@ -71,8 +79,10 @@ export default function AdminDashboard() {
             <tbody>
               {(data?.latestUsers || []).map((user) => (
                 <tr key={user.id}>
+                  <td>{user.id}</td>
                   <td>{user.username}</td>
                   <td>{user.email}</td>
+                  <td>{formatBirthDate(user.birth_date)}</td>
                   <td>{user.email_verified ? "Yes" : "No"}</td>
                   <td>{formatCreatedAt(user.created_at)}</td>
                 </tr>
