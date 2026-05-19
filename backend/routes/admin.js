@@ -78,6 +78,19 @@ const getReportsTableColumns = async () => {
   return new Set(rows.map((row) => String(row.column_name)));
 };
 
+const getTableColumns = async (tableName) => {
+  const { rows } = await pool.query(
+    `
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = $1
+    `,
+    [String(tableName)]
+  );
+  return new Set(rows.map((row) => String(row.column_name)));
+};
+
 const getReportIdColumn = (columns) => {
   if (columns.has("id")) return "id";
   if (columns.has("report_id")) return "report_id";
@@ -146,6 +159,23 @@ const buildReportPreview = async (report) => {
     }
 
     if (contentType === "message") {
+      const messageColumns = await getTableColumns("messages");
+      const messageTextColumn = messageColumns.has("content")
+        ? "content"
+        : messageColumns.has("message")
+          ? "message"
+          : null;
+      if (!messageTextColumn) {
+        return {
+          text: null,
+          media_url: null,
+          media_type: null,
+          attachment_name: null,
+          attachment_mime: null,
+          attachment_size: null,
+        };
+      }
+
       const fallbackMessageId = extractLegacyMessageIdFromDetails(
         report?.details,
         "Reported message ID"
@@ -153,7 +183,7 @@ const buildReportPreview = async (report) => {
       const lookupId = fallbackMessageId || contentId;
       let { rows } = await pool.query(
         `
-        SELECT message, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
+        SELECT ${messageTextColumn} AS message_text, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
         FROM messages
         WHERE id::text = $1
         LIMIT 1
@@ -165,7 +195,7 @@ const buildReportPreview = async (report) => {
         rows = (
           await pool.query(
             `
-            SELECT message, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
+            SELECT ${messageTextColumn} AS message_text, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
             FROM messages
             WHERE chat_id::text = $1
               AND sender_id::text <> $2
@@ -179,7 +209,7 @@ const buildReportPreview = async (report) => {
       }
 
       return {
-        text: rows[0]?.message || null,
+        text: rows[0]?.message_text || null,
         media_url: rows[0]?.attachment_url || null,
         media_type: rows[0]?.attachment_type || null,
         attachment_name: rows[0]?.attachment_name || null,
@@ -189,6 +219,23 @@ const buildReportPreview = async (report) => {
     }
 
     if (contentType === "group_message") {
+      const groupMessageColumns = await getTableColumns("group_messages");
+      const groupMessageTextColumn = groupMessageColumns.has("content")
+        ? "content"
+        : groupMessageColumns.has("message")
+          ? "message"
+          : null;
+      if (!groupMessageTextColumn) {
+        return {
+          text: null,
+          media_url: null,
+          media_type: null,
+          attachment_name: null,
+          attachment_mime: null,
+          attachment_size: null,
+        };
+      }
+
       const fallbackMessageId = extractLegacyMessageIdFromDetails(
         report?.details,
         "Reported group message ID"
@@ -196,7 +243,7 @@ const buildReportPreview = async (report) => {
       const lookupId = fallbackMessageId || contentId;
       let { rows } = await pool.query(
         `
-        SELECT message, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
+        SELECT ${groupMessageTextColumn} AS message_text, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
         FROM group_messages
         WHERE id::text = $1
         LIMIT 1
@@ -208,7 +255,7 @@ const buildReportPreview = async (report) => {
         rows = (
           await pool.query(
             `
-            SELECT message, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
+            SELECT ${groupMessageTextColumn} AS message_text, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
             FROM group_messages
             WHERE group_chat_id::text = $1
               AND sender_id::text <> $2
@@ -222,7 +269,7 @@ const buildReportPreview = async (report) => {
       }
 
       return {
-        text: rows[0]?.message || null,
+        text: rows[0]?.message_text || null,
         media_url: rows[0]?.attachment_url || null,
         media_type: rows[0]?.attachment_type || null,
         attachment_name: rows[0]?.attachment_name || null,
