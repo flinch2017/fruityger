@@ -66,6 +66,18 @@ const getReportModerationColumnsReady = async () => {
   }
 };
 
+const getReportsTableColumns = async () => {
+  const { rows } = await pool.query(
+    `
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'reports'
+    `
+  );
+  return new Set(rows.map((row) => String(row.column_name)));
+};
+
 const ensureAdminActivitySchema = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_activity_logs (
@@ -232,6 +244,26 @@ router.get("/reports", authenticateAdmin, async (req, res) => {
   const offset = (page - 1) * limit;
 
   try {
+    const tableExistsResult = await pool.query(`SELECT to_regclass('public.reports') AS reports_table`);
+    if (!tableExistsResult.rows[0]?.reports_table) {
+      return res.json({
+        reports: [],
+        pagination: { page, limit, total: 0, totalPages: 1 },
+        filters: { unresolvedOnly: false, moderationColumnsReady: false },
+      });
+    }
+
+    const reportColumns = await getReportsTableColumns();
+    const hasReporterId = reportColumns.has("reporter_id");
+    const hasContentType = reportColumns.has("content_type");
+    const hasContentId = reportColumns.has("content_id");
+    const hasReason = reportColumns.has("reason");
+    const hasDetails = reportColumns.has("details");
+    const hasCreatedAt = reportColumns.has("created_at");
+    const hasResolvedAt = moderationColumnsReady && reportColumns.has("resolved_at");
+    const hasResolvedBy = moderationColumnsReady && reportColumns.has("resolved_by");
+    const hasResolutionAction = moderationColumnsReady && reportColumns.has("resolution_action");
+
     const countResult = moderationColumnsReady
       ? await pool.query(
           `
@@ -248,18 +280,18 @@ router.get("/reports", authenticateAdmin, async (req, res) => {
           `
           SELECT
             id,
-            reporter_id,
-            content_type,
-            content_id,
-            reason,
-            details,
-            created_at,
-            resolved_at,
-            resolved_by,
-            resolution_action
+            ${hasReporterId ? "reporter_id" : "NULL::uuid AS reporter_id"},
+            ${hasContentType ? "content_type" : "NULL::text AS content_type"},
+            ${hasContentId ? "content_id" : "NULL::text AS content_id"},
+            ${hasReason ? "reason" : "NULL::text AS reason"},
+            ${hasDetails ? "details" : "NULL::text AS details"},
+            ${hasCreatedAt ? "created_at" : "NOW()::timestamptz AS created_at"},
+            ${hasResolvedAt ? "resolved_at" : "NULL::timestamptz AS resolved_at"},
+            ${hasResolvedBy ? "resolved_by" : "NULL::uuid AS resolved_by"},
+            ${hasResolutionAction ? "resolution_action" : "NULL::text AS resolution_action"}
           FROM reports
-          WHERE ($1::boolean = FALSE OR resolved_at IS NULL)
-          ORDER BY created_at DESC
+          WHERE ($1::boolean = FALSE OR ${hasResolvedAt ? "resolved_at IS NULL" : "TRUE"})
+          ORDER BY ${hasCreatedAt ? "created_at" : "id"} DESC
           LIMIT $2
           OFFSET $3
           `,
@@ -269,17 +301,17 @@ router.get("/reports", authenticateAdmin, async (req, res) => {
           `
           SELECT
             id,
-            reporter_id,
-            content_type,
-            content_id,
-            reason,
-            details,
-            created_at,
+            ${hasReporterId ? "reporter_id" : "NULL::uuid AS reporter_id"},
+            ${hasContentType ? "content_type" : "NULL::text AS content_type"},
+            ${hasContentId ? "content_id" : "NULL::text AS content_id"},
+            ${hasReason ? "reason" : "NULL::text AS reason"},
+            ${hasDetails ? "details" : "NULL::text AS details"},
+            ${hasCreatedAt ? "created_at" : "NOW()::timestamptz AS created_at"},
             NULL::timestamptz AS resolved_at,
             NULL::uuid AS resolved_by,
             NULL::text AS resolution_action
           FROM reports
-          ORDER BY created_at DESC
+          ORDER BY ${hasCreatedAt ? "created_at" : "id"} DESC
           LIMIT $1
           OFFSET $2
           `,
