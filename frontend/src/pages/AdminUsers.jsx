@@ -3,6 +3,12 @@ import { Link } from "react-router-dom";
 import "../css/Admin.css";
 
 const getAdminToken = () => localStorage.getItem("adminToken");
+const formatCreatedAt = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return `${date.toISOString()} (UTC)`;
+};
 
 export default function AdminUsers() {
   const [q, setQ] = useState("");
@@ -114,7 +120,7 @@ export default function AdminUsers() {
                   <td>{user.email_verified ? "Yes" : "No"}</td>
                   <td>{user.is_admin ? "Yes" : "No"}</td>
                   <td>{user.deactivated_at ? "Banned" : "Active"}</td>
-                  <td>{new Date(user.created_at).toLocaleString()}</td>
+                  <td>{formatCreatedAt(user.created_at)}</td>
                   <td>
                     <button
                       type="button"
