@@ -151,7 +151,7 @@ const buildReportPreview = async (report) => {
         "Reported message ID"
       );
       const lookupId = fallbackMessageId || contentId;
-      const { rows } = await pool.query(
+      let { rows } = await pool.query(
         `
         SELECT message, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
         FROM messages
@@ -160,6 +160,24 @@ const buildReportPreview = async (report) => {
         `,
         [lookupId]
       );
+
+      if (!rows[0]) {
+        rows = (
+          await pool.query(
+            `
+            SELECT message, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
+            FROM messages
+            WHERE chat_id::text = $1
+              AND sender_id::text <> $2
+              AND ($3::timestamptz IS NULL OR created_at <= $3::timestamptz)
+            ORDER BY created_at DESC
+            LIMIT 1
+            `,
+            [contentId, String(report?.reporter_id || ""), report?.created_at || null]
+          )
+        ).rows;
+      }
+
       return {
         text: rows[0]?.message || null,
         media_url: rows[0]?.attachment_url || null,
@@ -176,7 +194,7 @@ const buildReportPreview = async (report) => {
         "Reported group message ID"
       );
       const lookupId = fallbackMessageId || contentId;
-      const { rows } = await pool.query(
+      let { rows } = await pool.query(
         `
         SELECT message, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
         FROM group_messages
@@ -185,6 +203,24 @@ const buildReportPreview = async (report) => {
         `,
         [lookupId]
       );
+
+      if (!rows[0]) {
+        rows = (
+          await pool.query(
+            `
+            SELECT message, attachment_url, attachment_type, attachment_name, attachment_mime, attachment_size
+            FROM group_messages
+            WHERE group_chat_id::text = $1
+              AND sender_id::text <> $2
+              AND ($3::timestamptz IS NULL OR created_at <= $3::timestamptz)
+            ORDER BY created_at DESC
+            LIMIT 1
+            `,
+            [contentId, String(report?.reporter_id || ""), report?.created_at || null]
+          )
+        ).rows;
+      }
+
       return {
         text: rows[0]?.message || null,
         media_url: rows[0]?.attachment_url || null,
