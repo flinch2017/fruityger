@@ -10,7 +10,6 @@ import {
   FaUsers,
 } from "react-icons/fa";
 import "../css/GameLobby.css";
-import { formatCount } from "../utils/countFormatter";
 import supabase from "../lib/supabaseClient";
 
 const API_BASE = "http://localhost:5000/api/game-lobbies";
@@ -123,7 +122,7 @@ export default function GameHub() {
   const activeMatch = summary?.activeMatches?.[0] || null;
 
   return (
-    <div className="game-lobby-page">
+    <div className="game-lobby-page" aria-busy={loading}>
       <section className="game-lobby-command">
         <div className="game-lobby-title">
           <span className="game-lobby-mark">
@@ -148,30 +147,6 @@ export default function GameHub() {
       </section>
 
       {error && <div className="game-lobby-alert error">{error}</div>}
-
-      <section className="game-lobby-overview game-hub-overview" aria-label="Tic tac toe activity">
-        <div className="game-lobby-stat game-hub-stat">
-          <div className="game-hub-stat-icon">
-            <FaChessKnight />
-          </div>
-          <strong>{loading ? "..." : formatCount(summary?.availableLobbies?.length || 0)}</strong>
-          <p>Tic tac toe lobbies</p>
-        </div>
-        <div className="game-lobby-stat game-hub-stat">
-          <div className="game-hub-stat-icon">
-            <FaPlay />
-          </div>
-          <strong>{loading ? "..." : formatCount(summary?.activeMatches?.length || 0)}</strong>
-          <p>Active matches</p>
-        </div>
-        <div className="game-lobby-stat game-hub-stat">
-          <div className="game-hub-stat-icon">
-            <FaUsers />
-          </div>
-          <strong>{loading ? "..." : formatCount(summary?.invites?.length || 0)}</strong>
-          <p>Game invites</p>
-        </div>
-      </section>
 
       <section className="game-lobby-catalog game-hub-catalog">
         <div className="game-grid">

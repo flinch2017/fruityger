@@ -14,7 +14,6 @@ import {
   FaUsers,
 } from "react-icons/fa";
 import "../css/GameLobby.css";
-import { formatCount } from "../utils/countFormatter";
 import supabase from "../lib/supabaseClient";
 
 const API_BASE = "http://localhost:5000/api/game-lobbies";
@@ -354,21 +353,6 @@ export default function GameLobby() {
       {(error || notice) && (
         <div className={`game-lobby-alert ${error ? "error" : ""}`}>{error || notice}</div>
       )}
-
-      <section className="game-lobby-overview">
-        <div className="game-lobby-stat">
-          <span>{formatCount(dashboard.availableLobbies?.length || 0)}</span>
-          <p>Open lobbies</p>
-        </div>
-        <div className="game-lobby-stat">
-          <span>{formatCount(activeMatches.length)}</span>
-          <p>Live matches</p>
-        </div>
-        <div className="game-lobby-stat">
-          <span>{formatCount(dashboard.invites?.length || 0)}</span>
-          <p>Invites</p>
-        </div>
-      </section>
 
       <section className="game-lobby-main">
         <div className="game-lobby-catalog">
