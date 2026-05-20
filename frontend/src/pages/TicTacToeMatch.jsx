@@ -40,6 +40,7 @@ export default function TicTacToeMatch() {
   const [error, setError] = useState("");
   const [exiting, setExiting] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState("CONNECTING");
+  const [aiThinking, setAiThinking] = useState(false);
 
   const loadMatch = useCallback(
     async ({ quiet = false } = {}) => {
@@ -67,6 +68,39 @@ export default function TicTacToeMatch() {
   useEffect(() => {
     loadMatch();
   }, [loadMatch]);
+
+  const updatePresence = useCallback(
+    async (status, { keepalive = false } = {}) => {
+      if (!matchId || !getToken()) return;
+
+      const token = getToken();
+      fetch(`${API_BASE}/matches/${matchId}/presence`, {
+        method: "POST",
+        keepalive,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status }),
+      })
+        .then((res) => (keepalive ? null : res.json().catch(() => null)))
+        .then((data) => {
+          if (data?.match) {
+            setMatch(data.match);
+          }
+        })
+        .catch(() => null);
+    },
+    [matchId]
+  );
+
+  useEffect(() => {
+    updatePresence("active");
+
+    return () => {
+      updatePresence("afk", { keepalive: true });
+    };
+  }, [updatePresence]);
 
   useEffect(() => {
     if (!matchId) return undefined;
@@ -122,32 +156,73 @@ export default function TicTacToeMatch() {
   }, [currentUserId, loadMatch, matchId]);
 
   useEffect(() => {
-    const handleFocus = () => loadMatch({ quiet: true });
+    const handleFocus = () => {
+      updatePresence("active");
+      loadMatch({ quiet: true });
+    };
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
+        updatePresence("active");
         loadMatch({ quiet: true });
+      } else {
+        updatePresence("afk", { keepalive: true });
       }
     };
+    const handlePageHide = () => updatePresence("afk", { keepalive: true });
 
     window.addEventListener("focus", handleFocus);
+    window.addEventListener("pagehide", handlePageHide);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("pagehide", handlePageHide);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [loadMatch]);
+  }, [loadMatch, updatePresence]);
 
   useEffect(() => {
     if (!match || match.status !== "finished") return undefined;
 
     setExiting(true);
     const timeoutId = window.setTimeout(() => {
-      navigate("/games", { replace: true });
-    }, 3500);
+      navigate(`/games/tic-tac-toe/match/${match.id}/result`, { replace: true });
+    }, 1800);
 
     return () => window.clearTimeout(timeoutId);
   }, [match, navigate]);
+
+  useEffect(() => {
+    if (!match || match.status !== "active" || !match.current_turn_is_afk || aiThinking) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(async () => {
+      setAiThinking(true);
+      try {
+        const data = await requestJson(`/matches/${match.id}/ai-move`, { method: "POST" });
+        setMatch(data.match);
+        channelRef.current
+          ?.send({
+            type: "broadcast",
+            event: "match-updated",
+            payload: {
+              matchId: match.id,
+              actorId: `ai-${match.current_turn_user_id}`,
+              moveCount: data.match?.moves?.length || 0,
+              status: data.match?.status,
+            },
+          })
+          .catch(() => null);
+      } catch {
+        await loadMatch({ quiet: true });
+      } finally {
+        setAiThinking(false);
+      }
+    }, 1200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [aiThinking, loadMatch, match]);
 
   const boardSize = match?.board_size || 5;
   const board = useMemo(() => {
@@ -196,7 +271,13 @@ export default function TicTacToeMatch() {
       const won = match.winner_mark === match.my_mark;
       return won ? "Your team wins" : "Your team lost";
     }
-    return match.can_move ? "Your team's turn" : `Waiting for ${match.current_mark.toUpperCase()}`;
+    if (match.can_move) return "Your turn";
+    if (match.current_turn_is_afk) {
+      return aiThinking
+        ? `AI is playing for @${match.current_turn_username}`
+        : `@${match.current_turn_username} is AFK`;
+    }
+    return `Waiting for @${match.current_turn_username}`;
   })();
 
   if (loading) {
@@ -245,7 +326,7 @@ export default function TicTacToeMatch() {
             <div className="tic-match-status">
               <span>You are {match.my_mark.toUpperCase()}</span>
               <strong>{statusText}</strong>
-              {exiting && <small>Returning to the game hub...</small>}
+              {exiting && <small>Opening match results...</small>}
             </div>
             <div>
               <span>O Team</span>
@@ -286,6 +367,10 @@ export default function TicTacToeMatch() {
               5x5 board
             </span>
             <span>First team to connect {match.win_length || 4} wins</span>
+            <span>
+              Turn: @{match.current_turn_username || "waiting"}
+              {match.current_turn_is_afk ? " (AFK)" : ""}
+            </span>
           </footer>
         </main>
       )}

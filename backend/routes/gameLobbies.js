@@ -16,6 +16,7 @@ const REALTIME_TABLES = [
   "game_lobby_join_requests",
   "game_matches",
   "game_match_moves",
+  "game_match_player_states",
 ];
 
 let gameLobbySchemaReadyPromise = null;
@@ -79,6 +80,7 @@ async function ensureGameLobbySchema() {
           lobby_o_id UUID NOT NULL REFERENCES game_lobbies(id) ON DELETE CASCADE,
           status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'finished')),
           current_mark TEXT NOT NULL DEFAULT 'x' CHECK (current_mark IN ('x', 'o')),
+          current_turn_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
           board_size INTEGER NOT NULL DEFAULT 5,
           win_length INTEGER NOT NULL DEFAULT 4,
           winner_mark TEXT CHECK (winner_mark IN ('x', 'o')),
@@ -98,9 +100,26 @@ async function ensureGameLobbySchema() {
           mark TEXT NOT NULL CHECK (mark IN ('x', 'o')),
           cell_index INTEGER NOT NULL CHECK (cell_index BETWEEN 0 AND 24),
           move_number INTEGER NOT NULL,
+          is_ai_move BOOLEAN NOT NULL DEFAULT false,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           UNIQUE (match_id, cell_index),
           UNIQUE (match_id, move_number)
+        )
+      `);
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS game_match_player_states (
+          match_id UUID NOT NULL REFERENCES game_matches(id) ON DELETE CASCADE,
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          lobby_id UUID NOT NULL REFERENCES game_lobbies(id) ON DELETE CASCADE,
+          mark TEXT NOT NULL CHECK (mark IN ('x', 'o')),
+          turn_order INTEGER NOT NULL,
+          is_afk BOOLEAN NOT NULL DEFAULT false,
+          ai_turns_taken INTEGER NOT NULL DEFAULT 0,
+          last_seen_at TIMESTAMPTZ,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (match_id, user_id),
+          UNIQUE (match_id, mark, turn_order)
         )
       `);
 
@@ -112,6 +131,16 @@ async function ensureGameLobbySchema() {
       await pool.query(`
         ALTER TABLE game_matches
         ADD COLUMN IF NOT EXISTS win_length INTEGER NOT NULL DEFAULT 4
+      `);
+
+      await pool.query(`
+        ALTER TABLE game_matches
+        ADD COLUMN IF NOT EXISTS current_turn_user_id UUID REFERENCES users(id) ON DELETE SET NULL
+      `);
+
+      await pool.query(`
+        ALTER TABLE game_match_moves
+        ADD COLUMN IF NOT EXISTS is_ai_move BOOLEAN NOT NULL DEFAULT false
       `);
 
       await pool.query(`
@@ -145,6 +174,11 @@ async function ensureGameLobbySchema() {
       await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_game_matches_lobbies
         ON game_matches(lobby_x_id, lobby_o_id, created_at DESC)
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_game_match_player_states_match
+        ON game_match_player_states(match_id, mark, turn_order)
       `);
 
       await ensureGameRealtimePublication();
@@ -309,6 +343,244 @@ function getGameResult(board, boardSize = BOARD_SIZE, winLength = WIN_LENGTH) {
   return { winnerMark: null, winningLine: null, isDraw: board.every(Boolean) };
 }
 
+async function ensureMatchPlayerStates(matchId, client = pool) {
+  const matchResult = await client.query(
+    `
+    SELECT id, lobby_x_id, lobby_o_id, current_turn_user_id
+    FROM game_matches
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [matchId]
+  );
+  const match = matchResult.rows[0];
+  if (!match) return;
+
+  const existing = await client.query(
+    `
+    SELECT COUNT(*)::int AS count
+    FROM game_match_player_states
+    WHERE match_id = $1
+    `,
+    [matchId]
+  );
+
+  if (existing.rows[0]?.count === 0) {
+    await client.query(
+      `
+      INSERT INTO game_match_player_states (match_id, user_id, lobby_id, mark, turn_order)
+      SELECT $1, gm.user_id, gm.lobby_id, 'x', ROW_NUMBER() OVER (ORDER BY gm.joined_at ASC)
+      FROM game_lobby_members gm
+      WHERE gm.lobby_id = $2
+      ON CONFLICT (match_id, user_id) DO NOTHING
+      `,
+      [matchId, match.lobby_x_id]
+    );
+
+    await client.query(
+      `
+      INSERT INTO game_match_player_states (match_id, user_id, lobby_id, mark, turn_order)
+      SELECT $1, gm.user_id, gm.lobby_id, 'o', ROW_NUMBER() OVER (ORDER BY gm.joined_at ASC)
+      FROM game_lobby_members gm
+      WHERE gm.lobby_id = $2
+      ON CONFLICT (match_id, user_id) DO NOTHING
+      `,
+      [matchId, match.lobby_o_id]
+    );
+  }
+
+  if (!match.current_turn_user_id) {
+    const firstTurn = await client.query(
+      `
+      SELECT user_id
+      FROM game_match_player_states
+      WHERE match_id = $1
+        AND mark = 'x'
+      ORDER BY turn_order ASC
+      LIMIT 1
+      `,
+      [matchId]
+    );
+
+    if (firstTurn.rows[0]?.user_id) {
+      await client.query(
+        `
+        UPDATE game_matches
+        SET current_turn_user_id = $2,
+            updated_at = NOW()
+        WHERE id = $1
+          AND current_turn_user_id IS NULL
+        `,
+        [matchId, firstTurn.rows[0].user_id]
+      );
+    }
+  }
+}
+
+async function getNextTurnUserId(client, matchId, nextMark) {
+  const lastMove = await client.query(
+    `
+    SELECT gps.turn_order
+    FROM game_match_moves mv
+    JOIN game_match_player_states gps
+      ON gps.match_id = mv.match_id
+     AND gps.user_id = mv.player_id
+    WHERE mv.match_id = $1
+      AND mv.mark = $2
+    ORDER BY mv.move_number DESC
+    LIMIT 1
+    `,
+    [matchId, nextMark]
+  );
+  const lastTurnOrder = lastMove.rows[0]?.turn_order || 0;
+
+  const nextPlayer = await client.query(
+    `
+    SELECT user_id
+    FROM game_match_player_states
+    WHERE match_id = $1
+      AND mark = $2
+      AND turn_order > $3
+    ORDER BY turn_order ASC
+    LIMIT 1
+    `,
+    [matchId, nextMark, lastTurnOrder]
+  );
+
+  if (nextPlayer.rows[0]?.user_id) {
+    return nextPlayer.rows[0].user_id;
+  }
+
+  const wrappedPlayer = await client.query(
+    `
+    SELECT user_id
+    FROM game_match_player_states
+    WHERE match_id = $1
+      AND mark = $2
+    ORDER BY turn_order ASC
+    LIMIT 1
+    `,
+    [matchId, nextMark]
+  );
+
+  return wrappedPlayer.rows[0]?.user_id || null;
+}
+
+function getAiMoveIndex(board, mark, boardSize, winLength) {
+  const opponentMark = mark === "x" ? "o" : "x";
+  const emptyIndexes = board
+    .map((value, index) => (value ? null : index))
+    .filter((index) => index !== null);
+
+  const findWinningMove = (candidateMark) =>
+    emptyIndexes.find((index) => {
+      const nextBoard = [...board];
+      nextBoard[index] = candidateMark;
+      return getGameResult(nextBoard, boardSize, winLength).winnerMark === candidateMark;
+    });
+
+  const winningMove = findWinningMove(mark);
+  if (winningMove !== undefined) return winningMove;
+
+  const blockingMove = findWinningMove(opponentMark);
+  if (blockingMove !== undefined) return blockingMove;
+
+  const centerIndex = Math.floor((boardSize * boardSize) / 2);
+  if (!board[centerIndex]) return centerIndex;
+
+  return emptyIndexes[0] ?? null;
+}
+
+async function applyMatchMove({ client, match, playerState, cellIndex, isAiMove = false }) {
+  const boardSize = match.board_size || BOARD_SIZE;
+  const winLength = match.win_length || WIN_LENGTH;
+
+  if (!Number.isInteger(cellIndex) || cellIndex < 0 || cellIndex >= boardSize * boardSize) {
+    const error = new Error("Choose a valid square");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const movesResult = await client.query(
+    `
+    SELECT mark, cell_index, move_number
+    FROM game_match_moves
+    WHERE match_id = $1
+    ORDER BY move_number ASC
+    `,
+    [match.id]
+  );
+  const board = getBoardFromMoves(movesResult.rows, boardSize);
+  if (board[cellIndex]) {
+    const error = new Error("That square is already taken");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const moveNumber = movesResult.rows.length + 1;
+  await client.query(
+    `
+    INSERT INTO game_match_moves
+      (id, match_id, player_id, lobby_id, mark, cell_index, move_number, is_ai_move)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `,
+    [
+      uuidv4(),
+      match.id,
+      playerState.user_id,
+      playerState.lobby_id,
+      playerState.mark,
+      cellIndex,
+      moveNumber,
+      isAiMove,
+    ]
+  );
+
+  if (isAiMove) {
+    await client.query(
+      `
+      UPDATE game_match_player_states
+      SET ai_turns_taken = ai_turns_taken + 1,
+          updated_at = NOW()
+      WHERE match_id = $1
+        AND user_id = $2
+      `,
+      [match.id, playerState.user_id]
+    );
+  }
+
+  board[cellIndex] = playerState.mark;
+  const result = getGameResult(board, boardSize, winLength);
+  const nextMark = playerState.mark === "x" ? "o" : "x";
+  const nextTurnUserId =
+    result.winnerMark || result.isDraw
+      ? null
+      : await getNextTurnUserId(client, match.id, nextMark);
+
+  await client.query(
+    `
+    UPDATE game_matches
+    SET status = $2,
+        current_mark = $3,
+        current_turn_user_id = $4,
+        winner_mark = $5,
+        winning_line = $6,
+        is_draw = $7,
+        updated_at = NOW()
+    WHERE id = $1
+    `,
+    [
+      match.id,
+      result.winnerMark || result.isDraw ? "finished" : "active",
+      result.winnerMark || result.isDraw ? match.current_mark : nextMark,
+      nextTurnUserId,
+      result.winnerMark,
+      result.winningLine,
+      result.isDraw,
+    ]
+  );
+}
+
 async function notifyLobbyMembers({ lobbyId, actorId, type, gameLobbyId, gameMatchId, skipUserIds = [] }) {
   const members = await getLobbyMembers(lobbyId);
   const skipped = new Set(skipUserIds);
@@ -335,12 +607,17 @@ async function notifyLobbyMembers({ lobbyId, actorId, type, gameLobbyId, gameMat
 }
 
 async function getMatchForUser(matchId, userId, client = pool) {
+  await ensureMatchPlayerStates(matchId, client);
+
   const { rows } = await client.query(
     `
     SELECT
       m.id,
       m.status,
       m.current_mark,
+      m.current_turn_user_id,
+      turn_user.username AS current_turn_username,
+      COALESCE(turn_state.is_afk, false) AS current_turn_is_afk,
       m.board_size,
       m.win_length,
       m.winner_mark,
@@ -371,6 +648,7 @@ async function getMatchForUser(matchId, userId, client = pool) {
               'mark', mv.mark,
               'cell_index', mv.cell_index,
               'move_number', mv.move_number,
+              'is_ai_move', mv.is_ai_move,
               'created_at', mv.created_at
             )
             ORDER BY mv.move_number ASC
@@ -380,10 +658,36 @@ async function getMatchForUser(matchId, userId, client = pool) {
           WHERE mv.match_id = m.id
         ),
         '[]'
-      ) AS moves
+      ) AS moves,
+      COALESCE(
+        (
+          SELECT json_agg(
+            json_build_object(
+              'id', u.id,
+              'username', u.username,
+              'profile_pic', u.profile_pic,
+              'mark', gps.mark,
+              'lobby_id', gps.lobby_id,
+              'turn_order', gps.turn_order,
+              'is_afk', gps.is_afk,
+              'ai_turns_taken', gps.ai_turns_taken,
+              'last_seen_at', gps.last_seen_at
+            )
+            ORDER BY gps.mark ASC, gps.turn_order ASC
+          )
+          FROM game_match_player_states gps
+          JOIN users u ON u.id = gps.user_id
+          WHERE gps.match_id = m.id
+        ),
+        '[]'
+      ) AS players
     FROM game_matches m
     JOIN game_lobbies lx ON lx.id = m.lobby_x_id
     JOIN game_lobbies lo ON lo.id = m.lobby_o_id
+    LEFT JOIN users turn_user ON turn_user.id = m.current_turn_user_id
+    LEFT JOIN game_match_player_states turn_state
+      ON turn_state.match_id = m.id
+     AND turn_state.user_id = m.current_turn_user_id
     WHERE m.id = $1
     LIMIT 1
     `,
@@ -394,10 +698,22 @@ async function getMatchForUser(matchId, userId, client = pool) {
   if (!match || (!match.user_on_x && !match.user_on_o)) return null;
 
   const myMark = match.user_on_x ? "x" : "o";
+  const players = Array.isArray(match.players) ? match.players : [];
+  const myState = players.find((player) => player.id === userId);
+  const teams = {
+    x: players.filter((player) => player.mark === "x"),
+    o: players.filter((player) => player.mark === "o"),
+  };
+
   return {
     ...match,
+    teams,
     my_mark: myMark,
-    can_move: match.status === "active" && match.current_mark === myMark,
+    my_player_state: myState || null,
+    can_move:
+      match.status === "active" &&
+      match.current_turn_user_id === userId &&
+      !myState?.is_afk,
   };
 }
 
@@ -411,6 +727,8 @@ async function createMatchFromLobbies({ lobbyA, lobbyB, actorId, client }) {
     `,
     [matchId, lobbyA.id, lobbyB.id]
   );
+
+  await ensureMatchPlayerStates(matchId, client);
 
   await client.query(
     `
@@ -1152,6 +1470,143 @@ router.get("/matches/:matchId", authenticateToken, async (req, res) => {
   }
 });
 
+router.post("/matches/:matchId/presence", authenticateToken, async (req, res) => {
+  try {
+    await ensureGameLobbySchema();
+    const status = req.body?.status === "afk" ? "afk" : "active";
+
+    await ensureMatchPlayerStates(req.params.matchId);
+
+    const result = await pool.query(
+      `
+      UPDATE game_match_player_states
+      SET is_afk = $3,
+          last_seen_at = CASE WHEN $3 = false THEN NOW() ELSE last_seen_at END,
+          updated_at = NOW()
+      WHERE match_id = $1
+        AND user_id = $2
+      RETURNING user_id
+      `,
+      [req.params.matchId, req.user.id, status === "afk"]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ error: "Match player not found" });
+    }
+
+    const match = await getMatchForUser(req.params.matchId, req.user.id);
+    res.json({ match });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update match presence" });
+  }
+});
+
+router.post("/matches/:matchId/ai-move", authenticateToken, async (req, res) => {
+  try {
+    await ensureGameLobbySchema();
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await ensureMatchPlayerStates(req.params.matchId, client);
+
+      const matchResult = await client.query(
+        `
+        SELECT *
+        FROM game_matches
+        WHERE id = $1
+        FOR UPDATE
+        `,
+        [req.params.matchId]
+      );
+      const match = matchResult.rows[0];
+
+      if (!match) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Match not found" });
+      }
+      if (match.status !== "active") {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "This match is already finished" });
+      }
+
+      const requesterMembership = await client.query(
+        `
+        SELECT 1
+        FROM game_match_player_states
+        WHERE match_id = $1
+          AND user_id = $2
+        LIMIT 1
+        `,
+        [match.id, req.user.id]
+      );
+      if (requesterMembership.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "You are not in this match" });
+      }
+
+      const currentTurnState = await client.query(
+        `
+        SELECT *
+        FROM game_match_player_states
+        WHERE match_id = $1
+          AND user_id = $2
+        LIMIT 1
+        `,
+        [match.id, match.current_turn_user_id]
+      );
+      const playerState = currentTurnState.rows[0];
+
+      if (!playerState || !playerState.is_afk) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "AI can only move for an AFK player" });
+      }
+
+      const movesResult = await client.query(
+        `
+        SELECT mark, cell_index, move_number
+        FROM game_match_moves
+        WHERE match_id = $1
+        ORDER BY move_number ASC
+        `,
+        [match.id]
+      );
+      const boardSize = match.board_size || BOARD_SIZE;
+      const winLength = match.win_length || WIN_LENGTH;
+      const board = getBoardFromMoves(movesResult.rows, boardSize);
+      const aiCellIndex = getAiMoveIndex(board, playerState.mark, boardSize, winLength);
+
+      if (aiCellIndex === null) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "No moves available" });
+      }
+
+      await applyMatchMove({
+        client,
+        match,
+        playerState,
+        cellIndex: aiCellIndex,
+        isAiMove: true,
+      });
+
+      await client.query("COMMIT");
+      res.json({ match: await getMatchForUser(match.id, req.user.id) });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => null);
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    if (err.code === "23505") {
+      return res.status(409).json({ error: "That move was already played" });
+    }
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message || "Failed to play AI move" });
+  }
+});
+
 router.post("/matches/:matchId/move", authenticateToken, async (req, res) => {
   try {
     await ensureGameLobbySchema();
@@ -1163,6 +1618,8 @@ router.post("/matches/:matchId/move", authenticateToken, async (req, res) => {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      await ensureMatchPlayerStates(req.params.matchId, client);
+
       const matchResult = await client.query(
         `
         SELECT *
@@ -1182,83 +1639,31 @@ router.post("/matches/:matchId/move", authenticateToken, async (req, res) => {
         return res.status(400).json({ error: "This match is already finished" });
       }
 
-      const membership = await client.query(
+      const stateResult = await client.query(
         `
-        SELECT lobby_id
-        FROM game_lobby_members
-        WHERE user_id = $1 AND lobby_id IN ($2, $3)
+        SELECT *
+        FROM game_match_player_states
+        WHERE match_id = $1
+          AND user_id = $2
         LIMIT 1
         `,
-        [req.user.id, match.lobby_x_id, match.lobby_o_id]
+        [match.id, req.user.id]
       );
-      const userLobbyId = membership.rows[0]?.lobby_id;
-      if (!userLobbyId) {
+      const playerState = stateResult.rows[0];
+      if (!playerState) {
         await client.query("ROLLBACK");
         return res.status(403).json({ error: "You are not in this match" });
       }
-
-      const mark = userLobbyId === match.lobby_x_id ? "x" : "o";
-      if (mark !== match.current_mark) {
+      if (match.current_turn_user_id !== req.user.id || playerState.mark !== match.current_mark) {
         await client.query("ROLLBACK");
-        return res.status(400).json({ error: "It is not your team's turn" });
+        return res.status(400).json({ error: "It is not your player turn" });
+      }
+      if (playerState.is_afk) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "You are marked AFK. Rejoin the match to take control." });
       }
 
-      const boardSize = match.board_size || BOARD_SIZE;
-      const winLength = match.win_length || WIN_LENGTH;
-
-      if (cellIndex >= boardSize * boardSize) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ error: "Choose a valid square" });
-      }
-
-      const movesResult = await client.query(
-        `
-        SELECT mark, cell_index, move_number
-        FROM game_match_moves
-        WHERE match_id = $1
-        ORDER BY move_number ASC
-        `,
-        [match.id]
-      );
-      const board = getBoardFromMoves(movesResult.rows, boardSize);
-      if (board[cellIndex]) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ error: "That square is already taken" });
-      }
-
-      const moveNumber = movesResult.rows.length + 1;
-      await client.query(
-        `
-        INSERT INTO game_match_moves (id, match_id, player_id, lobby_id, mark, cell_index, move_number)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `,
-        [uuidv4(), match.id, req.user.id, userLobbyId, mark, cellIndex, moveNumber]
-      );
-
-      board[cellIndex] = mark;
-      const result = getGameResult(board, boardSize, winLength);
-      const nextMark = mark === "x" ? "o" : "x";
-
-      await client.query(
-        `
-        UPDATE game_matches
-        SET status = $2,
-            current_mark = $3,
-            winner_mark = $4,
-            winning_line = $5,
-            is_draw = $6,
-            updated_at = NOW()
-        WHERE id = $1
-        `,
-        [
-          match.id,
-          result.winnerMark || result.isDraw ? "finished" : "active",
-          result.winnerMark || result.isDraw ? match.current_mark : nextMark,
-          result.winnerMark,
-          result.winningLine,
-          result.isDraw,
-        ]
-      );
+      await applyMatchMove({ client, match, playerState, cellIndex });
 
       await client.query("COMMIT");
       res.json({ match: await getMatchForUser(match.id, req.user.id) });
@@ -1273,7 +1678,7 @@ router.post("/matches/:matchId/move", authenticateToken, async (req, res) => {
       return res.status(409).json({ error: "That move was already played" });
     }
     console.error(err);
-    res.status(500).json({ error: "Failed to play move" });
+    res.status(err.statusCode || 500).json({ error: err.message || "Failed to play move" });
   }
 });
 

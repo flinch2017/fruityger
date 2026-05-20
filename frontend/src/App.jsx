@@ -34,6 +34,7 @@ import TapesFeed from "./pages/TapesFeed";
 import GameHub from "./pages/GameHub";
 import GameLobby from "./pages/GameLobby";
 import TicTacToeMatch from "./pages/TicTacToeMatch";
+import TicTacToeResult from "./pages/TicTacToeResult";
 import EditPost from "./pages/EditPost";
 import CommentSheet from "./components/CommentSheet";
 import Search from "./pages/Search";
@@ -315,6 +316,14 @@ function App() {
           element={
             <PrivateRoute>
               <TicTacToeMatch />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/games/tic-tac-toe/match/:matchId/result"
+          element={
+            <PrivateRoute>
+              <TicTacToeResult />
             </PrivateRoute>
           }
         />
