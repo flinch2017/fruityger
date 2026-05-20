@@ -827,6 +827,11 @@
   font-size: clamp(1.2rem, 3vw, 2rem);
 }
 
+.tic-live-indicator {
+  cursor: default;
+  pointer-events: none;
+}
+
 .tic-match-shell {
   max-width: 1280px;
   margin: 18px auto 0;

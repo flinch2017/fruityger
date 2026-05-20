@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FaArrowLeft, FaGamepad, FaSyncAlt, FaUsers } from "react-icons/fa";
+import { FaArrowLeft, FaGamepad, FaSignal, FaUsers } from "react-icons/fa";
 import "../css/GameLobby.css";
 import supabase from "../lib/supabaseClient";
 
@@ -30,13 +30,16 @@ const requestJson = async (path, options = {}) => {
 export default function TicTacToeMatch() {
   const { matchId } = useParams();
   const navigate = useNavigate();
+  const channelRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
+  const currentUserId = localStorage.getItem("userId") || "";
   const [match, setMatch] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyCell, setBusyCell] = useState(null);
   const [error, setError] = useState("");
   const [exiting, setExiting] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState("CONNECTING");
 
   const loadMatch = useCallback(
     async ({ quiet = false } = {}) => {
@@ -77,6 +80,11 @@ export default function TicTacToeMatch() {
 
     const channel = supabase
       .channel(`tic-tac-toe-match-${matchId}`)
+      .on("broadcast", { event: "match-updated" }, ({ payload }) => {
+        if (!payload || String(payload.matchId) !== String(matchId)) return;
+        if (String(payload.actorId) === String(currentUserId)) return;
+        scheduleRealtimeRefresh();
+      })
       .on(
         "postgres_changes",
         {
@@ -97,13 +105,38 @@ export default function TicTacToeMatch() {
         },
         scheduleRealtimeRefresh
       )
-      .subscribe();
+      .subscribe((status) => {
+        setRealtimeStatus(status);
+        if (status === "SUBSCRIBED") {
+          scheduleRealtimeRefresh();
+        }
+      });
+
+    channelRef.current = channel;
 
     return () => {
+      channelRef.current = null;
       window.clearTimeout(refreshTimeoutRef.current);
       supabase.removeChannel(channel);
     };
-  }, [loadMatch, matchId]);
+  }, [currentUserId, loadMatch, matchId]);
+
+  useEffect(() => {
+    const handleFocus = () => loadMatch({ quiet: true });
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadMatch({ quiet: true });
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadMatch]);
 
   useEffect(() => {
     if (!match || match.status !== "finished") return undefined;
@@ -136,6 +169,18 @@ export default function TicTacToeMatch() {
         body: JSON.stringify({ cellIndex }),
       });
       setMatch(data.match);
+      channelRef.current
+        ?.send({
+          type: "broadcast",
+          event: "match-updated",
+          payload: {
+            matchId: match.id,
+            actorId: currentUserId,
+            moveCount: data.match?.moves?.length || 0,
+            status: data.match?.status,
+          },
+        })
+        .catch(() => null);
     } catch (err) {
       setError(err.message || "Failed to play move");
       await loadMatch({ quiet: true });
@@ -178,15 +223,14 @@ export default function TicTacToeMatch() {
             <h1>{match ? `${match.lobby_x_title} vs ${match.lobby_o_title}` : "Match"}</h1>
           </div>
         </div>
-        <button
-          type="button"
-          className="game-secondary-action"
-          onClick={() => loadMatch({ quiet: true })}
-          disabled={refreshing}
-        >
-          <FaSyncAlt />
-          {refreshing ? "Syncing" : "Sync"}
-        </button>
+        <div className="game-secondary-action tic-live-indicator" aria-live="polite">
+          <FaSignal />
+          {refreshing
+            ? "Updating"
+            : realtimeStatus === "SUBSCRIBED"
+              ? "Live sync"
+              : "Connecting"}
+        </div>
       </header>
 
       {error && <div className="game-lobby-alert error">{error}</div>}
