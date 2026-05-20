@@ -200,9 +200,11 @@ export default function GameLobby() {
     setNotice("");
 
     try {
-      await action();
+      const result = await action();
       if (successMessage) setNotice(successMessage);
-      await fetchDashboard({ quiet: true });
+      if (!result?.skipRefresh) {
+        await fetchDashboard({ quiet: true });
+      }
     } catch (err) {
       setError(err.message || "Action failed");
     } finally {
@@ -272,7 +274,14 @@ export default function GameLobby() {
       `matchmake-${currentLobby.id}`,
       async () => {
         const data = await requestJson(`/${currentLobby.id}/matchmake`, { method: "POST" });
-        if (data.waiting) setNotice("Matchmaking started. Waiting for a same-size team.");
+        if (data.match?.id) {
+          navigate(`/games/tic-tac-toe/match/${data.match.id}`, { replace: true });
+          return { skipRefresh: true };
+        }
+        if (data.waiting) {
+          setNotice("Matchmaking started. Waiting for a same-size team.");
+        }
+        return null;
       },
       ""
     );
@@ -283,6 +292,18 @@ export default function GameLobby() {
       () => requestJson(`/${currentLobby.id}`, { method: "DELETE" }),
       isHost ? "Lobby closed." : "Left lobby."
     );
+
+  useEffect(() => {
+    if (!currentLobby || currentLobby.status !== "matchmaking" || activeMatchId) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      fetchDashboard({ quiet: true });
+    }, 2500);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeMatchId, currentLobby, fetchDashboard]);
 
   if (loading) {
     return (
