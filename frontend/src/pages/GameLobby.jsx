@@ -293,18 +293,6 @@ export default function GameLobby() {
       isHost ? "Lobby closed." : "Left lobby."
     );
 
-  useEffect(() => {
-    if (!currentLobby || currentLobby.status !== "matchmaking" || activeMatchId) {
-      return undefined;
-    }
-
-    const intervalId = window.setInterval(() => {
-      fetchDashboard({ quiet: true });
-    }, 2500);
-
-    return () => window.clearInterval(intervalId);
-  }, [activeMatchId, currentLobby, fetchDashboard]);
-
   if (loading) {
     return (
       <div className="game-lobby-page">
