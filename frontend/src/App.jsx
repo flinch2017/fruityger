@@ -31,6 +31,7 @@ import EditProfile from "./pages/EditProfile"; // <-- import it
 import CreatePost from "./pages/CreatePost"; // <-- import it
 import CreateTape from "./pages/CreateTape";
 import TapesFeed from "./pages/TapesFeed";
+import GameLobby from "./pages/GameLobby";
 import EditPost from "./pages/EditPost";
 import CommentSheet from "./components/CommentSheet";
 import Search from "./pages/Search";
@@ -58,7 +59,12 @@ import "./css/App.css";
 function MainLayout({ children }) {
   const location = useLocation();
   const isTapesRoute = location.pathname === "/tapes";
-  const appContainerClassName = isTapesRoute ? "app-container tapes-layout" : "app-container";
+  const isWideRoute = location.pathname === "/games";
+  const appContainerClassName = isTapesRoute
+    ? "app-container tapes-layout"
+    : isWideRoute
+      ? "app-container wide-layout"
+      : "app-container";
 
   return (
     <>
@@ -278,6 +284,16 @@ function App() {
             <PrivateRoute>
               <MainLayout>
                 <TapesFeed />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/games"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <GameLobby />
               </MainLayout>
             </PrivateRoute>
           }

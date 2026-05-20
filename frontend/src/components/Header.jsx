@@ -5,6 +5,7 @@ import {
   FaCog,
   FaCompass,
   FaEnvelope,
+  FaGamepad,
   FaHome,
   FaPlayCircle,
   FaPlus,
@@ -716,6 +717,19 @@ export default function Header() {
                       <FaUser />
                     </span>
                     <span>Profile</span>
+                  </button>
+
+                  <button
+                    className="profile-dropdown-action"
+                    onClick={() => {
+                      goTo("/games");
+                      setDropdownOpen(false);
+                    }}
+                  >
+                    <span className="profile-dropdown-icon">
+                      <FaGamepad />
+                    </span>
+                    <span>Game Lobby</span>
                   </button>
 
                   <button

@@ -10,6 +10,10 @@
   grid-column: 2;
 }
 
+.app-container.wide-layout {
+  grid-template-columns: 1fr minmax(0, 1080px) 1fr;
+}
+
 .app-container.tapes-layout {
   position: fixed;
   top: 0;
