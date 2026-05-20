@@ -74,6 +74,26 @@ const TYPE_COPY = {
     title: "Message reaction",
     body: (username) => `@${username} reacted to your message.`,
   },
+  game_lobby_invite: {
+    icon: "TT",
+    title: "Game invite",
+    body: (username) => `@${username} invited you to a tic tac toe lobby.`,
+  },
+  game_lobby_request: {
+    icon: "JR",
+    title: "Lobby join request",
+    body: (username) => `@${username} requested to join your game lobby.`,
+  },
+  game_lobby_request_accepted: {
+    icon: "OK",
+    title: "Lobby request accepted",
+    body: (username) => `@${username} accepted your game lobby request.`,
+  },
+  game_match_found: {
+    icon: "XO",
+    title: "Match found",
+    body: (username) => `@${username}'s lobby matched your team.`,
+  },
   content_removed: {
     icon: "!",
     title: "Content removed",
@@ -174,6 +194,14 @@ export default function Notifications() {
 
     if (notification.group_chat_id) {
       navigate(`/group-chat/${notification.group_chat_id}`);
+      return;
+    }
+
+    if (notification.game_lobby_id || notification.game_match_id) {
+      const params = new URLSearchParams();
+      if (notification.game_lobby_id) params.set("lobby", notification.game_lobby_id);
+      if (notification.game_match_id) params.set("match", notification.game_match_id);
+      navigate(`/games?${params.toString()}`);
       return;
     }
 

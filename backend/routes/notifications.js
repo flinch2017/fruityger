@@ -22,6 +22,8 @@ router.get("/", authenticateToken, async (req, res) => {
         n.chat_id,
         n.group_chat_id,
         n.message_id,
+        n.game_lobby_id,
+        n.game_match_id,
         n.is_read,
         n.created_at,
         u.id AS actor_id,

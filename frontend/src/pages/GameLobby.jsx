@@ -1,123 +1,301 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  FaBolt,
-  FaChessKnight,
+  FaCheck,
   FaClock,
   FaCrown,
   FaGamepad,
-  FaLock,
+  FaPaperPlane,
   FaPlay,
+  FaPlus,
   FaSearch,
-  FaSignal,
+  FaSignOutAlt,
+  FaTimes,
   FaUsers,
 } from "react-icons/fa";
 import "../css/GameLobby.css";
 import { formatCount } from "../utils/countFormatter";
 
-const games = [
-  {
-    id: "fruit-rush",
-    title: "Fruit Rush",
-    genre: "Arcade",
-    status: "Ready",
-    players: 1840,
-    rooms: 28,
-    accent: "cyan",
-    icon: FaBolt,
-    description: "Fast rounds, quick reactions, and leaderboard climbs.",
-  },
-  {
-    id: "tile-tactics",
-    title: "Tile Tactics",
-    genre: "Strategy",
-    status: "Ready",
-    players: 920,
-    rooms: 14,
-    accent: "green",
-    icon: FaChessKnight,
-    description: "Turn-based matches for friends who like a slower burn.",
-  },
-  {
-    id: "aero-cards",
-    title: "Aero Cards",
-    genre: "Cards",
-    status: "Soon",
-    players: 0,
-    rooms: 0,
-    accent: "pink",
-    icon: FaCrown,
-    description: "Casual table play with private rooms and invite links.",
-  },
-  {
-    id: "night-rally",
-    title: "Night Rally",
-    genre: "Racing",
-    status: "Soon",
-    players: 0,
-    rooms: 0,
-    accent: "violet",
-    icon: FaSignal,
-    description: "Short racing heats built for quick group sessions.",
-  },
-];
+const API_BASE = "http://localhost:5000/api/game-lobbies";
 
-const rooms = [
-  {
-    id: "rush-open-1",
-    gameId: "fruit-rush",
-    title: "Open Sprint",
-    host: "mika",
-    players: 6,
-    maxPlayers: 8,
-    mode: "Public",
-    pace: "Live",
-  },
-  {
-    id: "tactics-duo-7",
-    gameId: "tile-tactics",
-    title: "Quiet Strategy",
-    host: "nori",
-    players: 2,
-    maxPlayers: 4,
-    mode: "Friends",
-    pace: "Waiting",
-  },
-  {
-    id: "rush-party-4",
-    gameId: "fruit-rush",
-    title: "After Class Party",
-    host: "kei",
-    players: 4,
-    maxPlayers: 8,
-    mode: "Public",
-    pace: "Waiting",
-  },
-];
+const getToken = () => localStorage.getItem("token");
 
-const filters = ["All", "Ready", "Soon"];
+const boardLabels = ["", "", "", "", "", "", "", "", ""];
+
+const memberCount = (lobby) => lobby?.members?.length || 0;
+
+const requestJson = async (path, options = {}) => {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...(options.headers || {}),
+    },
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || "Request failed");
+  }
+
+  return data;
+};
+
+function TeamAvatars({ members = [] }) {
+  return (
+    <div className="game-team-avatars">
+      {members.slice(0, 5).map((member) => (
+        <span key={member.id} className="game-team-avatar" title={`@${member.username}`}>
+          {member.username?.slice(0, 2).toUpperCase()}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function LobbyRow({ lobby, action, actionLabel, disabled }) {
+  return (
+    <div className="game-room-row">
+      <div className="game-room-main">
+        <strong>{lobby.title}</strong>
+        <span>Hosted by @{lobby.host_username}</span>
+        <TeamAvatars members={lobby.members} />
+      </div>
+      <div className="game-room-meta">
+        <span>
+          <FaUsers />
+          {memberCount(lobby)}/{lobby.max_team_size}
+        </span>
+        <span>
+          <FaClock />
+          {lobby.status === "matchmaking" ? "Finding match" : "Open"}
+        </span>
+        {action && (
+          <button type="button" className="game-mini-action" onClick={action} disabled={disabled}>
+            {actionLabel}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function GameLobby() {
-  const [activeFilter, setActiveFilter] = useState("All");
-  const [query, setQuery] = useState("");
-  const [selectedGameId, setSelectedGameId] = useState(games[0].id);
+  const [dashboard, setDashboard] = useState({
+    availableLobbies: [],
+    myLobbies: [],
+    activeMatches: [],
+    invites: [],
+  });
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busyKey, setBusyKey] = useState("");
+  const [title, setTitle] = useState("");
+  const [maxTeamSize, setMaxTeamSize] = useState(1);
+  const [inviteQuery, setInviteQuery] = useState("");
+  const [userResults, setUserResults] = useState([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [selectedMatchId, setSelectedMatchId] = useState("");
 
-  const selectedGame = games.find((game) => game.id === selectedGameId) || games[0];
-  const SelectedGameIcon = selectedGame.icon;
-  const selectedGameRooms = rooms.filter((room) => room.gameId === selectedGame.id);
+  const currentUserId = localStorage.getItem("userId");
 
-  const filteredGames = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+  const activeMatches = dashboard.activeMatches || [];
+  const selectedMatch =
+    activeMatches.find((match) => match.id === selectedMatchId) || activeMatches[0] || null;
+  const currentLobby = useMemo(
+    () => (dashboard.myLobbies || []).find((lobby) => lobby.status !== "matched") || null,
+    [dashboard.myLobbies]
+  );
+  const isHost = currentLobby?.host_id === currentUserId;
 
-    return games.filter((game) => {
-      const matchesFilter = activeFilter === "All" || game.status === activeFilter;
-      const matchesQuery =
-        !normalizedQuery ||
-        game.title.toLowerCase().includes(normalizedQuery) ||
-        game.genre.toLowerCase().includes(normalizedQuery);
+  const fetchDashboard = useCallback(async ({ quiet = false } = {}) => {
+    if (!getToken()) return;
+    if (quiet) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
 
-      return matchesFilter && matchesQuery;
+    try {
+      const data = await requestJson("");
+      setDashboard(data);
+      setSelectedMatchId((prev) => {
+        if (prev && data.activeMatches?.some((match) => match.id === prev)) return prev;
+        return data.activeMatches?.[0]?.id || "";
+      });
+      setError("");
+    } catch (err) {
+      setError(err.message || "Failed to load lobbies");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      fetchDashboard({ quiet: true });
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [fetchDashboard]);
+
+  useEffect(() => {
+    const keyword = inviteQuery.trim();
+    if (!keyword || keyword.length < 2 || !currentLobby) {
+      setUserResults([]);
+      setSearchingUsers(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      setSearchingUsers(true);
+      try {
+        const data = await requestJson(`/users?q=${encodeURIComponent(keyword)}`);
+        if (!cancelled) {
+          const existingMemberIds = new Set(currentLobby.members?.map((member) => member.id));
+          setUserResults((data.users || []).filter((user) => !existingMemberIds.has(user.id)));
+        }
+      } catch {
+        if (!cancelled) setUserResults([]);
+      } finally {
+        if (!cancelled) setSearchingUsers(false);
+      }
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [inviteQuery, currentLobby]);
+
+  const runAction = async (key, action, successMessage) => {
+    setBusyKey(key);
+    setError("");
+    setNotice("");
+
+    try {
+      await action();
+      if (successMessage) setNotice(successMessage);
+      await fetchDashboard({ quiet: true });
+    } catch (err) {
+      setError(err.message || "Action failed");
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const createLobby = () =>
+    runAction(
+      "create",
+      async () => {
+        const data = await requestJson("", {
+          method: "POST",
+          body: JSON.stringify({ title, maxTeamSize }),
+        });
+        setTitle("");
+        setMaxTeamSize(data.lobby?.max_team_size || maxTeamSize);
+      },
+      "Lobby created."
+    );
+
+  const inviteUser = (user) =>
+    runAction(
+      `invite-${user.id}`,
+      async () => {
+        await requestJson(`/${currentLobby.id}/invite`, {
+          method: "POST",
+          body: JSON.stringify({ userId: user.id }),
+        });
+        setInviteQuery("");
+        setUserResults([]);
+      },
+      `Invite sent to @${user.username}.`
+    );
+
+  const respondToInvite = (invite, action) =>
+    runAction(
+      `invite-${invite.id}-${action}`,
+      () =>
+        requestJson(`/invites/${invite.id}/respond`, {
+          method: "POST",
+          body: JSON.stringify({ action }),
+        }),
+      action === "accept" ? "Joined lobby." : "Invite declined."
+    );
+
+  const requestToJoin = (lobby) =>
+    runAction(
+      `request-${lobby.id}`,
+      () => requestJson(`/${lobby.id}/join-requests`, { method: "POST" }),
+      "Join request sent."
+    );
+
+  const respondToJoinRequest = (request, action) =>
+    runAction(
+      `join-${request.id}-${action}`,
+      () =>
+        requestJson(`/join-requests/${request.id}/respond`, {
+          method: "POST",
+          body: JSON.stringify({ action }),
+        }),
+      action === "accept" ? "Player added to the lobby." : "Request declined."
+    );
+
+  const startMatchmaking = () =>
+    runAction(
+      `matchmake-${currentLobby.id}`,
+      async () => {
+        const data = await requestJson(`/${currentLobby.id}/matchmake`, { method: "POST" });
+        if (data.waiting) setNotice("Matchmaking started. Waiting for a same-size team.");
+      },
+      ""
+    );
+
+  const leaveLobby = () =>
+    runAction(
+      `leave-${currentLobby.id}`,
+      () => requestJson(`/${currentLobby.id}`, { method: "DELETE" }),
+      isHost ? "Lobby closed." : "Left lobby."
+    );
+
+  const playMove = (cellIndex) => {
+    if (!selectedMatch?.can_move || selectedMatch.status !== "active") return;
+
+    runAction(
+      `move-${cellIndex}`,
+      () =>
+        requestJson(`/matches/${selectedMatch.id}/move`, {
+          method: "POST",
+          body: JSON.stringify({ cellIndex }),
+        }),
+      ""
+    );
+  };
+
+  const board = useMemo(() => {
+    const cells = [...boardLabels];
+    (selectedMatch?.moves || []).forEach((move) => {
+      cells[move.cell_index] = move.mark.toUpperCase();
     });
-  }, [activeFilter, query]);
+    return cells;
+  }, [selectedMatch]);
+
+  if (loading) {
+    return (
+      <div className="game-lobby-page">
+        <div className="game-lobby-status">Loading game lobby...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="game-lobby-page">
@@ -128,150 +306,354 @@ export default function GameLobby() {
           </span>
           <div>
             <p>Game Lobby</p>
-            <h1>Play with Fruityger friends</h1>
+            <h1>Tic Tac Toe teams</h1>
           </div>
         </div>
 
-        <div className="game-lobby-search">
-          <FaSearch />
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search games"
-          />
-        </div>
+        <button
+          type="button"
+          className="game-secondary-action"
+          onClick={() => fetchDashboard({ quiet: true })}
+          disabled={refreshing}
+        >
+          {refreshing ? "Refreshing..." : "Refresh"}
+        </button>
       </section>
+
+      {(error || notice) && (
+        <div className={`game-lobby-alert ${error ? "error" : ""}`}>{error || notice}</div>
+      )}
 
       <section className="game-lobby-overview">
         <div className="game-lobby-stat">
-          <span>{formatCount(games.reduce((sum, game) => sum + game.players, 0))}</span>
-          <p>Online</p>
+          <span>{formatCount(dashboard.availableLobbies?.length || 0)}</span>
+          <p>Open lobbies</p>
         </div>
         <div className="game-lobby-stat">
-          <span>{formatCount(rooms.length)}</span>
-          <p>Rooms</p>
+          <span>{formatCount(activeMatches.length)}</span>
+          <p>Your matches</p>
         </div>
         <div className="game-lobby-stat">
-          <span>{formatCount(games.filter((game) => game.status === "Ready").length)}</span>
-          <p>Ready</p>
+          <span>{formatCount(dashboard.invites?.length || 0)}</span>
+          <p>Invites</p>
         </div>
       </section>
 
       <section className="game-lobby-main">
         <div className="game-lobby-catalog">
-          <div className="game-lobby-tabs" aria-label="Game filters">
-            {filters.map((filter) => (
-              <button
-                key={filter}
-                type="button"
-                className={activeFilter === filter ? "active" : ""}
-                onClick={() => setActiveFilter(filter)}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
+          {selectedMatch && (
+            <div className="game-match-panel">
+              <div className="game-section-heading">
+                <div>
+                  <p>Active game</p>
+                  <h2>{selectedMatch.lobby_x_title} vs {selectedMatch.lobby_o_title}</h2>
+                </div>
+                <span className="game-pill">You are {selectedMatch.my_mark.toUpperCase()}</span>
+              </div>
 
-          <div className="game-grid">
-            {filteredGames.map((game) => {
-              const Icon = game.icon;
-              const isSelected = selectedGame.id === game.id;
+              {activeMatches.length > 1 && (
+                <div className="game-match-tabs">
+                  {activeMatches.map((match) => (
+                    <button
+                      key={match.id}
+                      type="button"
+                      className={match.id === selectedMatch.id ? "active" : ""}
+                      onClick={() => setSelectedMatchId(match.id)}
+                    >
+                      {match.status === "active" ? "Live" : "Done"} {match.my_mark.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              )}
 
-              return (
+              <div className="tic-tac-toe-board" aria-label="Tic tac toe board">
+                {board.map((value, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    className={`tic-cell ${
+                      selectedMatch.winning_line?.includes(index) ? "winner" : ""
+                    }`.trim()}
+                    onClick={() => playMove(index)}
+                    disabled={
+                      Boolean(value) ||
+                      !selectedMatch.can_move ||
+                      selectedMatch.status !== "active" ||
+                      busyKey.startsWith("move-")
+                    }
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+
+              <div className="game-match-footer">
+                {selectedMatch.status === "finished" ? (
+                  <strong>
+                    {selectedMatch.is_draw
+                      ? "Draw game"
+                      : `${selectedMatch.winner_mark.toUpperCase()} wins`}
+                  </strong>
+                ) : selectedMatch.can_move ? (
+                  <strong>Your team's turn</strong>
+                ) : (
+                  <span>Waiting for {selectedMatch.current_mark.toUpperCase()}</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!currentLobby && (
+            <div className="game-create-panel">
+              <div className="game-section-heading">
+                <div>
+                  <p>Create lobby</p>
+                  <h2>Host a tic tac toe team</h2>
+                </div>
+                <FaPlus />
+              </div>
+
+              <div className="game-create-form">
+                <label>
+                  Lobby name
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    placeholder="Weekend tic tac toe"
+                    maxLength={60}
+                  />
+                </label>
+                <label>
+                  Team slots
+                  <select
+                    value={maxTeamSize}
+                    onChange={(event) => setMaxTeamSize(Number(event.target.value))}
+                  >
+                    {[1, 2, 3, 4, 5].map((size) => (
+                      <option key={size} value={size}>
+                        {size} {size === 1 ? "player" : "players"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <button
-                  key={game.id}
                   type="button"
-                  className={`game-card ${game.accent} ${isSelected ? "selected" : ""}`}
-                  onClick={() => setSelectedGameId(game.id)}
+                  className="game-primary-action"
+                  onClick={createLobby}
+                  disabled={busyKey === "create"}
                 >
-                  <span className="game-card-icon">
-                    <Icon />
-                  </span>
-                  <span className="game-card-copy">
-                    <strong>{game.title}</strong>
-                    <span>{game.genre}</span>
-                  </span>
-                  <span className={`game-card-status ${game.status.toLowerCase()}`}>
-                    {game.status}
-                  </span>
+                  <FaPlus />
+                  {busyKey === "create" ? "Creating..." : "Create Lobby"}
                 </button>
-              );
-            })}
+              </div>
+            </div>
+          )}
+
+          {dashboard.invites?.length > 0 && (
+            <div className="game-list-panel">
+              <div className="game-room-heading">
+                <h3>Your invites</h3>
+                <span>{dashboard.invites.length}</span>
+              </div>
+              {dashboard.invites.map((invite) => (
+                <div key={invite.id} className="game-request-row">
+                  <div>
+                    <strong>{invite.title}</strong>
+                    <span>Invited by @{invite.inviter_username}</span>
+                  </div>
+                  <div className="game-request-actions">
+                    <button
+                      type="button"
+                      className="game-icon-action accept"
+                      onClick={() => respondToInvite(invite, "accept")}
+                      disabled={busyKey === `invite-${invite.id}-accept`}
+                    >
+                      <FaCheck />
+                    </button>
+                    <button
+                      type="button"
+                      className="game-icon-action decline"
+                      onClick={() => respondToInvite(invite, "decline")}
+                      disabled={busyKey === `invite-${invite.id}-decline`}
+                    >
+                      <FaTimes />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="game-list-panel">
+            <div className="game-room-heading">
+              <h3>Available lobbies</h3>
+              <span>{dashboard.availableLobbies?.length || 0}</span>
+            </div>
+            {dashboard.availableLobbies?.length ? (
+              dashboard.availableLobbies.map((lobby) => (
+                <LobbyRow
+                  key={lobby.id}
+                  lobby={lobby}
+                  action={() => requestToJoin(lobby)}
+                  actionLabel={lobby.has_pending_request ? "Requested" : "Request"}
+                  disabled={lobby.has_pending_request || busyKey === `request-${lobby.id}`}
+                />
+              ))
+            ) : (
+              <div className="game-room-empty">No open tic tac toe lobbies right now.</div>
+            )}
           </div>
         </div>
 
-        <aside className={`game-lobby-detail ${selectedGame.accent}`}>
+        <aside className="game-lobby-detail green">
           <div className="game-detail-top">
             <span className="game-detail-icon">
-              <SelectedGameIcon />
+              <FaCrown />
             </span>
             <div>
-              <p>{selectedGame.genre}</p>
-              <h2>{selectedGame.title}</h2>
+              <p>Your team</p>
+              <h2>{currentLobby ? currentLobby.title : "No lobby yet"}</h2>
             </div>
           </div>
 
-          <p className="game-detail-description">{selectedGame.description}</p>
+          {currentLobby ? (
+            <>
+              <div className="game-detail-metrics">
+                <span>
+                  <FaUsers />
+                  {memberCount(currentLobby)}/{currentLobby.max_team_size}
+                </span>
+                <span>
+                  <FaClock />
+                  {currentLobby.status}
+                </span>
+              </div>
 
-          <div className="game-detail-metrics">
-            <span>
-              <FaUsers />
-              {formatCount(selectedGame.players)} online
-            </span>
-            <span>
-              <FaSignal />
-              {formatCount(selectedGame.rooms)} rooms
-            </span>
-          </div>
-
-          <button
-            type="button"
-            className="game-primary-action"
-            disabled={selectedGame.status !== "Ready"}
-          >
-            {selectedGame.status === "Ready" ? (
-              <>
-                <FaPlay />
-                Enter Lobby
-              </>
-            ) : (
-              <>
-                <FaLock />
-                Coming Soon
-              </>
-            )}
-          </button>
-
-          <div className="game-room-list">
-            <div className="game-room-heading">
-              <h3>Rooms</h3>
-              <span>{formatCount(selectedGameRooms.length)}</span>
-            </div>
-
-            {selectedGameRooms.length === 0 ? (
-              <div className="game-room-empty">No active rooms yet.</div>
-            ) : (
-              selectedGameRooms.map((room) => (
-                <div key={room.id} className="game-room-row">
-                  <div>
-                    <strong>{room.title}</strong>
-                    <span>Hosted by @{room.host}</span>
+              <div className="game-member-list">
+                {currentLobby.members?.map((member) => (
+                  <div key={member.id} className="game-member-row">
+                    <span className="game-team-avatar">{member.username?.slice(0, 2).toUpperCase()}</span>
+                    <div>
+                      <strong>@{member.username}</strong>
+                      <span>{member.role === "host" ? "Host" : "Member"}</span>
+                    </div>
                   </div>
-                  <div className="game-room-meta">
-                    <span>
-                      <FaUsers />
-                      {room.players}/{room.maxPlayers}
-                    </span>
-                    <span>
-                      <FaClock />
-                      {room.pace}
-                    </span>
+                ))}
+              </div>
+
+              {isHost && currentLobby.status !== "matched" && (
+                <>
+                  <div className="game-invite-box">
+                    <div className="game-lobby-search compact">
+                      <FaSearch />
+                      <input
+                        type="search"
+                        value={inviteQuery}
+                        onChange={(event) => setInviteQuery(event.target.value)}
+                        placeholder="Invite by username"
+                      />
+                    </div>
+                    {searchingUsers && <div className="game-room-empty">Searching...</div>}
+                    {userResults.map((user) => (
+                      <button
+                        key={user.id}
+                        type="button"
+                        className="game-user-result"
+                        onClick={() => inviteUser(user)}
+                        disabled={busyKey === `invite-${user.id}`}
+                      >
+                        <span>@{user.username}</span>
+                        <FaPaperPlane />
+                      </button>
+                    ))}
                   </div>
-                </div>
-              ))
-            )}
-          </div>
+
+                  {currentLobby.pending_requests?.length > 0 && (
+                    <div className="game-pending-box">
+                      <div className="game-room-heading">
+                        <h3>Join requests</h3>
+                        <span>{currentLobby.pending_requests.length}</span>
+                      </div>
+                      {currentLobby.pending_requests.map((request) => (
+                        <div key={request.id} className="game-request-row">
+                          <div>
+                            <strong>@{request.requester_username}</strong>
+                            <span>wants to join</span>
+                          </div>
+                          <div className="game-request-actions">
+                            <button
+                              type="button"
+                              className="game-icon-action accept"
+                              onClick={() => respondToJoinRequest(request, "accept")}
+                              disabled={busyKey === `join-${request.id}-accept`}
+                            >
+                              <FaCheck />
+                            </button>
+                            <button
+                              type="button"
+                              className="game-icon-action decline"
+                              onClick={() => respondToJoinRequest(request, "decline")}
+                              disabled={busyKey === `join-${request.id}-decline`}
+                            >
+                              <FaTimes />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {currentLobby.pending_invites?.length > 0 && (
+                    <div className="game-pending-box">
+                      <div className="game-room-heading">
+                        <h3>Pending invites</h3>
+                        <span>{currentLobby.pending_invites.length}</span>
+                      </div>
+                      {currentLobby.pending_invites.map((invite) => (
+                        <div key={invite.id} className="game-request-row muted">
+                          <div>
+                            <strong>@{invite.invitee_username}</strong>
+                            <span>invited</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div className="game-detail-actions">
+                {isHost && currentLobby.status !== "matched" && (
+                  <button
+                    type="button"
+                    className="game-primary-action"
+                    onClick={startMatchmaking}
+                    disabled={busyKey === `matchmake-${currentLobby.id}`}
+                  >
+                    <FaPlay />
+                    {currentLobby.status === "matchmaking" ? "Find Same Team" : "Start Matchmaking"}
+                  </button>
+                )}
+                {currentLobby.status !== "matched" && (
+                  <button
+                    type="button"
+                    className="game-secondary-action danger"
+                    onClick={leaveLobby}
+                    disabled={busyKey === `leave-${currentLobby.id}`}
+                  >
+                    <FaSignOutAlt />
+                    {isHost ? "Close Lobby" : "Leave Lobby"}
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="game-detail-description">
+              Create a lobby or request to join one. Hosts approve manual requests before players
+              are added.
+            </p>
+          )}
         </aside>
       </section>
     </div>

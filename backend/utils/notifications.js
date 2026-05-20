@@ -36,6 +36,16 @@ export async function ensureNotificationsTable() {
       `);
 
       await pool.query(`
+        ALTER TABLE notifications
+        ADD COLUMN IF NOT EXISTS game_lobby_id UUID
+      `);
+
+      await pool.query(`
+        ALTER TABLE notifications
+        ADD COLUMN IF NOT EXISTS game_match_id UUID
+      `);
+
+      await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created
         ON notifications(recipient_id, created_at DESC)
       `);
@@ -172,6 +182,26 @@ const getNotificationPushCopy = (type, actorUsername = "Someone") => {
         title: "New reaction",
         body: `@${actorUsername} reacted to your message.`,
       };
+    case "game_lobby_invite":
+      return {
+        title: "Game invite",
+        body: `@${actorUsername} invited you to a tic tac toe lobby.`,
+      };
+    case "game_lobby_request":
+      return {
+        title: "Lobby join request",
+        body: `@${actorUsername} requested to join your game lobby.`,
+      };
+    case "game_lobby_request_accepted":
+      return {
+        title: "Lobby request accepted",
+        body: `@${actorUsername} accepted your game lobby request.`,
+      };
+    case "game_match_found":
+      return {
+        title: "Match found",
+        body: `@${actorUsername}'s lobby matched your team.`,
+      };
     case "content_removed":
       return {
         title: "Content removed",
@@ -255,6 +285,8 @@ export async function createNotification({
   chatId = null,
   groupChatId = null,
   messageId = null,
+  gameLobbyId = null,
+  gameMatchId = null,
   pushTitle = null,
   pushBody = null,
   pushCategoryId = null,
@@ -271,11 +303,23 @@ export async function createNotification({
     const { rows } = await pool.query(
       `
       INSERT INTO notifications
-        (notification_id, recipient_id, actor_id, type, post_id, comment_id, chat_id, group_chat_id, message_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        (notification_id, recipient_id, actor_id, type, post_id, comment_id, chat_id, group_chat_id, message_id, game_lobby_id, game_match_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
       `,
-      [uuidv4(), recipientId, actorId, type, postId, commentId, chatId, groupChatId, messageId]
+      [
+        uuidv4(),
+        recipientId,
+        actorId,
+        type,
+        postId,
+        commentId,
+        chatId,
+        groupChatId,
+        messageId,
+        gameLobbyId,
+        gameMatchId,
+      ]
     );
 
     const actorResult = await pool.query(
@@ -304,6 +348,8 @@ export async function createNotification({
           chatId,
           groupChatId,
           messageId,
+          gameLobbyId,
+          gameMatchId,
         },
     });
 

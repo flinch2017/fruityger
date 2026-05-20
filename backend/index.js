@@ -17,6 +17,7 @@ import messageRoutes from "./routes/messages.js";
 import notificationRoutes from "./routes/notifications.js";
 import repostRoutes from "./routes/reposts.js";
 import adminRoutes from "./routes/admin.js";
+import gameLobbyRoutes from "./routes/gameLobbies.js";
 import { cleanupExpiredUnverifiedUsers, ensureEmailVerificationSchema } from "./utils/emailVerification.js";
 import { backfillPostHashtags, ensureHashtagSchema } from "./utils/hashtags.js";
 import { ensurePerformanceIndexes } from "./utils/performanceIndexes.js";
@@ -68,6 +69,7 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/reposts", repostRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/game-lobbies", gameLobbyRoutes);
 
 
 
