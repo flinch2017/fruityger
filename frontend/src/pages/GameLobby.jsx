@@ -83,6 +83,7 @@ function LobbyRow({ lobby, action, actionLabel, disabled }) {
 
 export default function GameLobby() {
   const navigate = useNavigate();
+  const lobbyChannelRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
   const [dashboard, setDashboard] = useState({
     availableLobbies: [],
@@ -136,6 +137,8 @@ export default function GameLobby() {
   }, [fetchDashboard]);
 
   useEffect(() => {
+    const currentLobbyId = currentLobby?.id;
+
     const scheduleRealtimeRefresh = () => {
       window.clearTimeout(refreshTimeoutRef.current);
       refreshTimeoutRef.current = window.setTimeout(() => {
@@ -145,6 +148,12 @@ export default function GameLobby() {
 
     const channel = supabase
       .channel("tic-tac-toe-lobby-live")
+      .on("broadcast", { event: "match-found" }, ({ payload }) => {
+        if (!payload?.matchId || !currentLobbyId) return;
+        if (!payload.lobbyIds?.map(String).includes(String(currentLobbyId))) return;
+
+        navigate(`/games/tic-tac-toe/match/${payload.matchId}/ready`, { replace: true });
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "game_lobbies" }, scheduleRealtimeRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "game_lobby_members" }, scheduleRealtimeRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "game_lobby_invites" }, scheduleRealtimeRefresh)
@@ -152,11 +161,14 @@ export default function GameLobby() {
       .on("postgres_changes", { event: "*", schema: "public", table: "game_matches" }, scheduleRealtimeRefresh)
       .subscribe();
 
+    lobbyChannelRef.current = channel;
+
     return () => {
+      lobbyChannelRef.current = null;
       window.clearTimeout(refreshTimeoutRef.current);
       supabase.removeChannel(channel);
     };
-  }, [fetchDashboard]);
+  }, [currentLobby?.id, fetchDashboard, navigate]);
 
   useEffect(() => {
     if (activeMatchId) {
@@ -269,12 +281,27 @@ export default function GameLobby() {
       action === "accept" ? "Player added to the lobby." : "Request declined."
     );
 
+  const announceMatchFound = async (match) => {
+    if (!match?.id) return;
+
+    await lobbyChannelRef.current?.send({
+      type: "broadcast",
+      event: "match-found",
+      payload: {
+        matchId: match.id,
+        lobbyIds: [match.lobby_x_id, match.lobby_o_id].filter(Boolean),
+        actorId: currentUserId,
+      },
+    });
+  };
+
   const startMatchmaking = () =>
     runAction(
       `matchmake-${currentLobby.id}`,
       async () => {
         const data = await requestJson(`/${currentLobby.id}/matchmake`, { method: "POST" });
         if (data.match?.id) {
+          await announceMatchFound(data.match);
           navigate(`/games/tic-tac-toe/match/${data.match.id}/ready`, { replace: true });
           return { skipRefresh: true };
         }
