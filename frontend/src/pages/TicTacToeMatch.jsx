@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaArrowLeft, FaGamepad, FaSyncAlt, FaUsers } from "react-icons/fa";
 import "../css/GameLobby.css";
+import supabase from "../lib/supabaseClient";
 
 const API_BASE = "http://localhost:5000/api/game-lobbies";
 
@@ -29,6 +30,7 @@ const requestJson = async (path, options = {}) => {
 export default function TicTacToeMatch() {
   const { matchId } = useParams();
   const navigate = useNavigate();
+  const refreshTimeoutRef = useRef(null);
   const [match, setMatch] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -64,12 +66,44 @@ export default function TicTacToeMatch() {
   }, [loadMatch]);
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      loadMatch({ quiet: true });
-    }, 2500);
+    if (!matchId) return undefined;
 
-    return () => window.clearInterval(intervalId);
-  }, [loadMatch]);
+    const scheduleRealtimeRefresh = () => {
+      window.clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = window.setTimeout(() => {
+        loadMatch({ quiet: true });
+      }, 90);
+    };
+
+    const channel = supabase
+      .channel(`tic-tac-toe-match-${matchId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_matches",
+          filter: `id=eq.${matchId}`,
+        },
+        scheduleRealtimeRefresh
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_match_moves",
+          filter: `match_id=eq.${matchId}`,
+        },
+        scheduleRealtimeRefresh
+      )
+      .subscribe();
+
+    return () => {
+      window.clearTimeout(refreshTimeoutRef.current);
+      supabase.removeChannel(channel);
+    };
+  }, [loadMatch, matchId]);
 
   useEffect(() => {
     if (!match || match.status !== "finished") return undefined;

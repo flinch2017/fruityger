@@ -9,6 +9,14 @@ const GAME_KEY = "tic-tac-toe";
 const BOARD_SIZE = 5;
 const WIN_LENGTH = 4;
 const OPEN_LOBBY_STATUSES = ["open", "matchmaking"];
+const REALTIME_TABLES = [
+  "game_lobbies",
+  "game_lobby_members",
+  "game_lobby_invites",
+  "game_lobby_join_requests",
+  "game_matches",
+  "game_match_moves",
+];
 
 let gameLobbySchemaReadyPromise = null;
 
@@ -138,6 +146,8 @@ async function ensureGameLobbySchema() {
         CREATE INDEX IF NOT EXISTS idx_game_matches_lobbies
         ON game_matches(lobby_x_id, lobby_o_id, created_at DESC)
       `);
+
+      await ensureGameRealtimePublication();
     })().catch((error) => {
       gameLobbySchemaReadyPromise = null;
       throw error;
@@ -145,6 +155,34 @@ async function ensureGameLobbySchema() {
   }
 
   await gameLobbySchemaReadyPromise;
+}
+
+async function ensureGameRealtimePublication() {
+  for (const tableName of REALTIME_TABLES) {
+    try {
+      await pool.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1
+            FROM pg_publication
+            WHERE pubname = 'supabase_realtime'
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM pg_publication_tables
+            WHERE pubname = 'supabase_realtime'
+              AND schemaname = 'public'
+              AND tablename = '${tableName}'
+          ) THEN
+            EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE public.${tableName}';
+          END IF;
+        END $$;
+      `);
+    } catch (error) {
+      console.warn(`Could not enable Supabase Realtime for ${tableName}:`, error.message);
+    }
+  }
 }
 
 const normalizeTeamSize = (value) => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaBolt,
@@ -11,6 +11,7 @@ import {
 } from "react-icons/fa";
 import "../css/GameLobby.css";
 import { formatCount } from "../utils/countFormatter";
+import supabase from "../lib/supabaseClient";
 
 const API_BASE = "http://localhost:5000/api/game-lobbies";
 
@@ -75,6 +76,7 @@ async function fetchTicTacToeSummary() {
 
 export default function GameHub() {
   const navigate = useNavigate();
+  const refreshTimeoutRef = useRef(null);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -93,8 +95,29 @@ export default function GameHub() {
 
   useEffect(() => {
     loadHub();
-    const intervalId = window.setInterval(loadHub, 8000);
-    return () => window.clearInterval(intervalId);
+  }, [loadHub]);
+
+  useEffect(() => {
+    const scheduleRealtimeRefresh = () => {
+      window.clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = window.setTimeout(() => {
+        loadHub();
+      }, 120);
+    };
+
+    const channel = supabase
+      .channel("game-hub-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_lobbies" }, scheduleRealtimeRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_lobby_members" }, scheduleRealtimeRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_lobby_invites" }, scheduleRealtimeRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_lobby_join_requests" }, scheduleRealtimeRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_matches" }, scheduleRealtimeRefresh)
+      .subscribe();
+
+    return () => {
+      window.clearTimeout(refreshTimeoutRef.current);
+      supabase.removeChannel(channel);
+    };
   }, [loadHub]);
 
   const activeMatch = summary?.activeMatches?.[0] || null;

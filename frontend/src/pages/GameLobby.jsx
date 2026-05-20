@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaCheck,
@@ -15,6 +15,7 @@ import {
 } from "react-icons/fa";
 import "../css/GameLobby.css";
 import { formatCount } from "../utils/countFormatter";
+import supabase from "../lib/supabaseClient";
 
 const API_BASE = "http://localhost:5000/api/game-lobbies";
 
@@ -82,6 +83,7 @@ function LobbyRow({ lobby, action, actionLabel, disabled }) {
 
 export default function GameLobby() {
   const navigate = useNavigate();
+  const refreshTimeoutRef = useRef(null);
   const [dashboard, setDashboard] = useState({
     availableLobbies: [],
     myLobbies: [],
@@ -134,11 +136,26 @@ export default function GameLobby() {
   }, [fetchDashboard]);
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      fetchDashboard({ quiet: true });
-    }, 5000);
+    const scheduleRealtimeRefresh = () => {
+      window.clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = window.setTimeout(() => {
+        fetchDashboard({ quiet: true });
+      }, 120);
+    };
 
-    return () => window.clearInterval(intervalId);
+    const channel = supabase
+      .channel("tic-tac-toe-lobby-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_lobbies" }, scheduleRealtimeRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_lobby_members" }, scheduleRealtimeRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_lobby_invites" }, scheduleRealtimeRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_lobby_join_requests" }, scheduleRealtimeRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_matches" }, scheduleRealtimeRefresh)
+      .subscribe();
+
+    return () => {
+      window.clearTimeout(refreshTimeoutRef.current);
+      supabase.removeChannel(channel);
+    };
   }, [fetchDashboard]);
 
   useEffect(() => {
