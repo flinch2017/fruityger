@@ -3,6 +3,7 @@ import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { ensureRepostSchema } from "../utils/reposts.js";
 import { createNotification } from "../utils/notifications.js";
+import { canViewUserActivity, ensurePrivateAccountSchema } from "../utils/privacy.js";
 
 const router = express.Router();
 
@@ -16,6 +17,7 @@ router.post("/toggle", authenticateToken, async (req, res) => {
 
   try {
     await ensureRepostSchema();
+    await ensurePrivateAccountSchema();
 
     const postResult = await pool.query(
       `
@@ -30,6 +32,10 @@ router.post("/toggle", authenticateToken, async (req, res) => {
     const post = postResult.rows[0];
     if (!post) {
       return res.status(404).json({ error: "Post not found" });
+    }
+
+    if (!(await canViewUserActivity(userId, post.user_id))) {
+      return res.status(403).json({ error: "This post is private" });
     }
 
     if (post.user_id === userId) {

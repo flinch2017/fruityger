@@ -44,6 +44,16 @@ const TYPE_COPY = {
     title: "New follower",
     body: (username) => `@${username} started following you.`,
   },
+  follow_request: {
+    icon: "FR",
+    title: "Follow request",
+    body: (username) => `@${username} requested to follow you.`,
+  },
+  follow_request_accepted: {
+    icon: "OK",
+    title: "Request accepted",
+    body: (username) => `@${username} accepted your follow request.`,
+  },
   direct_message: {
     icon: "M",
     title: "New message",
@@ -80,6 +90,7 @@ export default function Notifications() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [clearing, setClearing] = useState(false);
+  const [requestActionMap, setRequestActionMap] = useState({});
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -147,7 +158,11 @@ export default function Notifications() {
       return;
     }
 
-    if (notification.type === "new_follower") {
+    if (
+      notification.type === "new_follower" ||
+      notification.type === "follow_request" ||
+      notification.type === "follow_request_accepted"
+    ) {
       navigate(`/profile/${notification.actor_username}`);
       return;
     }
@@ -238,6 +253,45 @@ export default function Notifications() {
     }
   };
 
+  const respondToFollowRequest = async (notification, action) => {
+    const token = localStorage.getItem("token");
+    if (!token || !notification?.actor_id || requestActionMap[notification.notification_id]) {
+      return;
+    }
+
+    setRequestActionMap((prev) => ({ ...prev, [notification.notification_id]: action }));
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/follow/requests/${notification.actor_id}/${action}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to respond to follow request");
+      }
+
+      setNotifications((prev) =>
+        prev.filter((item) => item.notification_id !== notification.notification_id)
+      );
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Failed to respond to follow request");
+    } finally {
+      setRequestActionMap((prev) => {
+        const next = { ...prev };
+        delete next[notification.notification_id];
+        return next;
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="notifications-page">
@@ -321,13 +375,20 @@ export default function Notifications() {
           "";
 
         return (
-          <button
+          <div
             key={notification.notification_id}
             className={`notification-card ${
               notification.is_read ? "" : "unread"
             } ${selectedSet.has(notification.notification_id) ? "selected" : ""}`.trim()}
-            type="button"
+            role="button"
+            tabIndex={0}
             onClick={() => handleNotificationClick(notification)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                handleNotificationClick(notification);
+              }
+            }}
           >
             {selectionMode && (
               <span className="selection-check">
@@ -341,12 +402,38 @@ export default function Notifications() {
               <h3>{meta.title}</h3>
               <p>{meta.body(notification.actor_username)}</p>
               {preview && <div className="notif-preview">{preview}</div>}
+              {notification.type === "follow_request" && !selectionMode && (
+                <div className="notif-request-actions">
+                  <button
+                    type="button"
+                    className="notif-request-btn accept"
+                    disabled={!!requestActionMap[notification.notification_id]}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      respondToFollowRequest(notification, "accept");
+                    }}
+                  >
+                    {requestActionMap[notification.notification_id] === "accept" ? "Accepting..." : "Accept"}
+                  </button>
+                  <button
+                    type="button"
+                    className="notif-request-btn decline"
+                    disabled={!!requestActionMap[notification.notification_id]}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      respondToFollowRequest(notification, "reject");
+                    }}
+                  >
+                    {requestActionMap[notification.notification_id] === "reject" ? "Declining..." : "Decline"}
+                  </button>
+                </div>
+              )}
             </div>
 
             <span className="notif-time">
               {formatRelativeTime(notification.created_at)}
             </span>
-          </button>
+          </div>
         );
       })}
     </div>

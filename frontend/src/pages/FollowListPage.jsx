@@ -55,11 +55,12 @@ export default function FollowListPage() {
     setTogglingMap((prev) => ({ ...prev, [account.id]: true }));
 
     const previous = account.is_following;
+    const previousRequested = account.requested;
 
     setAccounts((prev) =>
       prev.map((item) =>
         item.id === account.id
-          ? { ...item, is_following: !previous }
+          ? { ...item, is_following: !previous, requested: false }
           : item
       )
     );
@@ -83,7 +84,11 @@ export default function FollowListPage() {
       setAccounts((prev) =>
         prev.map((item) =>
           item.id === account.id
-            ? { ...item, is_following: data.following }
+            ? {
+                ...item,
+                is_following: Boolean(data.following),
+                requested: Boolean(data.requested),
+              }
             : item
         )
       );
@@ -92,7 +97,7 @@ export default function FollowListPage() {
       setAccounts((prev) =>
         prev.map((item) =>
           item.id === account.id
-            ? { ...item, is_following: previous }
+            ? { ...item, is_following: previous, requested: previousRequested }
             : item
         )
       );
@@ -160,7 +165,11 @@ export default function FollowListPage() {
                       ? "..."
                       : account.is_following
                         ? "Unfollow"
-                        : "Follow"}
+                        : account.requested
+                          ? "Requested"
+                          : account.is_private
+                            ? "Request"
+                            : "Follow"}
                   </button>
                 )}
               </div>

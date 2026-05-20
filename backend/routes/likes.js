@@ -2,6 +2,7 @@ import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { createNotification } from "../utils/notifications.js";
+import { canViewUserActivity, ensurePrivateAccountSchema } from "../utils/privacy.js";
 
 const router = express.Router();
 
@@ -18,6 +19,21 @@ router.post("/toggle", authenticateToken, async (req, res) => {
   }
 
   try {
+    await ensurePrivateAccountSchema();
+
+    const postResult = await pool.query(
+      `SELECT user_id FROM posts WHERE post_id = $1 LIMIT 1`,
+      [postId]
+    );
+
+    const postOwnerId = postResult.rows[0]?.user_id;
+    if (!postOwnerId) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    if (!(await canViewUserActivity(userId, postOwnerId))) {
+      return res.status(403).json({ error: "This post is private" });
+    }
 
     // Check if already liked
     const existing = await pool.query(
@@ -44,13 +60,8 @@ router.post("/toggle", authenticateToken, async (req, res) => {
         [postId, userId]
       );
 
-      const ownerResult = await pool.query(
-        `SELECT user_id FROM posts WHERE post_id = $1`,
-        [postId]
-      );
-
       await createNotification({
-        recipientId: ownerResult.rows[0]?.user_id,
+        recipientId: postOwnerId,
         actorId: userId,
         type: "post_like",
         postId,

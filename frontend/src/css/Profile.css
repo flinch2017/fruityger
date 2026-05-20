@@ -177,6 +177,21 @@
   color: #0a6e92;
 }
 
+.profile-private-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: #0e7697;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow:
+    0 8px 18px rgba(0, 169, 255, 0.12),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .profile-bio {
   width: min(100%, 420px);
   margin: 12px auto 0;

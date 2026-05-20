@@ -9,6 +9,7 @@ import { ensureRepostSchema } from "../utils/reposts.js";
 import { ensurePushNotificationSubscriptionsTable } from "../utils/notifications.js";
 import { ensureTapeViewEventsSchema } from "../utils/tapeViewEvents.js";
 import { ensureHashtagSchema } from "../utils/hashtags.js";
+import { ensurePrivateAccountSchema } from "../utils/privacy.js";
 
 const router = express.Router();
 
@@ -187,10 +188,11 @@ router.get("/user/:username", authenticateToken, async (req, res) => {
     await ensureUserOnboardingSchema();
     await ensureUserProfileSchema();
     await ensureAccountStatusSchema();
+    await ensurePrivateAccountSchema();
     const { username } = req.params;
 
     const { rows } = await pool.query(
-      `SELECT id, username, email, profile_pic, bio, interests, interests_completed, created_at
+      `SELECT id, username, email, profile_pic, bio, interests, interests_completed, is_private, created_at
        FROM users
        WHERE username = $1
          AND deactivated_at IS NULL
@@ -246,8 +248,9 @@ router.get("/me", authenticateToken, async (req, res) => {
     await ensureUserOnboardingSchema();
     await ensureUserProfileSchema();
     await ensureAccountStatusSchema();
+    await ensurePrivateAccountSchema();
     const { rows } = await pool.query(
-      `SELECT id, username, email, profile_pic, profile_pic_key, bio, interests, interests_completed, created_at
+      `SELECT id, username, email, profile_pic, profile_pic_key, bio, interests, interests_completed, is_private, created_at
        FROM users
        WHERE id = $1
          AND deactivated_at IS NULL
@@ -282,11 +285,12 @@ router.get("/public/user/:username", async (req, res) => {
   try {
     await ensureUserProfileSchema();
     await ensureAccountStatusSchema();
+    await ensurePrivateAccountSchema();
     const { username } = req.params;
 
     const { rows } = await pool.query(
       `
-      SELECT id, username, profile_pic, bio, created_at
+      SELECT id, username, profile_pic, bio, is_private, created_at
       FROM users
       WHERE username = $1
         AND deactivated_at IS NULL
@@ -461,6 +465,58 @@ router.put("/settings/notifications", authenticateToken, async (req, res) => {
   }
 });
 
+router.get("/settings/privacy", authenticateToken, async (req, res) => {
+  try {
+    await ensurePrivateAccountSchema();
+
+    const { rows } = await pool.query(
+      `
+      SELECT COALESCE(is_private, false) AS is_private
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [req.user.id]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({ isPrivate: rows[0].is_private });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load privacy settings" });
+  }
+});
+
+router.put("/settings/privacy", authenticateToken, async (req, res) => {
+  const isPrivate = Boolean(req.body?.isPrivate);
+
+  try {
+    await ensurePrivateAccountSchema();
+
+    const { rows } = await pool.query(
+      `
+      UPDATE users
+      SET is_private = $1
+      WHERE id = $2
+      RETURNING id, username, email, profile_pic, bio, interests, interests_completed, is_private, created_at
+      `,
+      [isPrivate, req.user.id]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({ isPrivate: rows[0].is_private, user: rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update privacy settings" });
+  }
+});
+
 router.post("/settings/push-token", authenticateToken, async (req, res) => {
   const expoPushToken = String(req.body?.expoPushToken || "").trim();
   const platform = String(req.body?.platform || "").trim().toLowerCase();
@@ -527,6 +583,7 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
   try {
     await ensureRepostSchema();
     await ensureTapeViewEventsSchema();
+    await ensurePrivateAccountSchema();
     const userId = req.user.id;
     const { postId } = req.params;
 
@@ -536,6 +593,7 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
         p.*,
         u.username,
         u.profile_pic,
+        COALESCE(u.is_private, false) AS author_is_private,
         COALESCE(( SELECT json_agg( json_build_object( 'media_url', pm.media_url, 'media_type', pm.media_type, 'media_order', pm.media_order ) ORDER BY pm.media_order ASC ) FROM post_media pm WHERE pm.post_id = p.post_id ), '[]') AS media,
         (
           SELECT COUNT(*)::int
@@ -631,6 +689,16 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
             ) AS reposter_count
         ) relevant_reposts ON TRUE
         WHERE p.post_id = $2
+          AND (
+            p.user_id = $1
+            OR COALESCE(u.is_private, false) = false
+            OR EXISTS (
+              SELECT 1
+              FROM follows viewer_follow
+              WHERE viewer_follow.follower_id = $1
+                AND viewer_follow.following_id = p.user_id
+            )
+          )
         `,
       [userId, postId]
     );
@@ -652,6 +720,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
     await ensureRepostSchema();
     await ensureTapeViewEventsSchema();
     await ensureHashtagSchema();
+    await ensurePrivateAccountSchema();
     const userId = req.user.id;
     const limit = parseInt(req.query.limit, 10) || 5;
     const offset = parseInt(req.query.offset, 10) || 0;
@@ -901,6 +970,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
         p.*,
         u.username,
         u.profile_pic,
+        COALESCE(u.is_private, false) AS author_is_private,
         latest_repost.reposter_id,
         latest_repost.reposter_username,
         latest_repost.reposter_profile_pic,
@@ -1017,6 +1087,16 @@ router.get("/feed", authenticateToken, async (req, res) => {
         ) latest
       ) latest_repost ON TRUE
       WHERE ${feedScopeClause}
+        AND (
+          p.user_id = $1
+          OR COALESCE(u.is_private, false) = false
+          OR EXISTS (
+            SELECT 1
+            FROM follows viewer_follow
+            WHERE viewer_follow.follower_id = $1
+              AND viewer_follow.following_id = p.user_id
+          )
+        )
         AND NOT EXISTS (
           SELECT 1
           FROM blocked_users bu
@@ -1224,6 +1304,7 @@ router.put("/edit-profile", authenticateToken, async (req, res) => {
     // ⭐ Get old profile picture key
     await ensureUserOnboardingSchema();
     await ensureUserProfileSchema();
+    await ensurePrivateAccountSchema();
 
     const userResult = await pool.query(
       "SELECT profile_pic, profile_pic_key FROM users WHERE id=$1",
@@ -1249,7 +1330,7 @@ router.put("/edit-profile", authenticateToken, async (req, res) => {
           profile_pic_key=$3,
           bio=$4
       WHERE id=$5
-      RETURNING id, username, email, profile_pic, profile_pic_key, bio, interests, interests_completed, created_at
+      RETURNING id, username, email, profile_pic, profile_pic_key, bio, interests, interests_completed, is_private, created_at
     `;
 
     const params = [

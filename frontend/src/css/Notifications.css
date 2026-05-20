@@ -202,6 +202,41 @@
   text-overflow: ellipsis;
 }
 
+.notif-request-actions {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.notif-request-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 9px 14px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow:
+    0 8px 18px rgba(0, 180, 255, 0.18),
+    inset 0 1px 0 rgba(255,255,255,0.28);
+}
+
+.notif-request-btn.accept {
+  background: linear-gradient(145deg, #1fd6ba, #12a990);
+}
+
+.notif-request-btn.decline {
+  color: #0f7394;
+  background: linear-gradient(145deg, rgba(255,255,255,0.96), rgba(216,247,255,0.86));
+}
+
+.notif-request-btn:disabled {
+  cursor: wait;
+  opacity: 0.74;
+}
+
 .notif-time {
   font-size: 12px;
   opacity: 0.7;

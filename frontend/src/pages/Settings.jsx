@@ -30,6 +30,8 @@ export default function Settings() {
   const [newsletterEnabled, setNewsletterEnabled] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [notificationSaving, setNotificationSaving] = useState(false);
+  const [privateProfile, setPrivateProfile] = useState(false);
+  const [privacySaving, setPrivacySaving] = useState(false);
   const [emailVerified, setEmailVerified] = useState(localStorage.getItem("emailVerified") === "true");
   const [verificationCode, setVerificationCode] = useState("");
   const [verificationSubmitting, setVerificationSubmitting] = useState(false);
@@ -93,6 +95,30 @@ export default function Settings() {
     };
 
     fetchNotificationSettings();
+  }, []);
+
+  useEffect(() => {
+    const fetchPrivacySettings = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      try {
+        const res = await fetch("http://localhost:5000/api/main/settings/privacy", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return;
+
+        setPrivateProfile(Boolean(data.isPrivate));
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    fetchPrivacySettings();
   }, []);
 
   useEffect(() => {
@@ -177,6 +203,46 @@ export default function Settings() {
       setPushEnabled(previousState.pushEnabled);
     } finally {
       setNotificationSaving(false);
+    }
+  };
+
+  const updatePrivacyPreference = async (nextPrivateProfile) => {
+    const token = localStorage.getItem("token");
+    if (!token || privacySaving) {
+      return;
+    }
+
+    const previousPrivateProfile = privateProfile;
+    setPrivateProfile(nextPrivateProfile);
+    setPrivacySaving(true);
+
+    try {
+      const res = await fetch("http://localhost:5000/api/main/settings/privacy", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          isPrivate: nextPrivateProfile,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update privacy settings");
+      }
+
+      setPrivateProfile(Boolean(data.isPrivate));
+      if (data.user) {
+        persistAuthSession({ user: data.user });
+      }
+    } catch (error) {
+      console.error(error);
+      setPrivateProfile(previousPrivateProfile);
+    } finally {
+      setPrivacySaving(false);
     }
   };
 
@@ -446,6 +512,26 @@ export default function Settings() {
               onChange={(event) =>
                 updateNotificationPreferences(newsletterEnabled, event.target.checked)
               }
+            />
+            <span className="settings-toggle-ui" aria-hidden="true"></span>
+          </label>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <div className="settings-section-header">
+          <h2>Privacy</h2>
+          <p>Private profiles require approval before new people can see your posts and reposts.</p>
+        </div>
+
+        <div className="settings-toggle-list">
+          <label className="settings-toggle-row">
+            <span className="settings-toggle-text">Private profile</span>
+            <input
+              type="checkbox"
+              checked={privateProfile}
+              disabled={privacySaving}
+              onChange={(event) => updatePrivacyPreference(event.target.checked)}
             />
             <span className="settings-toggle-ui" aria-hidden="true"></span>
           </label>

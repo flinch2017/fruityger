@@ -50,6 +50,7 @@ export default function Profile() {
   const [deletingPost, setDeletingPost] = useState(false); 
   const [disappearingPosts, setDisappearingPosts] = useState([]); 
   const [following, setFollowing] = useState(false); // new state
+  const [followRequested, setFollowRequested] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
@@ -57,6 +58,7 @@ export default function Profile() {
   const [guestPromptOpen, setGuestPromptOpen] = useState(false);
   const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [privatePostsHidden, setPrivatePostsHidden] = useState(false);
 
   const LIMIT = 5;
   const navigate = useNavigate();
@@ -332,7 +334,17 @@ export default function Profile() {
       const data = await res.json();
 
       if (res.ok) {
+        setPrivatePostsHidden(Boolean(data.isPrivate && data.canViewPrivateProfile === false));
+
         if (data.isBlocked) {
+          setPosts([]);
+          setOffset(0);
+          setHasMore(false);
+          setLoadingPosts(false);
+          return;
+        }
+
+        if (data.isPrivate && data.canViewPrivateProfile === false) {
           setPosts([]);
           setOffset(0);
           setHasMore(false);
@@ -371,6 +383,8 @@ export default function Profile() {
     setActiveIndexMap({});
     setActiveMenuPostId(null);
     setActiveCommentPost(null);
+    setFollowRequested(false);
+    setPrivatePostsHidden(false);
     fetchCurrentUser();
     fetchUser();
     fetchPosts(true);
@@ -872,7 +886,10 @@ export default function Profile() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await res.json();
-      if (res.ok) setFollowing(data.following);
+      if (res.ok) {
+        setFollowing(Boolean(data.following));
+        setFollowRequested(Boolean(data.requested));
+      }
     } catch (err) {
       console.error(err);
     }
@@ -907,14 +924,30 @@ export default function Profile() {
         }
       );
 
-      if (!res.ok) throw new Error("Failed");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed");
 
-      // ? Optimistic UI: toggle state and update followers count
-      setFollowing(prev => !prev);
+      const wasFollowing = following;
+      const nextFollowing = Boolean(data.following);
+      const nextRequested = Boolean(data.requested);
+
+      setFollowing(nextFollowing);
+      setFollowRequested(nextRequested);
       setUser(prev => ({
         ...prev,
-        followers_count: prev.followers_count + (following ? -1 : 1)
+        followers_count: Math.max(
+          0,
+          (prev.followers_count || 0) +
+            (!wasFollowing && nextFollowing ? 1 : wasFollowing && !nextFollowing ? -1 : 0)
+        ),
       }));
+
+      if (!wasFollowing && nextFollowing) {
+        setPrivatePostsHidden(false);
+        setOffset(0);
+        setHasMore(true);
+        fetchPosts(true);
+      }
     } catch (err) {
       console.error(err);
       setNotice({ type: "error", message: "Failed to update follow status." });
@@ -1070,6 +1103,9 @@ export default function Profile() {
           </button>
 
           <h2>{user.username}</h2>
+          {user.is_private && (
+            <span className="profile-private-badge">Private</span>
+          )}
           {user.bio ? (
             <p className="profile-bio">{user.bio}</p>
           ) : isOwnProfile ? (
@@ -1095,7 +1131,7 @@ export default function Profile() {
                 {token && followLoading ? (
                   <div className="button-spinner"></div>
                 ) : (
-                  following ? "Unfollow" : "Follow"
+                  following ? "Unfollow" : followRequested ? "Requested" : user?.is_private ? "Request" : "Follow"
                 )}
               </button>
             ) : user?.blocked_by_me ? (
@@ -1158,11 +1194,15 @@ export default function Profile() {
               ? "You blocked this user, so their posts are hidden."
               : "You can't view this user's posts."}
           </p>
+        ) : privatePostsHidden && !isOwnProfile ? (
+          <p className="no-posts-message">
+            This profile is private. Follow @{user.username} to see their posts and reposts.
+          </p>
         ) : posts.length === 0 && !loadingPosts && (
           <p className="no-posts-message">No posts yet</p>
         )}
 
-        {!isBlockedProfile && posts.map(post => (
+        {!isBlockedProfile && !privatePostsHidden && posts.map(post => (
           <div
             key={post.post_id}
             className={`post-card ${disappearingPosts.includes(post.post_id) ? "fade-out" : "fade-in"}`}

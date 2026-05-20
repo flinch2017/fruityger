@@ -3,16 +3,32 @@ import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { createNotification } from "../utils/notifications.js";
 import { extractMentionUsernames } from "../utils/mentions.js";
+import { canViewUserActivity, ensurePrivateAccountSchema } from "../utils/privacy.js";
 
 const router = express.Router();
 
 router.get("/:postId", authenticateToken, async (req, res) => {
   try {
+    await ensurePrivateAccountSchema();
     const { postId } = req.params;
     const userId = req.user.id;
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 20;
     const offset = (page - 1) * limit;
+
+    const postResult = await pool.query(
+      `SELECT user_id FROM posts WHERE post_id = $1 LIMIT 1`,
+      [postId]
+    );
+
+    const postOwnerId = postResult.rows[0]?.user_id;
+    if (!postOwnerId) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    if (!(await canViewUserActivity(userId, postOwnerId))) {
+      return res.status(403).json({ error: "This post is private" });
+    }
 
     const result = await pool.query(
       `
@@ -62,6 +78,7 @@ router.get("/:postId", authenticateToken, async (req, res) => {
 
 router.post("/", authenticateToken, async (req, res) => {
   try {
+    await ensurePrivateAccountSchema();
     const { postId, text, parentId } = req.body;
     const userId = req.user.id;
 
@@ -92,6 +109,13 @@ router.post("/", authenticateToken, async (req, res) => {
     );
 
     const postOwnerId = postOwnerResult.rows[0]?.user_id;
+    if (!postOwnerId) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    if (!(await canViewUserActivity(userId, postOwnerId))) {
+      return res.status(403).json({ error: "This post is private" });
+    }
 
     const insert = await pool.query(
       `

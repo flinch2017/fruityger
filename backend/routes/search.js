@@ -3,6 +3,7 @@ import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { backfillPostHashtags, ensureHashtagSchema } from "../utils/hashtags.js";
 import { ensureRepostSchema } from "../utils/reposts.js";
+import { ensurePrivateAccountSchema } from "../utils/privacy.js";
 
 const router = express.Router();
 
@@ -25,6 +26,9 @@ router.get("/hashtags/:tag", authenticateToken, async (req, res) => {
     await backfillPostHashtags();
     await ensureBlockedUsersTable();
     await ensureRepostSchema();
+    await ensurePrivateAccountSchema();
+    await ensureRepostSchema();
+    await ensurePrivateAccountSchema();
 
     const tag = normalizeTag(req.params.tag);
     const userId = req.user.id;
@@ -89,6 +93,16 @@ router.get("/hashtags/:tag", authenticateToken, async (req, res) => {
       LEFT JOIN likes l
         ON l.post_id = p.post_id
       WHERE ph.tag = $1
+        AND (
+          p.user_id = $2
+          OR COALESCE(u.is_private, false) = false
+          OR EXISTS (
+            SELECT 1
+            FROM follows viewer_follow
+            WHERE viewer_follow.follower_id = $2
+              AND viewer_follow.following_id = p.user_id
+          )
+        )
         AND NOT EXISTS (
           SELECT 1
           FROM blocked_users bu
@@ -349,6 +363,16 @@ router.get("/", authenticateToken, async (req, res) => {
           ) AS reposter_count
       ) relevant_reposts ON TRUE
       WHERE p.caption ILIKE $1
+        AND (
+          p.user_id = $2
+          OR COALESCE(u.is_private, false) = false
+          OR EXISTS (
+            SELECT 1
+            FROM follows viewer_follow
+            WHERE viewer_follow.follower_id = $2
+              AND viewer_follow.following_id = p.user_id
+          )
+        )
         AND NOT EXISTS (
           SELECT 1
           FROM blocked_users bu

@@ -112,6 +112,16 @@ const getNotificationPushCopy = (type, actorUsername = "Someone") => {
         title: "New follower",
         body: `@${actorUsername} started following you.`,
       };
+    case "follow_request":
+      return {
+        title: "Follow request",
+        body: `@${actorUsername} requested to follow you.`,
+      };
+    case "follow_request_accepted":
+      return {
+        title: "Follow request accepted",
+        body: `@${actorUsername} accepted your follow request.`,
+      };
     case "post_like":
       return {
         title: "New like",

@@ -10,12 +10,14 @@ import {
 } from "../utils/hashtags.js";
 import { syncPostMentions } from "../utils/mentions.js";
 import { ensureRepostSchema } from "../utils/reposts.js";
+import { canViewUserActivity, ensurePrivateAccountSchema } from "../utils/privacy.js";
 
 const router = express.Router();
 
 router.get("/posts", authenticateToken, async (req, res) => {
   try {
     await ensureRepostSchema();
+    await ensurePrivateAccountSchema();
 
     const viewerId = req.user.id;
     let userId = viewerId;
@@ -23,7 +25,7 @@ router.get("/posts", authenticateToken, async (req, res) => {
 
     if (username) {
       const userResult = await pool.query(
-        "SELECT id FROM users WHERE username = $1 AND deactivated_at IS NULL AND deleted_at IS NULL LIMIT 1",
+        "SELECT id, COALESCE(is_private, false) AS is_private FROM users WHERE username = $1 AND deactivated_at IS NULL AND deleted_at IS NULL LIMIT 1",
         [username]
       );
 
@@ -32,6 +34,16 @@ router.get("/posts", authenticateToken, async (req, res) => {
       }
 
       userId = userResult.rows[0].id;
+    }
+
+    const canViewProfileActivity = await canViewUserActivity(viewerId, userId);
+    if (!canViewProfileActivity) {
+      return res.json({
+        posts: [],
+        isBlocked: false,
+        isPrivate: true,
+        canViewPrivateProfile: false,
+      });
     }
 
     if (userId !== viewerId) {
@@ -99,6 +111,7 @@ router.get("/posts", authenticateToken, async (req, res) => {
         activity.reposted_at,
         author.username,
         author.profile_pic,
+        COALESCE(author.is_private, false) AS author_is_private,
         COALESCE(
           (
             SELECT json_agg(
@@ -142,6 +155,16 @@ router.get("/posts", authenticateToken, async (req, res) => {
         ON l.post_id = activity.post_id
       LEFT JOIN reposts r
         ON r.post_id = activity.post_id
+      WHERE (
+        activity.user_id = $1
+        OR COALESCE(author.is_private, false) = false
+        OR EXISTS (
+          SELECT 1
+          FROM follows viewer_follow
+          WHERE viewer_follow.follower_id = $1
+            AND viewer_follow.following_id = activity.user_id
+        )
+      )
       GROUP BY
         activity.post_id,
         activity.user_id,
@@ -150,14 +173,20 @@ router.get("/posts", authenticateToken, async (req, res) => {
         activity.activity_type,
         activity.reposted_at,
         author.username,
-        author.profile_pic
+        author.profile_pic,
+        author.is_private
       ORDER BY COALESCE(activity.reposted_at, activity.date_posted) DESC
       LIMIT $3 OFFSET $4
       `,
       [viewerId, userId, limit, offset]
     );
 
-    res.json({ posts: rows, isBlocked: false });
+    res.json({
+      posts: rows,
+      isBlocked: false,
+      isPrivate: false,
+      canViewPrivateProfile: true,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
@@ -167,6 +196,7 @@ router.get("/posts", authenticateToken, async (req, res) => {
 router.get("/public-posts", async (req, res) => {
   try {
     await ensureRepostSchema();
+    await ensurePrivateAccountSchema();
     const username = req.query.username;
 
     if (!username) {
@@ -174,7 +204,7 @@ router.get("/public-posts", async (req, res) => {
     }
 
     const userResult = await pool.query(
-      "SELECT id FROM users WHERE username = $1 AND deactivated_at IS NULL AND deleted_at IS NULL LIMIT 1",
+      "SELECT id, COALESCE(is_private, false) AS is_private FROM users WHERE username = $1 AND deactivated_at IS NULL AND deleted_at IS NULL LIMIT 1",
       [username]
     );
 
@@ -183,6 +213,15 @@ router.get("/public-posts", async (req, res) => {
     }
 
     const userId = userResult.rows[0].id;
+    if (userResult.rows[0].is_private) {
+      return res.json({
+        posts: [],
+        isBlocked: false,
+        isPrivate: true,
+        canViewPrivateProfile: false,
+      });
+    }
+
     const limit = parseInt(req.query.limit, 10) || 5;
     const offset = parseInt(req.query.offset, 10) || 0;
 
@@ -222,6 +261,7 @@ router.get("/public-posts", async (req, res) => {
         activity.reposted_at,
         author.username,
         author.profile_pic,
+        COALESCE(author.is_private, false) AS author_is_private,
         COALESCE(
           (
             SELECT json_agg(
@@ -255,6 +295,7 @@ router.get("/public-posts", async (req, res) => {
         ON l.post_id = activity.post_id
       LEFT JOIN reposts r
         ON r.post_id = activity.post_id
+      WHERE COALESCE(author.is_private, false) = false
       GROUP BY
         activity.post_id,
         activity.user_id,
@@ -263,7 +304,8 @@ router.get("/public-posts", async (req, res) => {
         activity.activity_type,
         activity.reposted_at,
         author.username,
-        author.profile_pic
+        author.profile_pic,
+        author.is_private
       ORDER BY COALESCE(activity.reposted_at, activity.date_posted) DESC
       LIMIT $2 OFFSET $3
       `,
