@@ -6,17 +6,9 @@ import { createNotification } from "../utils/notifications.js";
 
 const router = express.Router();
 const GAME_KEY = "tic-tac-toe";
+const BOARD_SIZE = 5;
+const WIN_LENGTH = 4;
 const OPEN_LOBBY_STATUSES = ["open", "matchmaking"];
-const WIN_LINES = [
-  [0, 1, 2],
-  [3, 4, 5],
-  [6, 7, 8],
-  [0, 3, 6],
-  [1, 4, 7],
-  [2, 5, 8],
-  [0, 4, 8],
-  [2, 4, 6],
-];
 
 let gameLobbySchemaReadyPromise = null;
 
@@ -79,6 +71,8 @@ async function ensureGameLobbySchema() {
           lobby_o_id UUID NOT NULL REFERENCES game_lobbies(id) ON DELETE CASCADE,
           status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'finished')),
           current_mark TEXT NOT NULL DEFAULT 'x' CHECK (current_mark IN ('x', 'o')),
+          board_size INTEGER NOT NULL DEFAULT 5,
+          win_length INTEGER NOT NULL DEFAULT 4,
           winner_mark TEXT CHECK (winner_mark IN ('x', 'o')),
           winning_line INTEGER[],
           is_draw BOOLEAN NOT NULL DEFAULT false,
@@ -94,12 +88,40 @@ async function ensureGameLobbySchema() {
           player_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           lobby_id UUID NOT NULL REFERENCES game_lobbies(id) ON DELETE CASCADE,
           mark TEXT NOT NULL CHECK (mark IN ('x', 'o')),
-          cell_index INTEGER NOT NULL CHECK (cell_index BETWEEN 0 AND 8),
+          cell_index INTEGER NOT NULL CHECK (cell_index BETWEEN 0 AND 24),
           move_number INTEGER NOT NULL,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           UNIQUE (match_id, cell_index),
           UNIQUE (match_id, move_number)
         )
+      `);
+
+      await pool.query(`
+        ALTER TABLE game_matches
+        ADD COLUMN IF NOT EXISTS board_size INTEGER NOT NULL DEFAULT 5
+      `);
+
+      await pool.query(`
+        ALTER TABLE game_matches
+        ADD COLUMN IF NOT EXISTS win_length INTEGER NOT NULL DEFAULT 4
+      `);
+
+      await pool.query(`
+        DO $$
+        BEGIN
+          ALTER TABLE game_match_moves
+          DROP CONSTRAINT IF EXISTS game_match_moves_cell_index_check;
+
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint
+            WHERE conname = 'game_match_moves_cell_index_range_check'
+          ) THEN
+            ALTER TABLE game_match_moves
+            ADD CONSTRAINT game_match_moves_cell_index_range_check
+            CHECK (cell_index BETWEEN 0 AND 24);
+          END IF;
+        END $$;
       `);
 
       await pool.query(`
@@ -197,19 +219,52 @@ async function getLobbyMembers(lobbyId) {
   return rows;
 }
 
-function getBoardFromMoves(moves = []) {
-  const board = Array(9).fill(null);
+function getBoardFromMoves(moves = [], boardSize = BOARD_SIZE) {
+  const board = Array(boardSize * boardSize).fill(null);
   moves.forEach((move) => {
     board[move.cell_index] = move.mark;
   });
   return board;
 }
 
-function getGameResult(board) {
-  for (const line of WIN_LINES) {
-    const [a, b, c] = line;
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-      return { winnerMark: board[a], winningLine: line, isDraw: false };
+function getGameResult(board, boardSize = BOARD_SIZE, winLength = WIN_LENGTH) {
+  const directions = [
+    [0, 1],
+    [1, 0],
+    [1, 1],
+    [1, -1],
+  ];
+
+  for (let row = 0; row < boardSize; row += 1) {
+    for (let col = 0; col < boardSize; col += 1) {
+      const startIndex = row * boardSize + col;
+      const mark = board[startIndex];
+      if (!mark) continue;
+
+      for (const [rowStep, colStep] of directions) {
+        const line = [startIndex];
+
+        for (let offset = 1; offset < winLength; offset += 1) {
+          const nextRow = row + rowStep * offset;
+          const nextCol = col + colStep * offset;
+          if (
+            nextRow < 0 ||
+            nextRow >= boardSize ||
+            nextCol < 0 ||
+            nextCol >= boardSize
+          ) {
+            break;
+          }
+
+          const nextIndex = nextRow * boardSize + nextCol;
+          if (board[nextIndex] !== mark) break;
+          line.push(nextIndex);
+        }
+
+        if (line.length === winLength) {
+          return { winnerMark: mark, winningLine: line, isDraw: false };
+        }
+      }
     }
   }
 
@@ -248,6 +303,8 @@ async function getMatchForUser(matchId, userId, client = pool) {
       m.id,
       m.status,
       m.current_mark,
+      m.board_size,
+      m.win_length,
       m.winner_mark,
       m.winning_line,
       m.is_draw,
@@ -448,11 +505,12 @@ router.get("/", authenticateToken, async (req, res) => {
       `
       SELECT m.id
       FROM game_matches m
-      WHERE EXISTS (
+      WHERE m.status = 'active'
+        AND EXISTS (
           SELECT 1 FROM game_lobby_members gm
           WHERE gm.user_id = $1 AND gm.lobby_id IN (m.lobby_x_id, m.lobby_o_id)
         )
-      ORDER BY CASE WHEN m.status = 'active' THEN 0 ELSE 1 END, m.updated_at DESC
+      ORDER BY m.updated_at DESC
       LIMIT 5
       `,
       [userId]
@@ -1041,11 +1099,26 @@ router.post("/:lobbyId/matchmake", authenticateToken, async (req, res) => {
   }
 });
 
+router.get("/matches/:matchId", authenticateToken, async (req, res) => {
+  try {
+    await ensureGameLobbySchema();
+    const match = await getMatchForUser(req.params.matchId, req.user.id);
+    if (!match) {
+      return res.status(404).json({ error: "Match not found" });
+    }
+
+    res.json({ match });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load match" });
+  }
+});
+
 router.post("/matches/:matchId/move", authenticateToken, async (req, res) => {
   try {
     await ensureGameLobbySchema();
     const cellIndex = Number.parseInt(req.body?.cellIndex, 10);
-    if (!Number.isInteger(cellIndex) || cellIndex < 0 || cellIndex > 8) {
+    if (!Number.isInteger(cellIndex) || cellIndex < 0 || cellIndex >= BOARD_SIZE * BOARD_SIZE) {
       return res.status(400).json({ error: "Choose a valid square" });
     }
 
@@ -1092,6 +1165,14 @@ router.post("/matches/:matchId/move", authenticateToken, async (req, res) => {
         return res.status(400).json({ error: "It is not your team's turn" });
       }
 
+      const boardSize = match.board_size || BOARD_SIZE;
+      const winLength = match.win_length || WIN_LENGTH;
+
+      if (cellIndex >= boardSize * boardSize) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Choose a valid square" });
+      }
+
       const movesResult = await client.query(
         `
         SELECT mark, cell_index, move_number
@@ -1101,7 +1182,7 @@ router.post("/matches/:matchId/move", authenticateToken, async (req, res) => {
         `,
         [match.id]
       );
-      const board = getBoardFromMoves(movesResult.rows);
+      const board = getBoardFromMoves(movesResult.rows, boardSize);
       if (board[cellIndex]) {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "That square is already taken" });
@@ -1117,7 +1198,7 @@ router.post("/matches/:matchId/move", authenticateToken, async (req, res) => {
       );
 
       board[cellIndex] = mark;
-      const result = getGameResult(board);
+      const result = getGameResult(board, boardSize, winLength);
       const nextMark = mark === "x" ? "o" : "x";
 
       await client.query(

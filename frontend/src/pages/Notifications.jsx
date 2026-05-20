@@ -198,10 +198,12 @@ export default function Notifications() {
     }
 
     if (notification.game_lobby_id || notification.game_match_id) {
-      const params = new URLSearchParams();
-      if (notification.game_lobby_id) params.set("lobby", notification.game_lobby_id);
-      if (notification.game_match_id) params.set("match", notification.game_match_id);
-      navigate(`/games?${params.toString()}`);
+      if (notification.game_match_id) {
+        navigate(`/games/tic-tac-toe/match/${notification.game_match_id}`);
+        return;
+      }
+
+      navigate("/games/tic-tac-toe");
       return;
     }
 

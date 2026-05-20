@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FaCheck,
   FaClock,
@@ -18,8 +19,6 @@ import { formatCount } from "../utils/countFormatter";
 const API_BASE = "http://localhost:5000/api/game-lobbies";
 
 const getToken = () => localStorage.getItem("token");
-
-const boardLabels = ["", "", "", "", "", "", "", "", ""];
 
 const memberCount = (lobby) => lobby?.members?.length || 0;
 
@@ -82,6 +81,7 @@ function LobbyRow({ lobby, action, actionLabel, disabled }) {
 }
 
 export default function GameLobby() {
+  const navigate = useNavigate();
   const [dashboard, setDashboard] = useState({
     availableLobbies: [],
     myLobbies: [],
@@ -98,13 +98,11 @@ export default function GameLobby() {
   const [inviteQuery, setInviteQuery] = useState("");
   const [userResults, setUserResults] = useState([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
-  const [selectedMatchId, setSelectedMatchId] = useState("");
 
   const currentUserId = localStorage.getItem("userId");
 
   const activeMatches = dashboard.activeMatches || [];
-  const selectedMatch =
-    activeMatches.find((match) => match.id === selectedMatchId) || activeMatches[0] || null;
+  const activeMatchId = activeMatches[0]?.id || "";
   const currentLobby = useMemo(
     () => (dashboard.myLobbies || []).find((lobby) => lobby.status !== "matched") || null,
     [dashboard.myLobbies]
@@ -122,10 +120,6 @@ export default function GameLobby() {
     try {
       const data = await requestJson("");
       setDashboard(data);
-      setSelectedMatchId((prev) => {
-        if (prev && data.activeMatches?.some((match) => match.id === prev)) return prev;
-        return data.activeMatches?.[0]?.id || "";
-      });
       setError("");
     } catch (err) {
       setError(err.message || "Failed to load lobbies");
@@ -146,6 +140,12 @@ export default function GameLobby() {
 
     return () => window.clearInterval(intervalId);
   }, [fetchDashboard]);
+
+  useEffect(() => {
+    if (activeMatchId) {
+      navigate(`/games/tic-tac-toe/match/${activeMatchId}`, { replace: true });
+    }
+  }, [activeMatchId, navigate]);
 
   useEffect(() => {
     const keyword = inviteQuery.trim();
@@ -267,28 +267,6 @@ export default function GameLobby() {
       isHost ? "Lobby closed." : "Left lobby."
     );
 
-  const playMove = (cellIndex) => {
-    if (!selectedMatch?.can_move || selectedMatch.status !== "active") return;
-
-    runAction(
-      `move-${cellIndex}`,
-      () =>
-        requestJson(`/matches/${selectedMatch.id}/move`, {
-          method: "POST",
-          body: JSON.stringify({ cellIndex }),
-        }),
-      ""
-    );
-  };
-
-  const board = useMemo(() => {
-    const cells = [...boardLabels];
-    (selectedMatch?.moves || []).forEach((move) => {
-      cells[move.cell_index] = move.mark.toUpperCase();
-    });
-    return cells;
-  }, [selectedMatch]);
-
   if (loading) {
     return (
       <div className="game-lobby-page">
@@ -305,8 +283,8 @@ export default function GameLobby() {
             <FaGamepad />
           </span>
           <div>
-            <p>Game Lobby</p>
-            <h1>Tic Tac Toe teams</h1>
+            <p>Tic Tac Toe</p>
+            <h1>Build your team</h1>
           </div>
         </div>
 
@@ -331,7 +309,7 @@ export default function GameLobby() {
         </div>
         <div className="game-lobby-stat">
           <span>{formatCount(activeMatches.length)}</span>
-          <p>Your matches</p>
+          <p>Live matches</p>
         </div>
         <div className="game-lobby-stat">
           <span>{formatCount(dashboard.invites?.length || 0)}</span>
@@ -341,68 +319,6 @@ export default function GameLobby() {
 
       <section className="game-lobby-main">
         <div className="game-lobby-catalog">
-          {selectedMatch && (
-            <div className="game-match-panel">
-              <div className="game-section-heading">
-                <div>
-                  <p>Active game</p>
-                  <h2>{selectedMatch.lobby_x_title} vs {selectedMatch.lobby_o_title}</h2>
-                </div>
-                <span className="game-pill">You are {selectedMatch.my_mark.toUpperCase()}</span>
-              </div>
-
-              {activeMatches.length > 1 && (
-                <div className="game-match-tabs">
-                  {activeMatches.map((match) => (
-                    <button
-                      key={match.id}
-                      type="button"
-                      className={match.id === selectedMatch.id ? "active" : ""}
-                      onClick={() => setSelectedMatchId(match.id)}
-                    >
-                      {match.status === "active" ? "Live" : "Done"} {match.my_mark.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="tic-tac-toe-board" aria-label="Tic tac toe board">
-                {board.map((value, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    className={`tic-cell ${
-                      selectedMatch.winning_line?.includes(index) ? "winner" : ""
-                    }`.trim()}
-                    onClick={() => playMove(index)}
-                    disabled={
-                      Boolean(value) ||
-                      !selectedMatch.can_move ||
-                      selectedMatch.status !== "active" ||
-                      busyKey.startsWith("move-")
-                    }
-                  >
-                    {value}
-                  </button>
-                ))}
-              </div>
-
-              <div className="game-match-footer">
-                {selectedMatch.status === "finished" ? (
-                  <strong>
-                    {selectedMatch.is_draw
-                      ? "Draw game"
-                      : `${selectedMatch.winner_mark.toUpperCase()} wins`}
-                  </strong>
-                ) : selectedMatch.can_move ? (
-                  <strong>Your team's turn</strong>
-                ) : (
-                  <span>Waiting for {selectedMatch.current_mark.toUpperCase()}</span>
-                )}
-              </div>
-            </div>
-          )}
-
           {!currentLobby && (
             <div className="game-create-panel">
               <div className="game-section-heading">

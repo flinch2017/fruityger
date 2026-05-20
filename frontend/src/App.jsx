@@ -31,7 +31,9 @@ import EditProfile from "./pages/EditProfile"; // <-- import it
 import CreatePost from "./pages/CreatePost"; // <-- import it
 import CreateTape from "./pages/CreateTape";
 import TapesFeed from "./pages/TapesFeed";
+import GameHub from "./pages/GameHub";
 import GameLobby from "./pages/GameLobby";
+import TicTacToeMatch from "./pages/TicTacToeMatch";
 import EditPost from "./pages/EditPost";
 import CommentSheet from "./components/CommentSheet";
 import Search from "./pages/Search";
@@ -59,7 +61,7 @@ import "./css/App.css";
 function MainLayout({ children }) {
   const location = useLocation();
   const isTapesRoute = location.pathname === "/tapes";
-  const isWideRoute = location.pathname === "/games";
+  const isWideRoute = location.pathname.startsWith("/games");
   const appContainerClassName = isTapesRoute
     ? "app-container tapes-layout"
     : isWideRoute
@@ -293,8 +295,26 @@ function App() {
           element={
             <PrivateRoute>
               <MainLayout>
+                <GameHub />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/games/tic-tac-toe"
+          element={
+            <PrivateRoute>
+              <MainLayout>
                 <GameLobby />
               </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/games/tic-tac-toe/match/:matchId"
+          element={
+            <PrivateRoute>
+              <TicTacToeMatch />
             </PrivateRoute>
           }
         />
