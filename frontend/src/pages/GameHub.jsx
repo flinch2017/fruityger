@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  FaBolt,
   FaChessKnight,
-  FaCrown,
   FaGamepad,
   FaPlay,
-  FaSignal,
   FaUsers,
 } from "react-icons/fa";
 import "../css/GameLobby.css";
@@ -24,33 +21,6 @@ const games = [
     icon: FaChessKnight,
     route: "/games/tic-tac-toe",
     description: "Team lobbies, same-size matchmaking, and a 5x5 board.",
-  },
-  {
-    id: "fruit-rush",
-    title: "Fruit Rush",
-    genre: "Arcade",
-    status: "Soon",
-    accent: "cyan",
-    icon: FaBolt,
-    description: "Fast arcade rounds for quick party queues.",
-  },
-  {
-    id: "aero-cards",
-    title: "Aero Cards",
-    genre: "Cards",
-    status: "Soon",
-    accent: "pink",
-    icon: FaCrown,
-    description: "Private tables, friend invites, and casual card play.",
-  },
-  {
-    id: "night-rally",
-    title: "Night Rally",
-    genre: "Racing",
-    status: "Soon",
-    accent: "violet",
-    icon: FaSignal,
-    description: "Short racing heats built for small teams.",
   },
 ];
 
@@ -178,6 +148,16 @@ export default function GameHub() {
               </button>
             );
           })}
+          <div className="game-card game-card-soon-note">
+            <span className="game-card-icon">
+              <FaGamepad />
+            </span>
+            <span className="game-card-copy">
+              <strong>More games coming soon...</strong>
+              <span>New modes</span>
+              <small>Fresh games will appear here as they are added.</small>
+            </span>
+          </div>
         </div>
 
         <div className="game-hub-footer">
