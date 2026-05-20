@@ -32,6 +32,7 @@ export default function TicTacToeMatch() {
   const navigate = useNavigate();
   const channelRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
+  const matchStatusRef = useRef("active");
   const currentUserId = localStorage.getItem("userId") || "";
   const [match, setMatch] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -69,9 +70,16 @@ export default function TicTacToeMatch() {
     loadMatch();
   }, [loadMatch]);
 
+  useEffect(() => {
+    if (match?.status) {
+      matchStatusRef.current = match.status;
+    }
+  }, [match?.status]);
+
   const updatePresence = useCallback(
     async (status, { keepalive = false } = {}) => {
       if (!matchId || !getToken()) return;
+      if (status === "afk" && matchStatusRef.current === "finished") return;
 
       const token = getToken();
       fetch(`${API_BASE}/matches/${matchId}/presence`, {

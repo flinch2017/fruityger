@@ -1477,6 +1477,28 @@ router.post("/matches/:matchId/presence", authenticateToken, async (req, res) =>
 
     await ensureMatchPlayerStates(req.params.matchId);
 
+    const matchStatusResult = await pool.query(
+      `
+      SELECT status
+      FROM game_matches
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [req.params.matchId]
+    );
+
+    if (!matchStatusResult.rows[0]) {
+      return res.status(404).json({ error: "Match not found" });
+    }
+
+    if (status === "afk" && matchStatusResult.rows[0].status !== "active") {
+      const match = await getMatchForUser(req.params.matchId, req.user.id);
+      if (!match) {
+        return res.status(404).json({ error: "Match player not found" });
+      }
+      return res.json({ match });
+    }
+
     const result = await pool.query(
       `
       UPDATE game_match_player_states

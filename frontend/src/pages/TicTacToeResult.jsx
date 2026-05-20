@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FaArrowLeft, FaCrown, FaRobot, FaUserClock, FaUsers } from "react-icons/fa";
+import { FaArrowLeft, FaCrown, FaRobot, FaUsers } from "react-icons/fa";
 import "../css/GameLobby.css";
 
 const API_BASE = "http://localhost:5000/api/game-lobbies";
@@ -114,10 +114,7 @@ export default function TicTacToeResult() {
                       </div>
                       <div>
                         <strong>@{player.username}</strong>
-                        <span>
-                          Turn {player.turn_order}
-                          {player.is_afk ? " - AFK" : ""}
-                        </span>
+                        <span>Turn {player.turn_order}</span>
                       </div>
                       <div className="tic-result-player-meta">
                         {player.ai_turns_taken > 0 ? (
@@ -129,12 +126,6 @@ export default function TicTacToeResult() {
                           <span>
                             <FaUsers />
                             Player
-                          </span>
-                        )}
-                        {player.is_afk && (
-                          <span>
-                            <FaUserClock />
-                            AFK
                           </span>
                         )}
                       </div>
