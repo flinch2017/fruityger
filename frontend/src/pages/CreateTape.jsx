@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import "../css/CreateTape.css";
 import { useUploadManager } from "../context/UploadManagerContext";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import { formatCount } from "../utils/countFormatter";
 
 const MAX_HASHTAGS = 5;
 const HASHTAG_MATCHER = /#[A-Za-z0-9_]+/g;
@@ -352,7 +353,7 @@ export default function CreateTape() {
                         onClick={() => applyHashtagSuggestion(item.tag)}
                       >
                         <strong>#{item.tag}</strong>
-                        <span>{(item.post_count || 0).toLocaleString()} posts</span>
+                        <span>{formatCount(item.post_count)} posts</span>
                       </button>
                     ))}
                   </div>

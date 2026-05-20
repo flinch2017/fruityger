@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import "../css/HashtagPage.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import { formatCount } from "../utils/countFormatter";
 
 export default function HashtagPage() {
   const { tag } = useParams();
@@ -114,7 +115,7 @@ export default function HashtagPage() {
           <p className="hashtag-kicker">Hashtag</p>
           <h1>#{data.hashtag?.tag}</h1>
           <p className="hashtag-meta">
-            {(data.hashtag?.post_count || 0).toLocaleString()} posts
+            {formatCount(data.hashtag?.post_count)} posts
           </p>
         </div>
 
@@ -161,8 +162,8 @@ export default function HashtagPage() {
 
                 <div className="hashtag-tile-overlay" />
                 <div className="hashtag-tile-stats">
-                  <span>{post.like_count || 0} likes</span>
-                  <span>{post.comment_count || 0} comments</span>
+                  <span>{formatCount(post.like_count)} likes</span>
+                  <span>{formatCount(post.comment_count)} comments</span>
                 </div>
               </div>
             </button>

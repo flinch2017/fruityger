@@ -7,6 +7,7 @@ import "../css/Profile.css";
 import CommentSheet from "../components/CommentSheet";
 import "../css/CommentSheet.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 
 export default function Profile() {
@@ -1163,7 +1164,7 @@ export default function Profile() {
                     : openGuestPrompt()
                 }
               >
-                {user.followers_count || 0}
+                {formatCount(user.followers_count)}
               </span>
               <span className="stat-label">Followers</span>
             </div>
@@ -1177,7 +1178,7 @@ export default function Profile() {
                     : openGuestPrompt()
                 }
               >
-                {user.following_count || 0}
+                {formatCount(user.following_count)}
               </span>
               <span className="stat-label">Following</span>
             </div>
@@ -1437,7 +1438,7 @@ export default function Profile() {
                   </button>
 
                   <span className="like-count">
-                    {post.like_count || 0}
+                    {formatCount(post.like_count)}
                   </span>
 
                 </div>
@@ -1452,7 +1453,7 @@ export default function Profile() {
                   </button>
 
                   <span className="like-count">
-                    {post.comment_count || 0}
+                    {formatCount(post.comment_count)}
                   </span>
 
                 </div>
@@ -1466,7 +1467,7 @@ export default function Profile() {
                   </button>
 
                   <span className="like-count">
-                    {post.repost_count || 0}
+                    {formatCount(post.repost_count)}
                   </span>
                 </div>
               </div>

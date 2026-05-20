@@ -6,6 +6,7 @@ import "../css/CommentSheet.css";
 import { formatRelativeTime } from "../utils/timeFormatter";
 import supabase from "../lib/supabaseClient";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "./CaptionWithHashtags";
 
 const getActiveMentionQuery = (value = "", cursor = 0) => {
@@ -651,7 +652,7 @@ const loadMoreReplies = (commentId) => {
                         toggleCommentLike(c.comment_id)
                       }
                     >
-                      ❤️ {c.like_count || 0}
+                      ❤️ {formatCount(c.like_count)}
                     </button>
 
                     <div
@@ -756,7 +757,7 @@ const loadMoreReplies = (commentId) => {
                                 className="thread-reply-btn"
                                 onClick={() => toggleCommentLike(r.comment_id)}
                               >
-                                ❤️ {r.like_count || 0}
+                                ❤️ {formatCount(r.like_count)}
                               </button>
 
                               <div

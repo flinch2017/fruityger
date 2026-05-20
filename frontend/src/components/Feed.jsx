@@ -5,6 +5,7 @@ import CommentSheet from "./CommentSheet";
 import "../css/Feed.css";
 import "../css/CommentSheet.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "./CaptionWithHashtags";
 
 export default function Feed() {
@@ -1073,7 +1074,7 @@ export default function Feed() {
                     {post.is_liked ? <FaHeart /> : <FaRegHeart />}
                   </button>
 
-                  <span className="feed-like-count">{post.like_count || 0}</span>
+                  <span className="feed-like-count">{formatCount(post.like_count)}</span>
                 </div>
 
                 <div className="feed-like-wrapper">
@@ -1089,7 +1090,7 @@ export default function Feed() {
                     <FaCommentDots />
                   </button>
 
-                  <span className="feed-like-count">{post.comment_count || 0}</span>
+                  <span className="feed-like-count">{formatCount(post.comment_count)}</span>
                 </div>
 
                 <div className="feed-like-wrapper">
@@ -1099,7 +1100,7 @@ export default function Feed() {
                   >
                     <FaRetweet />
                   </button>
-                  <span className="feed-like-count">{post.repost_count || 0}</span>
+                  <span className="feed-like-count">{formatCount(post.repost_count)}</span>
                 </div>
               </div>
             </div>

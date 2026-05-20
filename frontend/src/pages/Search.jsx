@@ -5,6 +5,7 @@ import CommentSheet from "../components/CommentSheet";
 import "../css/Search.css";
 import "../css/CommentSheet.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 
 const SEARCH_TABS = [
@@ -956,7 +957,7 @@ export default function Search() {
                             >
                               {p.is_liked ? <FaHeart /> : <FaRegHeart />}
                             </button>
-                            <span>{p.like_count || 0}</span>
+                            <span>{formatCount(p.like_count)}</span>
                           </div>
 
                           <div className="search-post-count-group">
@@ -971,7 +972,7 @@ export default function Search() {
                             >
                               <FaCommentDots />
                             </button>
-                            <span>{p.comment_count || 0}</span>
+                            <span>{formatCount(p.comment_count)}</span>
                           </div>
 
                           <div className="search-post-count-group">
@@ -981,7 +982,7 @@ export default function Search() {
                             >
                               <FaRetweet />
                             </button>
-                            <span>{p.repost_count || 0}</span>
+                            <span>{formatCount(p.repost_count)}</span>
                           </div>
                         </div>
                       </div>
@@ -1007,7 +1008,7 @@ export default function Search() {
                         <div className="search-hashtag-card-main">
                           <span className="search-hashtag-tag">#{h.tag}</span>
                           <span className="search-hashtag-count">
-                            {(h.post_count || 0).toLocaleString()} posts
+                            {formatCount(h.post_count)} posts
                           </span>
                         </div>
 

@@ -14,6 +14,7 @@ import CommentSheet from "../components/CommentSheet";
 import "../css/CommentSheet.css";
 import "../css/TapesFeed.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 
 export default function TapesFeed() {
@@ -767,7 +768,7 @@ export default function TapesFeed() {
                     onClick={() => toggleLike(tape.post_id)}
                   >
                     {tape.is_liked ? <FaHeart /> : <FaRegHeart />}
-                    <span>{tape.like_count || 0}</span>
+                    <span>{formatCount(tape.like_count)}</span>
                   </button>
 
                   <button
@@ -781,7 +782,7 @@ export default function TapesFeed() {
                     }
                   >
                     <FaCommentDots />
-                    <span>{tape.comment_count || 0}</span>
+                    <span>{formatCount(tape.comment_count)}</span>
                   </button>
 
                   <button
@@ -790,12 +791,12 @@ export default function TapesFeed() {
                     onClick={() => toggleRepost(tape.post_id)}
                   >
                     <FaRetweet />
-                    <span>{tape.repost_count || 0}</span>
+                    <span>{formatCount(tape.repost_count)}</span>
                   </button>
 
                   <div className="tape-action-btn tape-action-static" aria-label="Views">
                     <FaEye />
-                    <span>{tape.view_count || 0}</span>
+                    <span>{formatCount(tape.view_count)}</span>
                   </div>
 
                   <div className="tape-more-wrapper">

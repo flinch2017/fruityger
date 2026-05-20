@@ -18,6 +18,7 @@ import {
 import "../css/Header.css";
 import { clearAuthStorage } from "../utils/authSession";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import { formatCount } from "../utils/countFormatter";
 
 export default function Header() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -443,7 +444,7 @@ export default function Header() {
               <span className="search-suggestion-icon">#</span>
               <span className="search-suggestion-copy">
                 <strong>#{hashtag.tag}</strong>
-                <span>{(hashtag.post_count || 0).toLocaleString()} posts</span>
+                <span>{formatCount(hashtag.post_count)} posts</span>
               </span>
             </button>
           ))}
