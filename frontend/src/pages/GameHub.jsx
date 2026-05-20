@@ -149,17 +149,26 @@ export default function GameHub() {
 
       {error && <div className="game-lobby-alert error">{error}</div>}
 
-      <section className="game-lobby-overview">
-        <div className="game-lobby-stat">
-          <span>{loading ? "..." : formatCount(summary?.availableLobbies?.length || 0)}</span>
+      <section className="game-lobby-overview game-hub-overview" aria-label="Tic tac toe activity">
+        <div className="game-lobby-stat game-hub-stat">
+          <div className="game-hub-stat-icon">
+            <FaChessKnight />
+          </div>
+          <strong>{loading ? "..." : formatCount(summary?.availableLobbies?.length || 0)}</strong>
           <p>Tic tac toe lobbies</p>
         </div>
-        <div className="game-lobby-stat">
-          <span>{loading ? "..." : formatCount(summary?.activeMatches?.length || 0)}</span>
+        <div className="game-lobby-stat game-hub-stat">
+          <div className="game-hub-stat-icon">
+            <FaPlay />
+          </div>
+          <strong>{loading ? "..." : formatCount(summary?.activeMatches?.length || 0)}</strong>
           <p>Active matches</p>
         </div>
-        <div className="game-lobby-stat">
-          <span>{loading ? "..." : formatCount(summary?.invites?.length || 0)}</span>
+        <div className="game-lobby-stat game-hub-stat">
+          <div className="game-hub-stat-icon">
+            <FaUsers />
+          </div>
+          <strong>{loading ? "..." : formatCount(summary?.invites?.length || 0)}</strong>
           <p>Game invites</p>
         </div>
       </section>
