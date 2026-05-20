@@ -804,6 +804,97 @@
   font-family: "Segoe UI", sans-serif;
 }
 
+.tic-ready-page {
+  min-height: 100vh;
+  padding: 28px;
+  color: #075f80;
+  background:
+    radial-gradient(circle at 72% 8%, rgba(255,255,255,0.94), transparent 30%),
+    linear-gradient(155deg, #e8fbff 0%, #cef2ff 50%, #e9fff2 100%);
+  font-family: "Segoe UI", sans-serif;
+}
+
+.tic-ready-hero {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.tic-ready-hero .game-secondary-action {
+  justify-self: start;
+}
+
+.tic-ready-count {
+  width: 112px;
+  height: 112px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255,255,255,0.98), rgba(255,255,255,0.28) 34%, transparent 56%),
+    linear-gradient(180deg, #45d4f0, #14b59f);
+  box-shadow:
+    0 20px 42px rgba(20, 181, 159, 0.24),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+  font-size: 3.2rem;
+  font-weight: 1000;
+  line-height: 1;
+}
+
+.tic-ready-hero p {
+  margin: 8px 0 0;
+  color: #3598b8;
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tic-ready-hero h1 {
+  max-width: 980px;
+  margin: 0;
+  color: #075f80;
+  font-size: clamp(2rem, 6vw, 4.8rem);
+  line-height: 1;
+}
+
+.tic-ready-hero span {
+  color: #527f90;
+  font-weight: 800;
+}
+
+.tic-ready-teams {
+  max-width: 1120px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 28px auto 0;
+}
+
+.tic-ready-team {
+  padding: 18px;
+  border: 1px solid rgba(255,255,255,0.92);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(255,255,255,0.78), transparent 42%),
+    linear-gradient(165deg, rgba(255,255,255,0.84), rgba(209,245,255,0.62));
+  box-shadow:
+    0 18px 42px rgba(0, 166, 255, 0.14),
+    inset 0 1px 0 rgba(255,255,255,0.94);
+}
+
+.tic-ready-team.mine {
+  border-color: rgba(20, 181, 159, 0.42);
+  background:
+    radial-gradient(circle at top left, rgba(255,255,255,0.88), transparent 42%),
+    linear-gradient(165deg, rgba(235,255,249,0.94), rgba(209,245,255,0.66));
+}
+
 .tic-result-hero {
   max-width: 1120px;
   margin: 0 auto;
@@ -1118,6 +1209,7 @@
 
   .tic-match-topbar,
   .tic-match-score,
+  .tic-ready-teams,
   .tic-result-teams {
     grid-template-columns: 1fr;
   }
@@ -1173,8 +1265,15 @@
     padding: 14px;
   }
 
+  .tic-ready-page,
   .tic-result-page {
     padding: 16px;
+  }
+
+  .tic-ready-count {
+    width: 88px;
+    height: 88px;
+    font-size: 2.6rem;
   }
 
   .tic-board-stage {

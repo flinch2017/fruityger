@@ -199,7 +199,7 @@ export default function Notifications() {
 
     if (notification.game_lobby_id || notification.game_match_id) {
       if (notification.game_match_id) {
-        navigate(`/games/tic-tac-toe/match/${notification.game_match_id}`);
+        navigate(`/games/tic-tac-toe/match/${notification.game_match_id}/ready`);
         return;
       }
 

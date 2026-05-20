@@ -33,6 +33,7 @@ import CreateTape from "./pages/CreateTape";
 import TapesFeed from "./pages/TapesFeed";
 import GameHub from "./pages/GameHub";
 import GameLobby from "./pages/GameLobby";
+import TicTacToeReady from "./pages/TicTacToeReady";
 import TicTacToeMatch from "./pages/TicTacToeMatch";
 import TicTacToeResult from "./pages/TicTacToeResult";
 import EditPost from "./pages/EditPost";
@@ -308,6 +309,14 @@ function App() {
               <MainLayout>
                 <GameLobby />
               </MainLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/games/tic-tac-toe/match/:matchId/ready"
+          element={
+            <PrivateRoute>
+              <TicTacToeReady />
             </PrivateRoute>
           }
         />

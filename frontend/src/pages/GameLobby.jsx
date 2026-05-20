@@ -160,7 +160,7 @@ export default function GameLobby() {
 
   useEffect(() => {
     if (activeMatchId) {
-      navigate(`/games/tic-tac-toe/match/${activeMatchId}`, { replace: true });
+      navigate(`/games/tic-tac-toe/match/${activeMatchId}/ready`, { replace: true });
     }
   }, [activeMatchId, navigate]);
 
@@ -275,7 +275,7 @@ export default function GameLobby() {
       async () => {
         const data = await requestJson(`/${currentLobby.id}/matchmake`, { method: "POST" });
         if (data.match?.id) {
-          navigate(`/games/tic-tac-toe/match/${data.match.id}`, { replace: true });
+          navigate(`/games/tic-tac-toe/match/${data.match.id}/ready`, { replace: true });
           return { skipRefresh: true };
         }
         if (data.waiting) {
@@ -583,10 +583,15 @@ export default function GameLobby() {
                     type="button"
                     className="game-primary-action"
                     onClick={startMatchmaking}
-                    disabled={busyKey === `matchmake-${currentLobby.id}`}
+                    disabled={
+                      busyKey === `matchmake-${currentLobby.id}` ||
+                      currentLobby.status === "matchmaking"
+                    }
                   >
                     <FaPlay />
-                    {currentLobby.status === "matchmaking" ? "Find Same Team" : "Start Matchmaking"}
+                    {currentLobby.status === "matchmaking"
+                      ? "Finding Match..."
+                      : "Start Matchmaking"}
                   </button>
                 )}
                 {currentLobby.status !== "matched" && (
