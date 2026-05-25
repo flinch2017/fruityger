@@ -86,6 +86,7 @@ async function ensureGameLobbySchema() {
           winner_mark TEXT CHECK (winner_mark IN ('x', 'o')),
           winning_line INTEGER[],
           is_draw BOOLEAN NOT NULL DEFAULT false,
+          finish_reason TEXT NOT NULL DEFAULT 'board' CHECK (finish_reason IN ('board', 'draw', 'surrender')),
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
@@ -116,6 +117,8 @@ async function ensureGameLobbySchema() {
           turn_order INTEGER NOT NULL,
           is_afk BOOLEAN NOT NULL DEFAULT false,
           ai_turns_taken INTEGER NOT NULL DEFAULT 0,
+          surrender_requested BOOLEAN NOT NULL DEFAULT false,
+          surrendered_at TIMESTAMPTZ,
           last_seen_at TIMESTAMPTZ,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           PRIMARY KEY (match_id, user_id),
@@ -139,8 +142,38 @@ async function ensureGameLobbySchema() {
       `);
 
       await pool.query(`
+        ALTER TABLE game_matches
+        ADD COLUMN IF NOT EXISTS finish_reason TEXT NOT NULL DEFAULT 'board'
+      `);
+
+      await pool.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint
+            WHERE conname = 'game_matches_finish_reason_check'
+          ) THEN
+            ALTER TABLE game_matches
+            ADD CONSTRAINT game_matches_finish_reason_check
+            CHECK (finish_reason IN ('board', 'draw', 'surrender'));
+          END IF;
+        END $$;
+      `);
+
+      await pool.query(`
         ALTER TABLE game_match_moves
         ADD COLUMN IF NOT EXISTS is_ai_move BOOLEAN NOT NULL DEFAULT false
+      `);
+
+      await pool.query(`
+        ALTER TABLE game_match_player_states
+        ADD COLUMN IF NOT EXISTS surrender_requested BOOLEAN NOT NULL DEFAULT false
+      `);
+
+      await pool.query(`
+        ALTER TABLE game_match_player_states
+        ADD COLUMN IF NOT EXISTS surrendered_at TIMESTAMPTZ
       `);
 
       await pool.query(`
@@ -566,6 +599,7 @@ async function applyMatchMove({ client, match, playerState, cellIndex, isAiMove 
         winner_mark = $5,
         winning_line = $6,
         is_draw = $7,
+        finish_reason = $8,
         updated_at = NOW()
     WHERE id = $1
     `,
@@ -577,6 +611,7 @@ async function applyMatchMove({ client, match, playerState, cellIndex, isAiMove 
       result.winnerMark,
       result.winningLine,
       result.isDraw,
+      result.isDraw ? "draw" : "board",
     ]
   );
 }
@@ -623,6 +658,7 @@ async function getMatchForUser(matchId, userId, client = pool) {
       m.winner_mark,
       m.winning_line,
       m.is_draw,
+      m.finish_reason,
       m.created_at,
       m.updated_at,
       m.lobby_x_id,
@@ -671,6 +707,8 @@ async function getMatchForUser(matchId, userId, client = pool) {
               'turn_order', gps.turn_order,
               'is_afk', gps.is_afk,
               'ai_turns_taken', gps.ai_turns_taken,
+              'surrender_requested', gps.surrender_requested,
+              'surrendered_at', gps.surrendered_at,
               'last_seen_at', gps.last_seen_at
             )
             ORDER BY gps.mark ASC, gps.turn_order ASC
@@ -1626,6 +1664,102 @@ router.post("/matches/:matchId/ai-move", authenticateToken, async (req, res) => 
     }
     console.error(err);
     res.status(err.statusCode || 500).json({ error: err.message || "Failed to play AI move" });
+  }
+});
+
+router.post("/matches/:matchId/surrender", authenticateToken, async (req, res) => {
+  try {
+    await ensureGameLobbySchema();
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await ensureMatchPlayerStates(req.params.matchId, client);
+
+      const matchResult = await client.query(
+        `
+        SELECT *
+        FROM game_matches
+        WHERE id = $1
+        FOR UPDATE
+        `,
+        [req.params.matchId]
+      );
+      const match = matchResult.rows[0];
+
+      if (!match) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Match not found" });
+      }
+      if (match.status !== "active") {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "This match is already finished" });
+      }
+
+      const stateResult = await client.query(
+        `
+        UPDATE game_match_player_states
+        SET surrender_requested = true,
+            surrendered_at = COALESCE(surrendered_at, NOW()),
+            updated_at = NOW()
+        WHERE match_id = $1
+          AND user_id = $2
+        RETURNING *
+        `,
+        [match.id, req.user.id]
+      );
+      const playerState = stateResult.rows[0];
+
+      if (!playerState) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "You are not in this match" });
+      }
+
+      const surrenderResult = await client.query(
+        `
+        SELECT
+          COUNT(*)::int AS team_size,
+          COUNT(*) FILTER (WHERE surrender_requested)::int AS surrender_count
+        FROM game_match_player_states
+        WHERE match_id = $1
+          AND mark = $2
+        `,
+        [match.id, playerState.mark]
+      );
+      const teamSize = surrenderResult.rows[0]?.team_size || 1;
+      const surrenderCount = surrenderResult.rows[0]?.surrender_count || 0;
+      const requiredSurrenders = Math.min(2, teamSize);
+
+      if (surrenderCount >= requiredSurrenders) {
+        const winnerMark = playerState.mark === "x" ? "o" : "x";
+        await client.query(
+          `
+          UPDATE game_matches
+          SET status = 'finished',
+              current_mark = $2,
+              current_turn_user_id = NULL,
+              winner_mark = $2,
+              winning_line = NULL,
+              is_draw = false,
+              finish_reason = 'surrender',
+              updated_at = NOW()
+          WHERE id = $1
+          `,
+          [match.id, winnerMark]
+        );
+      }
+
+      await client.query("COMMIT");
+      res.json({ match: await getMatchForUser(match.id, req.user.id) });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => null);
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message || "Failed to surrender" });
   }
 });
 

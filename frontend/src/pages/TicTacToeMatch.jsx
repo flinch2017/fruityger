@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FaArrowLeft, FaGamepad, FaSignal, FaUsers } from "react-icons/fa";
+import { FaArrowLeft, FaFlag, FaGamepad, FaSignal, FaUsers } from "react-icons/fa";
 import "../css/GameLobby.css";
 import supabase from "../lib/supabaseClient";
 
@@ -42,6 +42,7 @@ export default function TicTacToeMatch() {
   const [exiting, setExiting] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState("CONNECTING");
   const [aiThinking, setAiThinking] = useState(false);
+  const [surrendering, setSurrendering] = useState(false);
 
   const loadMatch = useCallback(
     async ({ quiet = false } = {}) => {
@@ -143,6 +144,16 @@ export default function TicTacToeMatch() {
           event: "*",
           schema: "public",
           table: "game_match_moves",
+          filter: `match_id=eq.${matchId}`,
+        },
+        scheduleRealtimeRefresh
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_match_player_states",
           filter: `match_id=eq.${matchId}`,
         },
         scheduleRealtimeRefresh
@@ -272,13 +283,50 @@ export default function TicTacToeMatch() {
     }
   };
 
+  const myTeamPlayers = match?.teams?.[match?.my_mark] || [];
+  const surrenderVotes = myTeamPlayers.filter((player) => player.surrender_requested).length;
+  const surrenderRequired = myTeamPlayers.length > 0 ? Math.min(2, myTeamPlayers.length) : 1;
+  const hasSurrendered = Boolean(match?.my_player_state?.surrender_requested);
+
+  const surrenderMatch = async () => {
+    if (!match || match.status !== "active" || hasSurrendered || surrendering) return;
+    setSurrendering(true);
+    setError("");
+
+    try {
+      const data = await requestJson(`/matches/${match.id}/surrender`, { method: "POST" });
+      setMatch(data.match);
+      channelRef.current
+        ?.send({
+          type: "broadcast",
+          event: "match-updated",
+          payload: {
+            matchId: match.id,
+            actorId: currentUserId,
+            surrenderVotes: data.match?.teams?.[match.my_mark]?.filter((player) => player.surrender_requested).length || 0,
+            status: data.match?.status,
+          },
+        })
+        .catch(() => null);
+    } catch (err) {
+      setError(err.message || "Failed to surrender");
+      await loadMatch({ quiet: true });
+    } finally {
+      setSurrendering(false);
+    }
+  };
+
   const statusText = (() => {
     if (!match) return "";
     if (match.status === "finished") {
       if (match.is_draw) return "Draw game";
+      if (match.finish_reason === "surrender") {
+        return match.winner_mark === match.my_mark ? "Opponent surrendered" : "Your team surrendered";
+      }
       const won = match.winner_mark === match.my_mark;
       return won ? "Your team wins" : "Your team lost";
     }
+    if (hasSurrendered) return "Surrender vote submitted";
     if (match.can_move) return "Your turn";
     if (match.current_turn_is_afk) {
       return aiThinking
@@ -334,6 +382,11 @@ export default function TicTacToeMatch() {
             <div className="tic-match-status">
               <span>You are {match.my_mark.toUpperCase()}</span>
               <strong>{statusText}</strong>
+              {match.status === "active" && surrenderVotes > 0 && (
+                <small>
+                  Surrender votes {surrenderVotes}/{surrenderRequired}
+                </small>
+              )}
               {exiting && <small>Opening match results...</small>}
             </div>
             <div>
@@ -379,6 +432,19 @@ export default function TicTacToeMatch() {
               Turn: @{match.current_turn_username || "waiting"}
               {match.current_turn_is_afk ? " (AFK)" : ""}
             </span>
+            <button
+              type="button"
+              className="game-secondary-action danger tic-surrender-action"
+              onClick={surrenderMatch}
+              disabled={match.status !== "active" || hasSurrendered || surrendering}
+            >
+              <FaFlag />
+              {hasSurrendered
+                ? `Surrendered ${surrenderVotes}/${surrenderRequired}`
+                : surrendering
+                  ? "Surrendering"
+                  : `Surrender ${surrenderVotes}/${surrenderRequired}`}
+            </button>
           </footer>
         </main>
       )}

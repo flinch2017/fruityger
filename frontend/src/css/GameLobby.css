@@ -1130,6 +1130,8 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-top: 14px;
   color: #167b9c;
   font-weight: 900;
@@ -1139,6 +1141,13 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.tic-surrender-action {
+  width: auto;
+  min-width: 154px;
+  color: #a54343;
+  background: rgba(255, 232, 232, 0.78);
 }
 
 .game-card.green .game-card-icon,
