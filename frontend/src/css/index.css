@@ -344,6 +344,42 @@ body[data-theme="dark"] .verify-email-resend {
   border-color: rgba(129, 221, 255, 0.16) !important;
 }
 
+body[data-theme="dark"] .search-post-action-btn,
+body[data-theme="dark"] .post-action-btn,
+body[data-theme="dark"] .feed-post-action-btn {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+body[data-theme="dark"] .search-post-action-btn:hover,
+body[data-theme="dark"] .post-action-btn:hover,
+body[data-theme="dark"] .feed-post-action-btn:hover {
+  filter: drop-shadow(0 4px 10px rgba(93, 217, 255, 0.32));
+}
+
+body[data-theme="dark"] .search-post-action-btn.liked,
+body[data-theme="dark"] .post-action-btn.liked,
+body[data-theme="dark"] .feed-post-action-btn.liked {
+  color: #ff7dbc !important;
+  filter: drop-shadow(0 0 10px rgba(255, 125, 188, 0.34));
+}
+
+body[data-theme="dark"] .search-post-action-btn.reposted,
+body[data-theme="dark"] .post-action-btn.reposted,
+body[data-theme="dark"] .feed-post-action-btn.reposted {
+  color: #65e8ce !important;
+  filter: drop-shadow(0 0 10px rgba(101, 232, 206, 0.3));
+}
+
+body[data-theme="dark"] .message-wrapper.received .message-bubble {
+  color: #102433 !important;
+}
+
+body[data-theme="dark"] .message-wrapper.received .message-bubble-text {
+  color: #102433 !important;
+}
+
 body[data-theme="dark"] .profile-placeholder,
 body[data-theme="dark"] .search-post-avatar,
 body[data-theme="dark"] .feed-post-user-avatar,
