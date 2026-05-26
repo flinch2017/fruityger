@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import { r2 } from "../utils/r2.js";
 import { createNotification } from "../utils/notifications.js";
+import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
 
 const router = express.Router();
 
@@ -719,6 +720,7 @@ router.get("/chats", authenticateToken, async (req, res) => {
     await ensureDeletedChatsTable();
     await ensureDeletedMessagesTable();
     await ensureMessageAttachmentsSchema();
+    await ensureVerificationBadgeSchema();
 
     const { rows } = await pool.query(
       `
@@ -729,8 +731,10 @@ router.get("/chats", authenticateToken, async (req, res) => {
         dc.deleted_at,
         u1.username AS user1_username,
         u1.profile_pic AS user1_profile_pic,
+        u1.is_verified AS user1_is_verified,
         u2.username AS user2_username,
         u2.profile_pic AS user2_profile_pic,
+        u2.is_verified AS user2_is_verified,
         m.content AS last_message,
         m.attachment_type AS last_message_attachment_type,
         m.created_at AS last_message_at,
@@ -798,11 +802,13 @@ router.get("/chats", authenticateToken, async (req, res) => {
           id: chat.user1_id,
           username: chat.user1_username,
           profile_pic: chat.user1_profile_pic,
+          is_verified: chat.user1_is_verified,
         },
         user2: {
           id: chat.user2_id,
           username: chat.user2_username,
           profile_pic: chat.user2_profile_pic,
+          is_verified: chat.user2_is_verified,
         },
         last_message: chat.last_message,
         last_message_attachment_type: chat.last_message_attachment_type,
@@ -868,6 +874,7 @@ router.post("/send", authenticateToken, async (req, res) => {
     await ensureDeletedMessagesTable();
     await ensureMessageRepliesSchema();
     await ensureMessageReactionsSchema();
+    await ensureVerificationBadgeSchema();
     await ensureMessageAttachmentsSchema();
 
     if (!chatId) {
@@ -1101,9 +1108,10 @@ router.get("/search-users", authenticateToken, async (req, res) => {
   }
 
   try {
+    await ensureVerificationBadgeSchema();
     const { rows } = await pool.query(
       `
-      SELECT id, username, profile_pic
+      SELECT id, username, profile_pic, is_verified
       FROM users
       WHERE username ILIKE $1
         AND id <> $2
@@ -1129,6 +1137,7 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
     await ensureDeletedMessagesTable();
     await ensureBlockedUsersTable();
     await ensureActiveUsersTable();
+    await ensureVerificationBadgeSchema();
 
     const { rows } = await pool.query(
       `
@@ -1137,6 +1146,7 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
           u.id,
           u.username,
           u.profile_pic,
+          u.is_verified,
           NULL::uuid AS chat_id,
           FALSE AS has_chat
         FROM follows f
@@ -1149,6 +1159,7 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
           other_user.id,
           other_user.username,
           other_user.profile_pic,
+          other_user.is_verified,
           c.id AS chat_id,
           TRUE AS has_chat,
           c.last_message_at
@@ -1180,12 +1191,13 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
       combined AS (
         SELECT * FROM followed_people
         UNION ALL
-        SELECT id, username, profile_pic, chat_id, has_chat FROM chat_people
+        SELECT id, username, profile_pic, is_verified, chat_id, has_chat FROM chat_people
       )
       SELECT DISTINCT ON (combined.id)
         combined.id,
         combined.username,
         combined.profile_pic,
+        combined.is_verified,
         combined.chat_id,
         combined.has_chat,
         (
@@ -1299,8 +1311,10 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
         dc.deleted_at,
         u1.username AS user1_username,
         u1.profile_pic AS user1_profile_pic,
+        u1.is_verified AS user1_is_verified,
         u2.username AS user2_username,
-        u2.profile_pic AS user2_profile_pic
+        u2.profile_pic AS user2_profile_pic,
+        u2.is_verified AS user2_is_verified
       FROM chats c
       LEFT JOIN deleted_chats dc
         ON dc.chat_id = c.id
@@ -1425,11 +1439,13 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
           id: chat.user1_id,
           username: chat.user1_username,
           profile_pic: chat.user1_profile_pic,
+          is_verified: chat.user1_is_verified,
         },
         user2: {
           id: chat.user2_id,
           username: chat.user2_username,
           profile_pic: chat.user2_profile_pic,
+          is_verified: chat.user2_is_verified,
         },
       },
       messages: messagesResult.rows,

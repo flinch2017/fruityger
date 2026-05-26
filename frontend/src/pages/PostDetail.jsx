@@ -8,6 +8,7 @@ import "../css/PostDetail.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 export default function PostDetail() {
   const { postId } = useParams();
@@ -350,7 +351,10 @@ export default function PostDetail() {
                   className="feed-post-username clickable"
                   onClick={() => navigate(`/profile/${post.username}`)}
                 >
-                  {post.username}
+                  <span className="username-with-badge">
+                    {post.username}
+                    <VerifiedBadge verified={post.is_verified} />
+                  </span>
                 </span>
                 <span className="feed-post-date">{formatDate(post.date_posted)}</span>
               </div>
@@ -394,7 +398,12 @@ export default function PostDetail() {
                         )}
                       </span>
                       <span className="feed-repost-dropdown-copy">
-                        <strong>@{reposter.username}</strong>
+                        <strong>
+                          <span className="username-with-badge">
+                            @{reposter.username}
+                            <VerifiedBadge verified={reposter.is_verified} />
+                          </span>
+                        </strong>
                         <span>{formatDate(reposter.reposted_at)}</span>
                       </span>
                     </button>

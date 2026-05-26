@@ -10,6 +10,7 @@ import { ensurePushNotificationSubscriptionsTable } from "../utils/notifications
 import { ensureTapeViewEventsSchema } from "../utils/tapeViewEvents.js";
 import { ensureHashtagSchema } from "../utils/hashtags.js";
 import { ensurePrivateAccountSchema } from "../utils/privacy.js";
+import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
 
 const router = express.Router();
 
@@ -189,10 +190,11 @@ router.get("/user/:username", authenticateToken, async (req, res) => {
     await ensureUserProfileSchema();
     await ensureAccountStatusSchema();
     await ensurePrivateAccountSchema();
+    await ensureVerificationBadgeSchema();
     const { username } = req.params;
 
     const { rows } = await pool.query(
-      `SELECT id, username, email, profile_pic, bio, interests, interests_completed, is_private, created_at
+      `SELECT id, username, email, profile_pic, bio, interests, interests_completed, is_private, is_verified, created_at
        FROM users
        WHERE username = $1
          AND deactivated_at IS NULL
@@ -249,8 +251,9 @@ router.get("/me", authenticateToken, async (req, res) => {
     await ensureUserProfileSchema();
     await ensureAccountStatusSchema();
     await ensurePrivateAccountSchema();
+    await ensureVerificationBadgeSchema();
     const { rows } = await pool.query(
-      `SELECT id, username, email, profile_pic, profile_pic_key, bio, interests, interests_completed, is_private, created_at
+      `SELECT id, username, email, profile_pic, profile_pic_key, bio, interests, interests_completed, is_private, is_verified, created_at
        FROM users
        WHERE id = $1
          AND deactivated_at IS NULL
@@ -286,11 +289,12 @@ router.get("/public/user/:username", async (req, res) => {
     await ensureUserProfileSchema();
     await ensureAccountStatusSchema();
     await ensurePrivateAccountSchema();
+    await ensureVerificationBadgeSchema();
     const { username } = req.params;
 
     const { rows } = await pool.query(
       `
-      SELECT id, username, profile_pic, bio, is_private, created_at
+      SELECT id, username, profile_pic, bio, is_private, is_verified, created_at
       FROM users
       WHERE username = $1
         AND deactivated_at IS NULL
@@ -584,6 +588,7 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
     await ensureRepostSchema();
     await ensureTapeViewEventsSchema();
     await ensurePrivateAccountSchema();
+    await ensureVerificationBadgeSchema();
     const userId = req.user.id;
     const { postId } = req.params;
 
@@ -593,6 +598,7 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
         p.*,
         u.username,
         u.profile_pic,
+        u.is_verified,
         COALESCE(u.is_private, false) AS author_is_private,
         COALESCE(( SELECT json_agg( json_build_object( 'media_url', pm.media_url, 'media_type', pm.media_type, 'media_order', pm.media_order ) ORDER BY pm.media_order ASC ) FROM post_media pm WHERE pm.post_id = p.post_id ), '[]') AS media,
         (
@@ -640,6 +646,7 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
               r.user_id,
               ru.username,
               ru.profile_pic,
+              ru.is_verified,
               r.created_at AS reposted_at
             FROM reposts r
             JOIN users ru
@@ -675,6 +682,7 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
                     'user_id', user_id,
                     'username', username,
                     'profile_pic', profile_pic,
+                    'is_verified', is_verified,
                     'reposted_at', reposted_at
                   )
                   ORDER BY reposted_at DESC
@@ -721,6 +729,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
     await ensureTapeViewEventsSchema();
     await ensureHashtagSchema();
     await ensurePrivateAccountSchema();
+    await ensureVerificationBadgeSchema();
     const userId = req.user.id;
     const limit = parseInt(req.query.limit, 10) || 5;
     const offset = parseInt(req.query.offset, 10) || 0;
@@ -970,6 +979,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
         p.*,
         u.username,
         u.profile_pic,
+        u.is_verified,
         COALESCE(u.is_private, false) AS author_is_private,
         latest_repost.reposter_id,
         latest_repost.reposter_username,
@@ -1028,6 +1038,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
             r.user_id AS reposter_id,
             ru.username AS reposter_username,
             ru.profile_pic AS reposter_profile_pic,
+            ru.is_verified AS reposter_is_verified,
             r.created_at AS reposted_at
           FROM reposts r
           JOIN users ru
@@ -1059,6 +1070,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
           latest.reposter_id,
           latest.reposter_username,
           latest.reposter_profile_pic,
+          latest.reposter_is_verified,
           latest.reposted_at,
           COALESCE(
             (
@@ -1067,6 +1079,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
                   'user_id', reposter_id,
                   'username', reposter_username,
                   'profile_pic', reposter_profile_pic,
+                  'is_verified', reposter_is_verified,
                   'reposted_at', reposted_at
                 )
                 ORDER BY reposted_at DESC

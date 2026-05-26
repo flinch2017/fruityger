@@ -9,6 +9,7 @@ import "../css/CommentSheet.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 export default function Profile() {
 
@@ -1103,7 +1104,12 @@ export default function Profile() {
               : <FaUser />}
           </button>
 
-          <h2>{user.username}</h2>
+          <h2>
+            <span className="username-with-badge">
+              {user.username}
+              <VerifiedBadge verified={user.is_verified} />
+            </span>
+          </h2>
           {user.is_private && (
             <span className="profile-private-badge">Private</span>
           )}
@@ -1278,7 +1284,10 @@ export default function Profile() {
 
                   <div className="post-user-text">
                     <span className="post-username">
-                      {post.username || user.username}
+                      <span className="username-with-badge">
+                        {post.username || user.username}
+                        <VerifiedBadge verified={post.is_verified ?? user.is_verified} />
+                      </span>
                     </span>
                     <span className="post-date">
                       {formatDate(post.date_posted)}

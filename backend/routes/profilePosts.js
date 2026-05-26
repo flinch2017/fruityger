@@ -11,6 +11,7 @@ import {
 import { syncPostMentions } from "../utils/mentions.js";
 import { ensureRepostSchema } from "../utils/reposts.js";
 import { canViewUserActivity, ensurePrivateAccountSchema } from "../utils/privacy.js";
+import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
 
 const router = express.Router();
 
@@ -18,6 +19,7 @@ router.get("/posts", authenticateToken, async (req, res) => {
   try {
     await ensureRepostSchema();
     await ensurePrivateAccountSchema();
+    await ensureVerificationBadgeSchema();
 
     const viewerId = req.user.id;
     let userId = viewerId;
@@ -111,6 +113,7 @@ router.get("/posts", authenticateToken, async (req, res) => {
         activity.reposted_at,
         author.username,
         author.profile_pic,
+        author.is_verified,
         COALESCE(author.is_private, false) AS author_is_private,
         COALESCE(
           (
@@ -174,7 +177,8 @@ router.get("/posts", authenticateToken, async (req, res) => {
         activity.reposted_at,
         author.username,
         author.profile_pic,
-        author.is_private
+        author.is_private,
+        author.is_verified
       ORDER BY COALESCE(activity.reposted_at, activity.date_posted) DESC
       LIMIT $3 OFFSET $4
       `,
@@ -197,6 +201,7 @@ router.get("/public-posts", async (req, res) => {
   try {
     await ensureRepostSchema();
     await ensurePrivateAccountSchema();
+    await ensureVerificationBadgeSchema();
     const username = req.query.username;
 
     if (!username) {
@@ -261,6 +266,7 @@ router.get("/public-posts", async (req, res) => {
         activity.reposted_at,
         author.username,
         author.profile_pic,
+        author.is_verified,
         COALESCE(author.is_private, false) AS author_is_private,
         COALESCE(
           (
@@ -305,7 +311,8 @@ router.get("/public-posts", async (req, res) => {
         activity.reposted_at,
         author.username,
         author.profile_pic,
-        author.is_private
+        author.is_private,
+        author.is_verified
       ORDER BY COALESCE(activity.reposted_at, activity.date_posted) DESC
       LIMIT $2 OFFSET $3
       `,

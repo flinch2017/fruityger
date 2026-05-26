@@ -3,6 +3,7 @@ import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { createNotification } from "../utils/notifications.js";
 import { ensurePrivateAccountSchema } from "../utils/privacy.js";
+import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
 
 const router = express.Router();
 
@@ -283,9 +284,10 @@ router.get("/list", authenticateToken, async (req, res) => {
 
   try {
     await ensurePrivateAccountSchema();
+    await ensureVerificationBadgeSchema();
 
     const userRes = await pool.query(
-      "SELECT id, username FROM users WHERE username = $1 AND deactivated_at IS NULL AND deleted_at IS NULL",
+      "SELECT id, username, is_verified FROM users WHERE username = $1 AND deactivated_at IS NULL AND deleted_at IS NULL",
       [username]
     );
 
@@ -301,6 +303,7 @@ router.get("/list", authenticateToken, async (req, res) => {
           u.id,
           u.username,
           u.profile_pic,
+          u.is_verified,
           COALESCE(u.is_private, false) AS is_private,
           EXISTS (
             SELECT 1
@@ -327,6 +330,7 @@ router.get("/list", authenticateToken, async (req, res) => {
           u.id,
           u.username,
           u.profile_pic,
+          u.is_verified,
           COALESCE(u.is_private, false) AS is_private,
           EXISTS (
             SELECT 1

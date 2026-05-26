@@ -7,6 +7,7 @@ import "../css/CommentSheet.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 const SEARCH_TABS = [
   { key: "profiles", label: "Profiles", resultKey: "users" },
@@ -708,7 +709,10 @@ export default function Search() {
                           <FaUser />
                         )}
                       </div>
-                      <span>{u.username}</span>
+                      <span className="username-with-badge">
+                        {u.username}
+                        <VerifiedBadge verified={u.is_verified} />
+                      </span>
                     </div>
                   ))
                 )}
@@ -782,7 +786,10 @@ export default function Search() {
                             className="search-post-username clickable"
                             onClick={() => navigate(`/profile/${p.username}`)}
                           >
-                            {p.username}
+                            <span className="username-with-badge">
+                              {p.username}
+                              <VerifiedBadge verified={p.is_verified} />
+                            </span>
                           </span>
                           <span className="search-post-date">
                             {formatDate(p.date_posted)}
@@ -827,7 +834,12 @@ export default function Search() {
                                     )}
                                   </span>
                                   <span className="feed-repost-dropdown-copy">
-                                    <strong>@{reposter.username}</strong>
+                                    <strong>
+                                      <span className="username-with-badge">
+                                        @{reposter.username}
+                                        <VerifiedBadge verified={reposter.is_verified} />
+                                      </span>
+                                    </strong>
                                     <span>{formatDate(reposter.reposted_at)}</span>
                                   </span>
                                 </button>

@@ -481,6 +481,42 @@ body[data-theme="dark"] .settings-flow-input::placeholder {
   text-decoration: underline;
 }
 
+.verified-badge {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 5px;
+  border-radius: 50%;
+  color: #ffffff;
+  background: linear-gradient(145deg, #4fd5ff, #157fe8);
+  box-shadow:
+    0 4px 10px rgba(21, 127, 232, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  font-size: 9px;
+  vertical-align: -2px;
+}
+
+.verified-badge svg {
+  display: block;
+}
+
+.username-with-badge {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0;
+}
+
+body[data-theme="dark"] .verified-badge {
+  background: linear-gradient(145deg, #7ee8ff, #278cff);
+  box-shadow:
+    0 4px 12px rgba(71, 183, 255, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.46);
+}
+
 body[data-theme="dark"] .welcome-page,
 body[data-theme="dark"] .login-aero-page,
 body[data-theme="dark"] .signup-aero-page,

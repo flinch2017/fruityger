@@ -4,6 +4,7 @@ import { authenticateToken } from "../middleware/auth.js";
 import { backfillPostHashtags, ensureHashtagSchema } from "../utils/hashtags.js";
 import { ensureRepostSchema } from "../utils/reposts.js";
 import { ensurePrivateAccountSchema } from "../utils/privacy.js";
+import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
 
 const router = express.Router();
 
@@ -25,8 +26,10 @@ router.get("/hashtags/:tag", authenticateToken, async (req, res) => {
     await ensureHashtagSchema();
     await backfillPostHashtags();
     await ensureBlockedUsersTable();
+    await ensureVerificationBadgeSchema();
     await ensureRepostSchema();
     await ensurePrivateAccountSchema();
+    await ensureVerificationBadgeSchema();
     await ensureRepostSchema();
     await ensurePrivateAccountSchema();
 
@@ -68,6 +71,7 @@ router.get("/hashtags/:tag", authenticateToken, async (req, res) => {
         p.user_id,
         u.username,
         u.profile_pic,
+        u.is_verified,
         preview.media_url AS preview_media_url,
         preview.media_type AS preview_media_type,
         COUNT(DISTINCT l.like_id)::int AS like_count,
@@ -121,6 +125,7 @@ router.get("/hashtags/:tag", authenticateToken, async (req, res) => {
         p.user_id,
         u.username,
         u.profile_pic,
+        u.is_verified,
         preview.media_url,
         preview.media_type
       ORDER BY like_count DESC, comment_count DESC, p.date_posted DESC
@@ -221,7 +226,7 @@ router.get("/", authenticateToken, async (req, res) => {
 
     const users = await pool.query(
       `
-      SELECT id, username, profile_pic
+      SELECT id, username, profile_pic, is_verified
       FROM users u
       WHERE u.username ILIKE $1
         AND u.id <> $2
@@ -259,6 +264,7 @@ router.get("/", authenticateToken, async (req, res) => {
         p.date_posted,
         u.username,
         u.profile_pic,
+        u.is_verified,
         COALESCE(
           (
             SELECT json_agg(
@@ -314,6 +320,7 @@ router.get("/", authenticateToken, async (req, res) => {
             r.user_id,
             ru.username,
             ru.profile_pic,
+            ru.is_verified,
             r.created_at AS reposted_at
           FROM reposts r
           JOIN users ru
@@ -349,6 +356,7 @@ router.get("/", authenticateToken, async (req, res) => {
                   'user_id', user_id,
                   'username', username,
                   'profile_pic', profile_pic,
+                  'is_verified', is_verified,
                   'reposted_at', reposted_at
                 )
                 ORDER BY reposted_at DESC

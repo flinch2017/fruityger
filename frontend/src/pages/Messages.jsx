@@ -4,6 +4,7 @@ import { FaPlus, FaTimes, FaUser, FaUsers } from "react-icons/fa";
 import supabase from "../lib/supabaseClient";
 import "../css/Messages.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 function buildGroupTitle(groupChat) {
   if (groupChat.group_name?.trim()) return groupChat.group_name.trim();
@@ -698,7 +699,12 @@ export default function Messages() {
                     )}
                   </span>
                   {user.is_online && <span className="messages-online-dot online"></span>}
-                  <span className="messages-online-name">{user.username}</span>
+                  <span className="messages-online-name">
+                    <span className="username-with-badge">
+                      {user.username}
+                      <VerifiedBadge verified={user.is_verified} />
+                    </span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -723,7 +729,12 @@ export default function Messages() {
                   )}
                 </div>
                 <div className="chat-info">
-                  <h4>{user.username}</h4>
+                  <h4>
+                    <span className="username-with-badge">
+                      {user.username}
+                      <VerifiedBadge verified={user.is_verified} />
+                    </span>
+                  </h4>
                   <p>Start a fresh conversation</p>
                 </div>
                 <div className="search-result-cta">Message</div>
@@ -835,7 +846,12 @@ export default function Messages() {
 
                   <div className="chat-info">
                     <div className="chat-top">
-                      <h4>{otherUser?.username || "Conversation"}</h4>
+                      <h4>
+                        <span className="username-with-badge">
+                          {otherUser?.username || "Conversation"}
+                          <VerifiedBadge verified={otherUser?.is_verified} />
+                        </span>
+                      </h4>
 
                       <div className="chat-meta">
                         <span className="chat-date">{formatChatDate(chat.last_message_at)}</span>
@@ -936,7 +952,12 @@ export default function Messages() {
                       )}
                     </span>
                     <span className="messages-group-result-copy">
-                      <strong>{user.username}</strong>
+                      <strong>
+                        <span className="username-with-badge">
+                          {user.username}
+                          <VerifiedBadge verified={user.is_verified} />
+                        </span>
+                      </strong>
                       <small>Add to group</small>
                     </span>
                   </button>

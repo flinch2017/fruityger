@@ -17,6 +17,7 @@ import supabase from "../lib/supabaseClient";
 import AeroNotice from "../components/AeroNotice";
 import "../css/Chat.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 export default function Chat() {
   const reactionOptions = [
@@ -1034,7 +1035,12 @@ export default function Chat() {
             {otherUserOnline && <span className="chat-user-online-dot"></span>}
           </div>
           <div className="chat-user-heading">
-            <h3>{otherUser.username}</h3>
+            <h3>
+              <span className="username-with-badge">
+                {otherUser.username}
+                <VerifiedBadge verified={otherUser.is_verified} />
+              </span>
+            </h3>
             <span
               className={`chat-user-status ${
                 otherUserTyping ? "typing" : otherUserOnline ? "online" : ""

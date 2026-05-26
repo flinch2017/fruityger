@@ -16,6 +16,7 @@ import "../css/TapesFeed.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 export default function TapesFeed() {
   const navigate = useNavigate();
@@ -745,7 +746,12 @@ export default function TapesFeed() {
                       )}
                     </span>
                     <span className="tape-author-copy">
-                      <strong>@{tape.username}</strong>
+                      <strong>
+                        <span className="username-with-badge">
+                          @{tape.username}
+                          <VerifiedBadge verified={tape.is_verified} />
+                        </span>
+                      </strong>
                       <span>{formatDate(tape.date_posted)}</span>
                     </span>
                   </button>

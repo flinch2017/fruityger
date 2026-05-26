@@ -4,12 +4,14 @@ import { authenticateToken } from "../middleware/auth.js";
 import { createNotification } from "../utils/notifications.js";
 import { extractMentionUsernames } from "../utils/mentions.js";
 import { canViewUserActivity, ensurePrivateAccountSchema } from "../utils/privacy.js";
+import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
 
 const router = express.Router();
 
 router.get("/:postId", authenticateToken, async (req, res) => {
   try {
     await ensurePrivateAccountSchema();
+    await ensureVerificationBadgeSchema();
     const { postId } = req.params;
     const userId = req.user.id;
     const page = parseInt(req.query.page, 10) || 1;
@@ -41,6 +43,7 @@ router.get("/:postId", authenticateToken, async (req, res) => {
         c.date_commented,
         u.username,
         u.profile_pic,
+        u.is_verified,
         COUNT(DISTINCT cl.comment_id)::int AS like_count,
         EXISTS (
           SELECT 1
@@ -62,7 +65,8 @@ router.get("/:postId", authenticateToken, async (req, res) => {
         c.parent_comment_id,
         c.date_commented,
         u.username,
-        u.profile_pic
+        u.profile_pic,
+        u.is_verified
       ORDER BY c.date_commented ASC
       LIMIT $3 OFFSET $4
       `,
@@ -79,6 +83,7 @@ router.get("/:postId", authenticateToken, async (req, res) => {
 router.post("/", authenticateToken, async (req, res) => {
   try {
     await ensurePrivateAccountSchema();
+    await ensureVerificationBadgeSchema();
     const { postId, text, parentId } = req.body;
     const userId = req.user.id;
 
@@ -195,6 +200,7 @@ router.post("/", authenticateToken, async (req, res) => {
         c.date_commented,
         u.username,
         u.profile_pic,
+        u.is_verified,
         0::int AS like_count,
         false AS is_liked
       FROM comments c
@@ -214,6 +220,7 @@ router.post("/", authenticateToken, async (req, res) => {
 
 router.get("/single/:commentId", authenticateToken, async (req, res) => {
   try {
+    await ensureVerificationBadgeSchema();
     const { commentId } = req.params;
     const result = await pool.query(
       `
@@ -226,6 +233,7 @@ router.get("/single/:commentId", authenticateToken, async (req, res) => {
         c.date_commented,
         u.username,
         u.profile_pic,
+        u.is_verified,
         0::int AS like_count,
         false AS is_liked
       FROM comments c

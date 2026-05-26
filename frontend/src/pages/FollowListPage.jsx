@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import "../css/FollowListPage.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 export default function FollowListPage() {
   const navigate = useNavigate();
@@ -10,6 +11,7 @@ export default function FollowListPage() {
   const [loading, setLoading] = useState(true);
   const [togglingMap, setTogglingMap] = useState({});
   const [ownerUsername, setOwnerUsername] = useState(username);
+  const [ownerVerified, setOwnerVerified] = useState(false);
 
   const pageTitle = type === "following" ? "Following" : "Followers";
 
@@ -37,6 +39,7 @@ export default function FollowListPage() {
         }
 
         setOwnerUsername(data.user?.username || username);
+        setOwnerVerified(Boolean(data.user?.is_verified));
         setAccounts(data.accounts || []);
       } catch (err) {
         console.error(err);
@@ -120,7 +123,12 @@ export default function FollowListPage() {
 
           <div className="follow-list-header-text">
             <h2>{pageTitle}</h2>
-            <p className="follow-list-owner">@{ownerUsername}</p>
+            <p className="follow-list-owner">
+              <span className="username-with-badge">
+                @{ownerUsername}
+                <VerifiedBadge verified={ownerVerified} />
+              </span>
+            </p>
           </div>
         </div>
 
@@ -148,7 +156,12 @@ export default function FollowListPage() {
                   </div>
 
                   <div className="follow-list-user-text">
-                    <span className="follow-list-username">{account.username}</span>
+                    <span className="follow-list-username">
+                      <span className="username-with-badge">
+                        {account.username}
+                        <VerifiedBadge verified={account.is_verified} />
+                      </span>
+                    </span>
                     <span className="follow-list-subtitle">
                       {account.is_self ? "You" : `@${account.username}`}
                     </span>

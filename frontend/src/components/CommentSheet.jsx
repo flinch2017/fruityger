@@ -8,6 +8,7 @@ import supabase from "../lib/supabaseClient";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "./CaptionWithHashtags";
+import VerifiedBadge from "./VerifiedBadge";
 
 const getActiveMentionQuery = (value = "", cursor = 0) => {
   const uptoCursor = String(value).slice(0, cursor);
@@ -613,7 +614,10 @@ const loadMoreReplies = (commentId) => {
                         className="comment-user-name comment-identity-clickable"
                         onClick={() => openUserProfile(c.username)}
                       >
-                        {c.username}
+                        <span className="username-with-badge">
+                          {c.username}
+                          <VerifiedBadge verified={c.is_verified} />
+                        </span>
 
                         {c.user_id === postAuthorId && (
                           <span className="comment-author-badge">
@@ -727,7 +731,10 @@ const loadMoreReplies = (commentId) => {
                                 className="comment-identity-clickable"
                                 onClick={() => openUserProfile(r.username)}
                               >
-                                @{r.username}
+                                <span className="username-with-badge">
+                                  @{r.username}
+                                  <VerifiedBadge verified={r.is_verified} />
+                                </span>
 
                                 {r.user_id === postAuthorId && (
                                   <span className="comment-author-badge">
