@@ -135,14 +135,24 @@
   background: #f2f8fd;
   color: #174c73;
   padding: 6px 10px;
-  margin-right: 8px;
   cursor: pointer;
+}
+
+.admin-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .admin-danger-btn {
   background: #ffecec;
   border-color: #f3bcbc;
   color: #8a1f1f;
+}
+
+.admin-inline-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .admin-toolbar {

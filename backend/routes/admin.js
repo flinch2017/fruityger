@@ -64,8 +64,29 @@ const ensureAdminBanSchema = async () => {
   `);
 };
 
+const ensureAdminAccountStatusSchema = async () => {
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS deactivated_at TIMESTAMPTZ
+  `);
+
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ
+  `);
+};
+
+const ensureAdminVerificationBadgeSchema = async () => {
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+};
+
 const ensureAdminUserMetadataSchema = async () => {
   await ensureAdminBanSchema();
+  await ensureAdminAccountStatusSchema();
+  await ensureAdminVerificationBadgeSchema();
   await pool.query(`
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS birth_date DATE
@@ -517,7 +538,7 @@ router.get("/users", authenticateAdmin, async (req, res) => {
 
     const { rows } = await pool.query(
       `
-      SELECT id, username, email, birth_date, ${usersCreatedSelect}, email_verified, is_admin
+      SELECT id, username, email, birth_date, ${usersCreatedSelect}, email_verified, is_verified, is_admin
            , deactivated_at, admin_banned_at
       FROM users
       WHERE deleted_at IS NULL
@@ -725,6 +746,125 @@ router.patch("/users/:userId/unban", authenticateAdmin, async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to unban user" });
+  }
+});
+
+router.patch("/users/:userId/verification-badge", authenticateAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const verified = Boolean(req.body?.verified);
+
+  if (!userId) {
+    return res.status(400).json({ error: "User id is required" });
+  }
+
+  try {
+    await ensureAdminUserMetadataSchema();
+    const { rows } = await pool.query(
+      `
+      UPDATE users
+      SET is_verified = $2
+      WHERE id = $1
+        AND deleted_at IS NULL
+      RETURNING id, username, email, is_verified
+      `,
+      [userId, verified]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    await logAdminActivity({
+      adminId: req.admin.id,
+      actionType: verified ? "grant_verification_badge" : "remove_verification_badge",
+      targetType: "user",
+      targetId: userId,
+      metadata: { username: rows[0].username },
+    });
+
+    return res.json({ user: rows[0] });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to update verification badge" });
+  }
+});
+
+router.delete("/users/:userId", authenticateAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const client = await pool.connect();
+
+  if (!userId) {
+    client.release();
+    return res.status(400).json({ error: "User id is required" });
+  }
+
+  if (String(userId) === String(req.admin.id)) {
+    client.release();
+    return res.status(400).json({ error: "You cannot delete your own admin account" });
+  }
+
+  try {
+    await ensureAdminUserMetadataSchema();
+    await client.query("BEGIN");
+
+    const userResult = await client.query(
+      `
+      SELECT id, username, email, is_admin
+      FROM users
+      WHERE id = $1
+        AND deleted_at IS NULL
+      FOR UPDATE
+      `,
+      [userId]
+    );
+    const user = userResult.rows[0];
+
+    if (!user) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.is_admin) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Admin users cannot be deleted from this screen" });
+    }
+
+    const { rows } = await client.query(
+      `
+      UPDATE users
+      SET deleted_at = NOW(),
+          deactivated_at = NOW(),
+          admin_banned_at = NULL
+      WHERE id = $1
+      RETURNING id, username, email, deleted_at, deactivated_at
+      `,
+      [userId]
+    );
+
+    await client.query("COMMIT");
+
+    await pool.query(`DELETE FROM newsletter_subscriptions WHERE user_id = $1`, [userId]).catch(() => null);
+    await pool.query(`DELETE FROM push_notification_subscriptions WHERE user_id = $1`, [userId]).catch(() => null);
+    await pool.query(`DELETE FROM active_users WHERE user_id = $1`, [userId]).catch(() => null);
+
+    await logAdminActivity({
+      adminId: req.admin.id,
+      actionType: "delete_user",
+      targetType: "user",
+      targetId: userId,
+      metadata: {
+        username: user.username,
+        email: user.email,
+      },
+    });
+
+    return res.json({ user: rows[0] });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => null);
+    console.error(error);
+    return res.status(500).json({ error: "Failed to delete user" });
+  } finally {
+    client.release();
   }
 });
 
