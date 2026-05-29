@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import pool from "../db.js";
 import { authenticateAdmin, ensureAdminSchema } from "../middleware/adminAuth.js";
 import { createNotification } from "../utils/notifications.js";
+import { ensurePrivateAccountSchema } from "../utils/privacy.js";
 
 const router = express.Router();
 
@@ -530,6 +531,7 @@ router.get("/users", authenticateAdmin, async (req, res) => {
 
   try {
     await ensureAdminUserMetadataSchema();
+    await ensurePrivateAccountSchema();
     const usersCreatedColumn = await resolveUsersCreatedColumn();
     const usersCreatedSelect = usersCreatedColumn
       ? `${usersCreatedColumn} AS created_at`
@@ -539,7 +541,7 @@ router.get("/users", authenticateAdmin, async (req, res) => {
     const { rows } = await pool.query(
       `
       SELECT id, username, email, birth_date, ${usersCreatedSelect}, email_verified, is_verified, is_admin
-           , deactivated_at, admin_banned_at
+           , COALESCE(is_private, false) AS is_private, deactivated_at, admin_banned_at
       FROM users
       WHERE deleted_at IS NULL
         AND (
@@ -786,6 +788,49 @@ router.patch("/users/:userId/verification-badge", authenticateAdmin, async (req,
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to update verification badge" });
+  }
+});
+
+router.patch("/users/:userId/privacy", authenticateAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const isPrivate = Boolean(req.body?.isPrivate);
+
+  if (!userId) {
+    return res.status(400).json({ error: "User id is required" });
+  }
+
+  try {
+    await ensurePrivateAccountSchema();
+    const { rows } = await pool.query(
+      `
+      UPDATE users
+      SET is_private = $2
+      WHERE id = $1
+        AND deleted_at IS NULL
+      RETURNING id, username, email, COALESCE(is_private, false) AS is_private
+      `,
+      [userId, isPrivate]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    await logAdminActivity({
+      adminId: req.admin.id,
+      actionType: isPrivate ? "set_user_private_mode" : "set_user_public_mode",
+      targetType: "user",
+      targetId: userId,
+      metadata: {
+        username: rows[0].username,
+        is_private: rows[0].is_private,
+      },
+    });
+
+    return res.json({ user: rows[0] });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to update privacy setting" });
   }
 });
 

@@ -122,6 +122,45 @@ export default function AdminUsers() {
     }
   };
 
+  const handlePrivacyToggle = async (user) => {
+    const nextPrivate = !Boolean(user.is_private);
+    setBusyUserId(user.id);
+    setBusyAction("privacy");
+    setError("");
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/admin/users/${user.id}/privacy`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getAdminToken()}`,
+        },
+        body: JSON.stringify({ isPrivate: nextPrivate }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Failed to update privacy setting");
+        return;
+      }
+
+      setUsers((prev) =>
+        prev.map((item) =>
+          item.id === user.id
+            ? {
+                ...item,
+                is_private: Boolean(data.user?.is_private),
+              }
+            : item
+        )
+      );
+    } catch {
+      setError("Failed to update privacy setting");
+    } finally {
+      setBusyUserId("");
+      setBusyAction("");
+    }
+  };
+
   const handleDeleteUser = async (user) => {
     const confirmed = window.confirm(
       `Delete @${user.username}? This will deactivate and hide the account from the app.`
@@ -184,6 +223,7 @@ export default function AdminUsers() {
                 <th>Birthdate</th>
                 <th>Verified</th>
                 <th>Badge</th>
+                <th>Privacy</th>
                 <th>Admin</th>
                 <th>Status</th>
                 <th>Created</th>
@@ -199,6 +239,7 @@ export default function AdminUsers() {
                   <td>{formatBirthDate(user.birth_date)}</td>
                   <td>{user.email_verified ? "Yes" : "No"}</td>
                   <td>{user.is_verified ? "Verified" : "None"}</td>
+                  <td>{user.is_private ? "Private" : "Public"}</td>
                   <td>{user.is_admin ? "Yes" : "No"}</td>
                   <td>
                     {user.admin_banned_at
@@ -233,6 +274,18 @@ export default function AdminUsers() {
                           : user.is_verified
                             ? "Remove Badge"
                             : "Give Badge"}
+                      </button>
+                      <button
+                        type="button"
+                        className="admin-inline-btn"
+                        disabled={busyUserId === user.id}
+                        onClick={() => handlePrivacyToggle(user)}
+                      >
+                        {busyUserId === user.id && busyAction === "privacy"
+                          ? "Saving..."
+                          : user.is_private
+                            ? "Set Public"
+                            : "Set Private"}
                       </button>
                       <button
                         type="button"
