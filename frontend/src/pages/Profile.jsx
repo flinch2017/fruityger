@@ -958,6 +958,39 @@ export default function Profile() {
     }
   };
 
+  const handleMessageProfile = async () => {
+    if (!token) {
+      openGuestPrompt();
+      return;
+    }
+
+    if (!user?.id) return;
+
+    try {
+      const res = await fetch("http://localhost:5000/api/messages/get-or-create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ targetUserId: user.id }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to open chat");
+      }
+
+      navigate(`/chat/${data.chatId}`);
+    } catch (err) {
+      console.error(err);
+      setNotice({
+        type: "error",
+        message: err.message || "Failed to open chat.",
+      });
+    }
+  };
+
   /* ================= RENDER ================= */
 
   if (!user) {
@@ -1156,6 +1189,18 @@ export default function Profile() {
                 onClick={() => navigate(`/profile/${user.username}/share`)}
               >
                 Share Profile
+              </button>
+            )}
+
+            {!isOwnProfile && !isBlockedProfile && following && !followRequested && (
+              <button
+                type="button"
+                className="profile-btn message-btn"
+                onClick={handleMessageProfile}
+                aria-label="Message this user"
+                title="Message"
+              >
+                <FaCommentDots />
               </button>
             )}
           </div>
