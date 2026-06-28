@@ -137,6 +137,8 @@ export default function ForgotPasswordSearch() {
         )}
 
         <input
+          id="forgot-password-query"
+          name="query"
           type="text"
           className="forgot-password-input"
           placeholder="Username or email"

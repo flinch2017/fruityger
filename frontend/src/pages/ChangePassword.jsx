@@ -91,6 +91,8 @@ export default function ChangePassword() {
 
         <form className="settings-flow-form" onSubmit={handleSubmit}>
           <input
+            id="change-password-new-password"
+            name="newPassword"
             type="password"
             className="settings-flow-input"
             placeholder="New password"
@@ -101,6 +103,8 @@ export default function ChangePassword() {
           />
 
           <input
+            id="change-password-confirm-password"
+            name="confirmPassword"
             type="password"
             className="settings-flow-input"
             placeholder="Confirm new password"

@@ -89,6 +89,8 @@ export default function ChangeEmail() {
 
         <form className="settings-flow-form" onSubmit={handleSubmit}>
           <input
+            id="change-email-new-email"
+            name="newEmail"
             type="email"
             className="settings-flow-input"
             placeholder="New email address"

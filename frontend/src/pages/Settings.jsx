@@ -453,6 +453,8 @@ export default function Settings() {
           <label className="settings-toggle-row">
             <span className="settings-toggle-text">Email newsletter</span>
             <input
+              id="newsletter-enabled"
+              name="newsletterEnabled"
               type="checkbox"
               checked={newsletterEnabled}
               disabled={notificationSaving}
@@ -466,6 +468,8 @@ export default function Settings() {
           <label className="settings-toggle-row">
             <span className="settings-toggle-text">Push notifications</span>
             <input
+              id="push-enabled"
+              name="pushEnabled"
               type="checkbox"
               checked={pushEnabled}
               disabled={notificationSaving}
@@ -488,6 +492,8 @@ export default function Settings() {
           <label className="settings-toggle-row">
             <span className="settings-toggle-text">Private profile</span>
             <input
+              id="private-profile"
+              name="privateProfile"
               type="checkbox"
               checked={privateProfile}
               disabled={privacySaving}

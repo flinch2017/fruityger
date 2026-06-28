@@ -87,6 +87,8 @@ export default function ForgotPasswordChange() {
 
         <form className="forgot-password-form" onSubmit={handleSubmit}>
           <input
+            id="forgot-password-new-password"
+            name="newPassword"
             type="password"
             className="forgot-password-input"
             placeholder="New password"
@@ -97,6 +99,8 @@ export default function ForgotPasswordChange() {
           />
 
           <input
+            id="forgot-password-confirm-password"
+            name="confirmPassword"
             type="password"
             className="forgot-password-input"
             placeholder="Confirm new password"

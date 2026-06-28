@@ -398,6 +398,8 @@ export default function Signup() {
             {stepIndex === 2 && (
               <div className="signup-birthday-grid">
                 <select
+                  id="signup-birth-month"
+                  name="birthMonth"
                   className="signup-aero-input signup-aero-select"
                   value={birthMonth}
                   onChange={(event) => handleMonthSelect(event.target.value)}
@@ -411,6 +413,8 @@ export default function Signup() {
                 </select>
 
                 <select
+                  id="signup-birth-day"
+                  name="birthDay"
                   className="signup-aero-input signup-aero-select"
                   value={birthDay}
                   onChange={(event) => handleDaySelect(event.target.value)}
@@ -425,6 +429,8 @@ export default function Signup() {
                 </select>
 
                 <select
+                  id="signup-birth-year"
+                  name="birthYear"
                   className="signup-aero-input signup-aero-select"
                   value={birthYear}
                   onChange={(event) => handleYearSelect(event.target.value)}

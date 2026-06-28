@@ -160,6 +160,8 @@ export default function Login() {
 
           <form className="login-aero-form" onSubmit={handleSubmit}>
             <input
+              id="login-identifier"
+              name="identifier"
               type="text"
               placeholder="Email or Username"
               className="login-aero-input"
@@ -176,6 +178,8 @@ export default function Login() {
 
             <div className="login-password-field">
               <input
+                id="login-password"
+                name="password"
                 type={showPassword ? "text" : "password"}
                 placeholder="Password"
                 className="login-aero-input login-password-input"

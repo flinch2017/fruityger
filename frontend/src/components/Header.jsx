@@ -546,6 +546,8 @@ export default function Header() {
         <div className="search-shell" ref={searchRef}>
           <form className="search-form" onSubmit={handleSearch}>
             <input
+              id="header-search"
+              name="search"
               type="text"
               placeholder="Search people, posts, hashtags..."
               value={searchQuery}
@@ -787,6 +789,8 @@ export default function Header() {
               className="mobile-search-form"
             >
               <input
+                id="mobile-header-search"
+                name="mobileSearch"
                 type="text"
                 placeholder="Search people, posts, hashtags..."
                 value={searchQuery}

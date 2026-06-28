@@ -94,6 +94,8 @@ export default function VerifyCurrentPassword() {
 
         <form className="settings-flow-form" onSubmit={handleSubmit}>
           <input
+            id="verify-current-password"
+            name="currentPassword"
             type="password"
             className="settings-flow-input"
             placeholder="Current password"
