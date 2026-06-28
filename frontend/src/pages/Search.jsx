@@ -8,6 +8,7 @@ import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
+import FollowSuggestions from "../components/FollowSuggestions";
 
 const SEARCH_TABS = [
   { key: "profiles", label: "Profiles", resultKey: "users" },
@@ -682,6 +683,8 @@ export default function Search() {
           </button>
         ))}
       </div>
+
+      <FollowSuggestions variant="search" limit={4} />
 
       {/* Tab Content */}
       <section className={`search-section ${loading ? "loading" : ""}`}>

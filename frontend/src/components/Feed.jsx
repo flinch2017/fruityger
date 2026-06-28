@@ -8,6 +8,7 @@ import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "./CaptionWithHashtags";
 import VerifiedBadge from "./VerifiedBadge";
+import FollowSuggestions from "./FollowSuggestions";
 
 export default function Feed() {
   const navigate = useNavigate();
@@ -790,6 +791,8 @@ export default function Feed() {
           onClose={() => setActiveCommentPost(null)}
         />
       )}
+
+      <FollowSuggestions variant="feed" limit={4} />
 
       <div
         className="feed"
