@@ -181,7 +181,7 @@ export const ensurePasskeySchema = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS user_passkeys (
       id SERIAL PRIMARY KEY,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       credential_id TEXT NOT NULL UNIQUE,
       public_key_jwk JSONB NOT NULL,
       counter BIGINT NOT NULL DEFAULT 0,
@@ -200,7 +200,7 @@ export const ensurePasskeySchema = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS webauthn_challenges (
       id SERIAL PRIMARY KEY,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       challenge TEXT NOT NULL,
       purpose TEXT NOT NULL,
       expires_at TIMESTAMPTZ NOT NULL,
