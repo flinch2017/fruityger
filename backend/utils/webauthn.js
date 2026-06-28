@@ -137,8 +137,13 @@ const normalizeOrigin = (value = "") => {
   const trimmed = String(value || "").trim().replace(/\/+$/, "");
   if (!trimmed) return "";
 
+  if (/^android:apk-key-hash:/i.test(trimmed)) {
+    return trimmed;
+  }
+
   try {
-    return new URL(trimmed).origin;
+    const parsed = new URL(trimmed);
+    return parsed.origin === "null" ? trimmed : parsed.origin;
   } catch {
     return trimmed;
   }
