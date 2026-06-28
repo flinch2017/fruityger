@@ -38,6 +38,15 @@ const parseFromAddress = (value = "") => {
   };
 };
 
+const logSafeMailjetError = (error) => {
+  console.error("Mailjet send failed:", {
+    message: error.message,
+    code: error.code,
+    status: error.response?.status,
+    data: error.response?.data,
+  });
+};
+
 export const getFriendlyEmailErrorMessage = (error) => {
   const message = String(error?.message || "").trim();
   const code = String(error?.code || "").trim().toUpperCase();
@@ -64,11 +73,8 @@ export const getFriendlyEmailErrorMessage = (error) => {
     return "Mailjet is temporarily unavailable. Please try again in a moment.";
   }
 
-  if (
-    message === "Email service is not configured" ||
-    message === "Email sender is not configured"
-  ) {
-    return "Email delivery is not configured on the server yet.";
+  if (code === "ECONNRESET") {
+    return "Mailjet closed the connection. Please try again in a moment.";
   }
 
   if (message === "Email service timed out" || code === "ETIMEDOUT") {
@@ -85,10 +91,6 @@ export const getFriendlyEmailErrorMessage = (error) => {
 
   if (responseCode === 550 || responseCode === 553) {
     return "Email server rejected the sender or recipient address.";
-  }
-
-  if (responseCode === 534) {
-    return "Email provider blocked the sign-in attempt. For Gmail, use an App Password.";
   }
 
   return message || "Email delivery failed.";
@@ -133,13 +135,10 @@ const createTransporter = () => {
     throw new Error("Email service is not configured");
   }
 
-  const normalizedHost = String(SMTP_HOST || "").trim().toLowerCase();
   const port = Number(SMTP_PORT);
   const secure = SMTP_SECURE === "true" || port === 465;
-  const isGmailHost = normalizedHost === "smtp.gmail.com";
 
   return nodemailer.createTransport({
-    ...(isGmailHost ? { service: "gmail" } : {}),
     host: SMTP_HOST,
     port,
     secure,
@@ -171,50 +170,66 @@ const sendWithMailjet = async ({ from, to, subject, text, html }) => {
     throw new Error("Mailjet is not configured");
   }
 
-  if (!from) {
-    throw new Error("Mailjet sender is not configured");
-  }
-
   const parsedFrom = parseFromAddress(from);
+
   if (!parsedFrom.email) {
     throw new Error("Mailjet sender is not configured");
   }
 
-  await axios.post(
-    "https://api.mailjet.com/v3.1/send",
-    {
-      Messages: [
-        {
-          From: {
-            Email: parsedFrom.email,
-            ...(parsedFrom.name ? { Name: parsedFrom.name } : {}),
+  const recipients = (Array.isArray(to) ? to : [to])
+    .map((email) => String(email || "").trim())
+    .filter(Boolean)
+    .map((email) => ({ Email: email }));
+
+  if (recipients.length === 0) {
+    throw new Error("Email recipient is not configured");
+  }
+
+  try {
+    const response = await axios.post(
+      "https://api.mailjet.com/v3.1/send",
+      {
+        Messages: [
+          {
+            From: {
+              Email: parsedFrom.email,
+              ...(parsedFrom.name ? { Name: parsedFrom.name } : {}),
+            },
+            To: recipients,
+            Subject: subject,
+            TextPart: text,
+            HTMLPart: html,
           },
-          To: (Array.isArray(to) ? to : [to]).map((email) => ({
-            Email: String(email).trim(),
-          })),
-          Subject: subject,
-          TextPart: text,
-          HTMLPart: html,
+        ],
+      },
+      {
+        timeout: 20000,
+        auth: {
+          username: apiKey,
+          password: secretKey,
         },
-      ],
-    },
-    {
-      timeout: 20000,
-      auth: {
-        username: apiKey,
-        password: secretKey,
-      },
-      headers: {
-        "Content-Type": "application/json",
-      },
-    }
-  );
+        headers: {
+          "Content-Type": "application/json",
+          Connection: "close",
+        },
+      }
+    );
+
+    console.log("Mailjet email sent:", {
+      status: response.status,
+      to: recipients.map((item) => item.Email),
+      from: parsedFrom.email,
+    });
+
+    return response.data;
+  } catch (error) {
+    logSafeMailjetError(error);
+    throw error;
+  }
 };
 
 const getTransporter = async () => {
-  if (cachedTransporter) {
-    return cachedTransporter;
-  }
+  if (cachedTransporter) return cachedTransporter;
 
   if (!cachedTransporterPromise) {
     cachedTransporterPromise = (async () => {
@@ -264,6 +279,7 @@ const sendMailWithTimeout = async (mailOptions) => {
 
 export const sendVerificationEmail = async ({ to, username, code }) => {
   const from = getConfiguredFromAddress();
+
   if (!from) {
     throw new Error("Email sender is not configured");
   }
@@ -297,12 +313,9 @@ export const sendVerificationEmail = async ({ to, username, code }) => {
   });
 };
 
-export const sendEmailChangeConfirmationEmail = async ({
-  to,
-  username,
-  code,
-}) => {
+export const sendEmailChangeConfirmationEmail = async ({ to, username, code }) => {
   const from = getConfiguredFromAddress();
+
   if (!from) {
     throw new Error("Email sender is not configured");
   }
@@ -336,12 +349,9 @@ export const sendEmailChangeConfirmationEmail = async ({
   });
 };
 
-export const sendPasswordResetEmail = async ({
-  to,
-  username,
-  code,
-}) => {
+export const sendPasswordResetEmail = async ({ to, username, code }) => {
   const from = getConfiguredFromAddress();
+
   if (!from) {
     throw new Error("Email sender is not configured");
   }
@@ -375,88 +385,6 @@ export const sendPasswordResetEmail = async ({
   });
 };
 
-const deleteUserCompletely = async (client, userId) => {
-  const postIdsResult = await client.query(
-    `SELECT post_id FROM posts WHERE user_id = $1`,
-    [userId]
-  );
-  const commentIdsResult = await client.query(
-    `SELECT comment_id FROM comments WHERE user_id = $1`,
-    [userId]
-  );
-  const messageIdsResult = await client.query(
-    `
-    SELECT id
-    FROM messages
-    WHERE sender_id = $1
-       OR receiver_id = $1
-       OR chat_id IN (
-         SELECT id
-         FROM chats
-         WHERE user1_id = $1 OR user2_id = $1
-       )
-    `,
-    [userId]
-  );
-  const chatIdsResult = await client.query(
-    `SELECT id FROM chats WHERE user1_id = $1 OR user2_id = $1`,
-    [userId]
-  );
-
-  const postIds = postIdsResult.rows.map((row) => row.post_id);
-  const commentIds = commentIdsResult.rows.map((row) => row.comment_id);
-  const messageIds = messageIdsResult.rows.map((row) => row.id);
-  const chatIds = chatIdsResult.rows.map((row) => row.id);
-
-  if (messageIds.length > 0) {
-    await client.query(
-      `DELETE FROM deleted_messages WHERE message_id = ANY($1::uuid[])`,
-      [messageIds]
-    );
-  }
-
-  if (chatIds.length > 0) {
-    await client.query(
-      `DELETE FROM deleted_chats WHERE chat_id = ANY($1::uuid[])`,
-      [chatIds]
-    );
-  }
-
-  await client.query(
-    `
-    DELETE FROM reports
-    WHERE reporter_id = $1
-       OR (content_type = 'user' AND content_id = $1)
-       OR (
-         array_length($2::uuid[], 1) IS NOT NULL
-         AND content_type = 'post'
-         AND content_id = ANY($2::uuid[])
-       )
-       OR (
-         array_length($3::uuid[], 1) IS NOT NULL
-         AND content_type = 'comment'
-         AND content_id = ANY($3::uuid[])
-       )
-       OR (
-         array_length($4::uuid[], 1) IS NOT NULL
-         AND content_type = 'message'
-         AND content_id = ANY($4::uuid[])
-       )
-    `,
-    [userId, postIds, commentIds, messageIds]
-  );
-
-  await client.query(
-    `DELETE FROM messages WHERE sender_id = $1 OR receiver_id = $1`,
-    [userId]
-  );
-  await client.query(
-    `DELETE FROM chats WHERE user1_id = $1 OR user2_id = $1`,
-    [userId]
-  );
-  await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
-};
-
 export const cleanupExpiredUnverifiedUsers = async () => {
   await ensureEmailVerificationSchema();
 
@@ -465,16 +393,14 @@ export const cleanupExpiredUnverifiedUsers = async () => {
   try {
     await client.query("BEGIN");
 
-    const { rowCount } = await client.query(
-      `
+    const { rowCount } = await client.query(`
       UPDATE users
       SET email_verification_code = NULL,
           email_verification_expires_at = NULL
       WHERE email_verified = FALSE
         AND email_verification_expires_at IS NOT NULL
         AND email_verification_expires_at <= NOW()
-      `
-    );
+    `);
 
     await client.query("COMMIT");
     return rowCount || 0;
