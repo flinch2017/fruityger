@@ -8,15 +8,18 @@ import {
   cleanupExpiredUnverifiedUsers,
   ensureEmailVerificationSchema,
   ensurePasswordResetSchema,
-  generateVerificationCode,
-  getVerificationExpiry,
   getFriendlyEmailErrorMessage,
-  sendEmailChangeConfirmationEmail,
-  sendPasswordResetEmail,
-  sendVerificationEmail,
 } from "../utils/emailVerification.js";
 import { ensureUserOnboardingSchema } from "../utils/userOnboarding.js";
 import { deleteR2Object } from "../utils/r2Delete.js";
+import {
+  ensurePasskeySchema,
+  getAssertionOptions,
+  getRegistrationOptions,
+  sanitizePasskey,
+  verifyAssertion,
+  verifyRegistration,
+} from "../utils/webauthn.js";
 
 const router = express.Router();
 const SALT_ROUNDS = 10;
@@ -473,9 +476,6 @@ router.post("/signup", async (req, res) => {
     return res.status(500).json({ error: "Turnstile request failed" });
   }
 
-  const verificationCode = generateVerificationCode();
-  const verificationExpiry = getVerificationExpiry();
-
   try {
     const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
 
@@ -489,37 +489,22 @@ router.post("/signup", async (req, res) => {
         birth_date,
         created_at,
         email_verified,
-        email_verification_code,
-        email_verification_expires_at,
         interests,
         interests_completed
       )
-      VALUES ($1, $2, $3, $4, $5, NOW(), FALSE, $6, $7, '[]'::jsonb, FALSE)
+      VALUES ($1, $2, $3, $4, $5, NOW(), TRUE, '[]'::jsonb, FALSE)
       RETURNING id, username, email, profile_pic, birth_date, email_verified, interests, interests_completed, created_at
       `,
-      [normalizedUsername, email, password_hash, profile_pic || null, birthDate, verificationCode, verificationExpiry]
+      [normalizedUsername, email, password_hash, profile_pic || null, birthDate]
     );
 
     const user = result.rows[0];
-
-    try {
-      await sendVerificationEmail({
-        to: email,
-        username: normalizedUsername,
-        code: verificationCode,
-      });
-    } catch (mailError) {
-      await pool.query(`DELETE FROM users WHERE id = $1`, [user.id]);
-      return res.status(500).json({
-        error: getFriendlyEmailErrorMessage(mailError),
-      });
-    }
 
     const token = signToken(user.id);
     res.json({
       user: sanitizeUser(user),
       token,
-      requiresVerification: true,
+      requiresVerification: false,
     });
   } catch (err) {
     if (err.code === "23505") {
@@ -608,7 +593,7 @@ router.post("/login", async (req, res) => {
     res.json({
       user: sanitizeUser(sessionUser),
       token,
-      requiresVerification: !sessionUser.email_verified,
+      requiresVerification: false,
     });
   } catch (err) {
     console.error(err);
@@ -624,6 +609,7 @@ router.post("/forgot-password/search", async (req, res) => {
   await ensurePasswordResetSchema();
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
+  await ensurePasskeySchema();
   await cleanupExpiredUnverifiedUsers();
   await cleanupExpiredDeletedUsers();
 
@@ -634,7 +620,16 @@ router.post("/forgot-password/search", async (req, res) => {
   try {
     const { rows } = await pool.query(
       `
-      SELECT id, username, email, profile_pic
+      SELECT
+        users.id,
+        users.username,
+        users.email,
+        users.profile_pic,
+        EXISTS (
+          SELECT 1
+          FROM user_passkeys
+          WHERE user_passkeys.user_id = users.id
+        ) AS has_passkey
       FROM users
       WHERE email_verified = TRUE
         AND pending_email IS NULL
@@ -663,6 +658,7 @@ router.post("/forgot-password/search", async (req, res) => {
         username: row.username,
         profile_pic: row.profile_pic,
         masked_email: maskEmail(row.email),
+        has_passkey: Boolean(row.has_passkey),
       })),
     });
   } catch (error) {
@@ -672,12 +668,19 @@ router.post("/forgot-password/search", async (req, res) => {
 });
 
 router.post("/forgot-password/send-code", async (req, res) => {
+  return res.status(410).json({
+    error: "Email reset codes are no longer supported. Use your passkey to reset your password.",
+  });
+});
+
+router.post("/forgot-password/passkey/options", async (req, res) => {
   const { userId } = req.body || {};
 
   await ensureEmailVerificationSchema();
   await ensurePasswordResetSchema();
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
+  await ensurePasskeySchema();
   await cleanupExpiredUnverifiedUsers();
   await cleanupExpiredDeletedUsers();
 
@@ -701,27 +704,14 @@ router.post("/forgot-password/send-code", async (req, res) => {
       return res.status(404).json({ error: "Account not found" });
     }
 
-    const resetCode = generateVerificationCode();
-    const resetExpiry = getVerificationExpiry();
-
-    await pool.query(
-      `
-      UPDATE users
-      SET password_reset_code = $2,
-          password_reset_expires_at = $3
-      WHERE id = $1
-      `,
-      [user.id, resetCode, resetExpiry]
-    );
-
-    await sendPasswordResetEmail({
-      to: user.email,
-      username: user.username,
-      code: resetCode,
+    const options = await getAssertionOptions({
+      req,
+      userId: user.id,
+      purpose: "forgot-password",
     });
 
     res.json({
-      message: "Reset code sent",
+      options,
       account: {
         id: user.id,
         username: user.username,
@@ -729,38 +719,36 @@ router.post("/forgot-password/send-code", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Password reset email failed:", {
-      message: err.message,
-      code: err.code,
-      status: err.response?.status,
-      data: err.response?.data,
-    });
-
-    return res.status(500).json({
-      success: false,
-      message: getFriendlyEmailErrorMessage(err),
-    });
+    console.error(err);
+    return res.status(400).json({ error: err.message || "Couldn't start passkey reset." });
   }
 });
 
 router.post("/forgot-password/verify-code", async (req, res) => {
-  const { userId, code } = req.body || {};
+  return res.status(410).json({
+    error: "Email reset codes are no longer supported. Use your passkey to reset your password.",
+  });
+});
+
+router.post("/forgot-password/passkey/verify", async (req, res) => {
+  const { userId, credential } = req.body || {};
 
   await ensureEmailVerificationSchema();
   await ensurePasswordResetSchema();
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
+  await ensurePasskeySchema();
   await cleanupExpiredUnverifiedUsers();
   await cleanupExpiredDeletedUsers();
 
-  if (!userId || !/^\d{6}$/.test(String(code || ""))) {
-    return res.status(400).json({ error: "Please enter a valid 6-digit code" });
+  if (!userId || !credential) {
+    return res.status(400).json({ error: "Passkey response is required" });
   }
 
   try {
     const { rows } = await pool.query(
       `
-      SELECT id, password_reset_code, password_reset_expires_at, email_verified, pending_email, deactivated_at, deleted_at
+      SELECT id, email_verified, pending_email, deactivated_at, deleted_at
       FROM users
       WHERE id = $1
       LIMIT 1
@@ -773,33 +761,19 @@ router.post("/forgot-password/verify-code", async (req, res) => {
       return res.status(404).json({ error: "Account not found" });
     }
 
-    if (
-      !user.password_reset_expires_at ||
-      new Date(user.password_reset_expires_at) <= new Date()
-    ) {
-      return res.status(400).json({ error: "This reset code expired. Please request a new one." });
-    }
-
-    if (String(user.password_reset_code) !== String(code)) {
-      return res.status(400).json({ error: "That reset code is incorrect" });
-    }
-
-    await pool.query(
-      `
-      UPDATE users
-      SET password_reset_code = NULL,
-          password_reset_expires_at = NULL
-      WHERE id = $1
-      `,
-      [user.id]
-    );
+    await verifyAssertion({
+      req,
+      userId: user.id,
+      purpose: "forgot-password",
+      credential,
+    });
 
     res.json({
       resetToken: signAccountChangeToken(user.id, "forgot-password"),
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Failed to verify reset code" });
+    res.status(400).json({ error: error.message || "Passkey verification failed" });
   }
 });
 
@@ -891,58 +865,112 @@ router.get("/session", authenticateTokenAllowUnverified, async (req, res) => {
 
   res.json({
     user: sanitizeUser(user),
-    requiresVerification: !user.email_verified,
-    verificationExpiresAt: user.email_verification_expires_at,
+    requiresVerification: false,
+    verificationExpiresAt: null,
   });
 });
 
-router.post("/verify-email", authenticateTokenAllowUnverified, async (req, res) => {
-  const { code } = req.body;
+router.get("/passkeys", authenticateTokenAllowUnverified, async (req, res) => {
+  try {
+    await ensurePasskeySchema();
 
+    const { rows } = await pool.query(
+      `
+      SELECT id, name, transports, created_at, last_used_at
+      FROM user_passkeys
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      `,
+      [req.user.id]
+    );
+
+    res.json({
+      passkeys: rows.map(sanitizePasskey),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to load passkeys" });
+  }
+});
+
+router.post("/passkeys/register/options", authenticateTokenAllowUnverified, async (req, res) => {
+  try {
+    await ensurePasskeySchema();
+
+    const options = await getRegistrationOptions({
+      req,
+      user: {
+        id: req.user.id,
+        username: req.user.username,
+        email: req.user.email,
+      },
+    });
+
+    res.json({ options });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to start passkey setup" });
+  }
+});
+
+router.post("/passkeys/register/verify", authenticateTokenAllowUnverified, async (req, res) => {
+  const { credential, name } = req.body || {};
+
+  if (!credential) {
+    return res.status(400).json({ error: "Passkey response is required" });
+  }
+
+  try {
+    await ensurePasskeySchema();
+
+    const passkey = await verifyRegistration({
+      req,
+      userId: req.user.id,
+      credential,
+      name,
+    });
+
+    res.json({
+      passkey: sanitizePasskey(passkey),
+      message: "Passkey added successfully",
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(400).json({ error: error.message || "Failed to add passkey" });
+  }
+});
+
+router.delete("/passkeys/:passkeyId", authenticateTokenAllowUnverified, async (req, res) => {
+  try {
+    await ensurePasskeySchema();
+
+    const { rows } = await pool.query(
+      `
+      DELETE FROM user_passkeys
+      WHERE id = $1
+        AND user_id = $2
+      RETURNING id
+      `,
+      [req.params.passkeyId, req.user.id]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ error: "Passkey not found" });
+    }
+
+    res.json({ message: "Passkey removed" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to remove passkey" });
+  }
+});
+
+router.post("/verify-email", authenticateTokenAllowUnverified, async (req, res) => {
   await ensureEmailVerificationSchema();
   await ensureUserOnboardingSchema();
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
-  await cleanupExpiredUnverifiedUsers();
   await cleanupExpiredDeletedUsers();
-
-  if (!code || !/^\d{6}$/.test(String(code))) {
-    return res.status(400).json({ error: "Please enter a valid 6-digit code" });
-  }
-
-  const { rows } = await pool.query(
-    `
-    SELECT id, username, email, profile_pic, birth_date, email_verified, interests, interests_completed, email_verification_code, email_verification_expires_at, created_at
-    FROM users
-    WHERE id = $1
-    LIMIT 1
-    `,
-    [req.user.id]
-  );
-
-  const user = rows[0];
-  if (!user) {
-    return res.status(401).json({ error: "User not found" });
-  }
-
-  if (user.email_verified) {
-    return res.json({
-      user: sanitizeUser(user),
-      verified: true,
-    });
-  }
-
-  if (
-    !user.email_verification_expires_at ||
-    new Date(user.email_verification_expires_at) <= new Date()
-  ) {
-    await cleanupExpiredUnverifiedUsers();
-    return res.status(400).json({ error: "This verification code expired. Request a new code and try again." });
-  }
-
-  if (String(user.email_verification_code) !== String(code)) {
-    return res.status(400).json({ error: "That verification code is incorrect" });
-  }
 
   const updateResult = await pool.query(
     `
@@ -956,8 +984,13 @@ router.post("/verify-email", authenticateTokenAllowUnverified, async (req, res) 
     [req.user.id]
   );
 
+  const user = updateResult.rows[0];
+  if (!user) {
+    return res.status(401).json({ error: "User not found" });
+  }
+
   res.json({
-    user: sanitizeUser(updateResult.rows[0]),
+    user: sanitizeUser(user),
     verified: true,
   });
 });
@@ -967,54 +1000,29 @@ router.post("/resend-verification", authenticateTokenAllowUnverified, async (req
   await ensureUserOnboardingSchema();
   await ensureAccountChangeSchema();
   await ensureAccountStatusSchema();
-  await cleanupExpiredUnverifiedUsers();
   await cleanupExpiredDeletedUsers();
 
-  const { rows } = await pool.query(
+  const updateResult = await pool.query(
     `
-    SELECT id, username, email, profile_pic, birth_date, email_verified, interests, interests_completed, created_at
-    FROM users
+    UPDATE users
+    SET email_verified = TRUE,
+        email_verification_code = NULL,
+        email_verification_expires_at = NULL
     WHERE id = $1
-    LIMIT 1
+    RETURNING id, username, email, profile_pic, birth_date, email_verified, interests, interests_completed, created_at
     `,
     [req.user.id]
   );
 
-  const user = rows[0];
+  const user = updateResult.rows[0];
   if (!user) {
     return res.status(401).json({ error: "User not found" });
   }
 
-  if (user.email_verified) {
-    return res.json({ message: "Email already verified" });
-  }
-
-  const verificationCode = generateVerificationCode();
-  const verificationExpiry = getVerificationExpiry();
-
-  await pool.query(
-    `
-    UPDATE users
-    SET email_verification_code = $2,
-        email_verification_expires_at = $3
-    WHERE id = $1
-    `,
-    [user.id, verificationCode, verificationExpiry]
-  );
-
-  try {
-    await sendVerificationEmail({
-      to: user.email,
-      username: user.username,
-      code: verificationCode,
-    });
-  } catch (mailError) {
-      return res.status(500).json({
-        error: getFriendlyEmailErrorMessage(mailError),
-      });
-  }
-
-  res.json({ message: "Verification code sent" });
+  res.json({
+    user: sanitizeUser(user),
+    message: "Email verification is no longer required",
+  });
 });
 
 router.post("/verify-current-password", authenticateTokenAllowUnverified, async (req, res) => {
@@ -1111,32 +1119,34 @@ router.post("/request-email-change", authenticateTokenAllowUnverified, async (re
       return res.status(401).json({ error: "User not found" });
     }
 
-    if (user.pending_email) {
-      return res.status(400).json({ error: "You already have a pending email change" });
-    }
-
-    const emailChangeToken = generateVerificationCode();
-    const emailChangeExpiry = getVerificationExpiry();
+    const updateResult = await pool.query(
+      `
+      UPDATE users
+      SET email = $2,
+          pending_email = NULL,
+          email_change_token = NULL,
+          email_change_expires_at = NULL,
+          email_verified = TRUE,
+          email_verification_code = NULL,
+          email_verification_expires_at = NULL
+      WHERE id = $1
+      RETURNING id, username, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, created_at
+      `,
+      [req.user.id, normalizedEmail]
+    );
 
     await pool.query(
       `
-      UPDATE users
-      SET pending_email = $2,
-          email_change_token = $3,
-          email_change_expires_at = $4
-      WHERE id = $1
+      UPDATE newsletter_subscriptions
+      SET email = $2
+      WHERE user_id = $1
       `,
-      [req.user.id, normalizedEmail, emailChangeToken, emailChangeExpiry]
-    );
-
-    await sendEmailChangeConfirmationEmail({
-      to: normalizedEmail,
-      username: user.username,
-      code: emailChangeToken,
-    });
+      [req.user.id, updateResult.rows[0].email]
+    ).catch(() => null);
 
     res.json({
-      message: "Confirmation code sent to your new address",
+      user: sanitizeUser(updateResult.rows[0]),
+      message: "Email updated successfully",
     });
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError || error.message === "Missing verification token" || error.message === "Invalid verification token") {
@@ -1147,178 +1157,6 @@ router.post("/request-email-change", authenticateTokenAllowUnverified, async (re
     res.status(500).json({
       error: getFriendlyEmailErrorMessage(error),
     });
-  }
-});
-
-router.post("/confirm-email-change", async (req, res) => {
-  const { token } = req.body || {};
-
-  if (!token) {
-    return res.status(400).json({ error: "Confirmation token is required" });
-  }
-
-  try {
-    await ensureAccountChangeSchema();
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.purpose !== "confirm-email-change") {
-      return res.status(400).json({ error: "Invalid confirmation token" });
-    }
-
-    const { rows } = await pool.query(
-      `
-      SELECT id, username, email, profile_pic, birth_date, email_verified, interests, interests_completed, pending_email, email_change_token, email_change_expires_at, created_at
-      FROM users
-      WHERE id = $1
-      LIMIT 1
-      `,
-      [decoded.id]
-    );
-
-    const user = rows[0];
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    if (
-      user.email_change_token !== token ||
-      !user.pending_email ||
-      user.pending_email !== decoded.newEmail ||
-      !user.email_change_expires_at ||
-      new Date(user.email_change_expires_at) <= new Date()
-    ) {
-      return res.status(400).json({ error: "This email change request is invalid or expired" });
-    }
-
-    const duplicateEmail = await pool.query(
-      `
-      SELECT id
-      FROM users
-      WHERE LOWER(email) = LOWER($1)
-        AND id <> $2
-      LIMIT 1
-      `,
-      [user.pending_email, user.id]
-    );
-
-    if (duplicateEmail.rows.length > 0) {
-      return res.status(400).json({ error: "That email is already in use" });
-    }
-
-    const updateResult = await pool.query(
-      `
-      UPDATE users
-      SET email = pending_email,
-          pending_email = NULL,
-          email_change_token = NULL,
-          email_change_expires_at = NULL
-      WHERE id = $1
-      RETURNING id, username, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, created_at
-      `,
-      [user.id]
-    );
-
-    await pool.query(
-      `
-      UPDATE newsletter_subscriptions
-      SET email = $2
-      WHERE user_id = $1
-      `,
-      [user.id, updateResult.rows[0].email]
-    ).catch(() => null);
-
-    res.json({
-      user: sanitizeUser(updateResult.rows[0]),
-      message: "Email updated successfully",
-    });
-  } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
-      return res.status(400).json({ error: "This confirmation link is invalid or expired" });
-    }
-
-    console.error(error);
-    res.status(500).json({ error: "Failed to confirm email change" });
-  }
-});
-
-router.post("/confirm-email-change-code", authenticateTokenAllowUnverified, async (req, res) => {
-  const { code } = req.body || {};
-
-  if (!/^\d{6}$/.test(String(code || ""))) {
-    return res.status(400).json({ error: "Please enter a valid 6-digit code" });
-  }
-
-  try {
-    await ensureAccountChangeSchema();
-
-    const { rows } = await pool.query(
-      `
-      SELECT id, username, email, profile_pic, birth_date, email_verified, interests, interests_completed, pending_email, email_change_token, email_change_expires_at, created_at
-      FROM users
-      WHERE id = $1
-      LIMIT 1
-      `,
-      [req.user.id]
-    );
-
-    const user = rows[0];
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    if (
-      !user.pending_email ||
-      String(user.email_change_token || "") !== String(code) ||
-      !user.email_change_expires_at ||
-      new Date(user.email_change_expires_at) <= new Date()
-    ) {
-      return res.status(400).json({ error: "This confirmation code is invalid or expired" });
-    }
-
-    const duplicateEmail = await pool.query(
-      `
-      SELECT id
-      FROM users
-      WHERE LOWER(email) = LOWER($1)
-        AND id <> $2
-      LIMIT 1
-      `,
-      [user.pending_email, user.id]
-    );
-
-    if (duplicateEmail.rows.length > 0) {
-      return res.status(400).json({ error: "That email is already in use" });
-    }
-
-    const updateResult = await pool.query(
-      `
-      UPDATE users
-      SET email = pending_email,
-          pending_email = NULL,
-          email_change_token = NULL,
-          email_change_expires_at = NULL
-      WHERE id = $1
-      RETURNING id, username, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, created_at
-      `,
-      [user.id]
-    );
-
-    await pool.query(
-      `
-      UPDATE newsletter_subscriptions
-      SET email = $2
-      WHERE user_id = $1
-      `,
-      [user.id, updateResult.rows[0].email]
-    ).catch(() => null);
-
-    res.json({
-      user: sanitizeUser(updateResult.rows[0]),
-      message: "Email updated successfully",
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to confirm email change" });
   }
 });
 

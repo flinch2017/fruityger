@@ -55,15 +55,18 @@ export default function ChangeEmail() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setFeedback({ type: "error", message: data.error || "Couldn't start email change." });
+        setFeedback({ type: "error", message: data.error || "Couldn't update email." });
         return;
       }
 
-      persistAuthSession({ user: { pending_email: email } });
-      navigate("/settings/confirm-email-change", { replace: true });
+      persistAuthSession({ user: data.user });
+      sessionStorage.removeItem("accountChangeApprovalToken");
+      sessionStorage.removeItem("accountChangePurpose");
+      setFeedback({ type: "success", message: data.message || "Email updated successfully." });
+      setTimeout(() => navigate("/settings", { replace: true }), 700);
     } catch (error) {
       console.error(error);
-      setFeedback({ type: "error", message: "Couldn't start email change." });
+      setFeedback({ type: "error", message: "Couldn't update email." });
     } finally {
       setSubmitting(false);
     }
@@ -94,7 +97,7 @@ export default function ChangeEmail() {
           />
 
           <button type="submit" className="settings-flow-primary" disabled={submitting}>
-            {submitting ? "Sending..." : "Send confirmation code"}
+            {submitting ? "Updating..." : "Update email"}
           </button>
         </form>
       </div>

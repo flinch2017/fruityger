@@ -6,7 +6,9 @@ import { getSafeMediaUrl } from "../utils/mediaUrl";
 import {
   clearForgotPasswordResetToken,
   setForgotPasswordAccount,
+  setForgotPasswordResetToken,
 } from "../utils/forgotPasswordSession";
+import { getPasskeyCredential } from "../utils/webauthn";
 
 export default function ForgotPasswordSearch() {
   const navigate = useNavigate();
@@ -69,25 +71,51 @@ export default function ForgotPasswordSearch() {
 
   const handleChooseAccount = async (account) => {
     setFeedback({ type: "", message: "" });
+
+    if (!account.has_passkey) {
+      setFeedback({
+        type: "error",
+        message: "This account does not have a passkey yet. Log in and add one from Settings before using password recovery.",
+      });
+      return;
+    }
+
     setSubmittingId(account.id);
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/forgot-password/send-code", {
+      const optionsRes = await fetch("http://localhost:5000/api/auth/forgot-password/passkey/options", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: account.id }),
       });
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || "Couldn't send reset code.");
+      const optionsData = await optionsRes.json().catch(() => ({}));
+      if (!optionsRes.ok) {
+        throw new Error(optionsData.error || "Couldn't start passkey verification.");
       }
 
-      setForgotPasswordAccount(data.account || account);
-      navigate("/forgot-password/verify", { replace: true });
+      const credential = await getPasskeyCredential(optionsData.options);
+
+      const verifyRes = await fetch("http://localhost:5000/api/auth/forgot-password/passkey/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: account.id,
+          credential,
+        }),
+      });
+
+      const verifyData = await verifyRes.json().catch(() => ({}));
+      if (!verifyRes.ok) {
+        throw new Error(verifyData.error || "Passkey verification failed.");
+      }
+
+      setForgotPasswordAccount(optionsData.account || account);
+      setForgotPasswordResetToken(verifyData.resetToken);
+      navigate("/forgot-password/change-password", { replace: true });
     } catch (error) {
       console.error(error);
-      setFeedback({ type: "error", message: error.message || "Couldn't send reset code." });
+      setFeedback({ type: "error", message: error.message || "Passkey verification failed." });
     } finally {
       setSubmittingId("");
     }
@@ -99,7 +127,7 @@ export default function ForgotPasswordSearch() {
         <p className="forgot-password-kicker">Password Reset</p>
         <h1>Find your account</h1>
         <p className="forgot-password-subtitle">
-          Search by username or email, then choose your verified account to receive a 6-digit code.
+          Search by username or email, then use your saved passkey to reset your password.
         </p>
 
         {feedback.message && (
@@ -150,11 +178,13 @@ export default function ForgotPasswordSearch() {
 
                 <span className="forgot-password-account-copy">
                   <strong>{account.username}</strong>
-                  <span>{account.masked_email}</span>
+                  <span>
+                    {account.has_passkey ? "Passkey ready" : "No passkey set up"} · {account.masked_email}
+                  </span>
                 </span>
 
                 <span className="forgot-password-account-cta">
-                  {submittingId === account.id ? "Sending..." : "Select"}
+                  {submittingId === account.id ? "Checking..." : "Use passkey"}
                 </span>
               </button>
             ))}

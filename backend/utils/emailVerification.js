@@ -100,7 +100,12 @@ export const getFriendlyEmailErrorMessage = (error) => {
 export const ensureEmailVerificationSchema = async () => {
   await pool.query(`
     ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE
+    ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE
+  `);
+
+  await pool.query(`
+    ALTER TABLE users
+    ALTER COLUMN email_verified SET DEFAULT TRUE
   `);
 
   await pool.query(`
@@ -111,6 +116,14 @@ export const ensureEmailVerificationSchema = async () => {
   await pool.query(`
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ
+  `);
+
+  await pool.query(`
+    UPDATE users
+    SET email_verified = TRUE,
+        email_verification_code = NULL,
+        email_verification_expires_at = NULL
+    WHERE email_verified = FALSE
   `);
 };
 

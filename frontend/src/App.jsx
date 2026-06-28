@@ -7,10 +7,8 @@ import HelpCenter from "./pages/HelpCenter";
 import VerifyCurrentPassword from "./pages/VerifyCurrentPassword";
 import ChangeEmail from "./pages/ChangeEmail";
 import ChangePassword from "./pages/ChangePassword";
-import ConfirmEmailChange from "./pages/ConfirmEmailChange";
 import DangerZone from "./pages/DangerZone";
 import ForgotPasswordSearch from "./pages/ForgotPasswordSearch";
-import ForgotPasswordVerify from "./pages/ForgotPasswordVerify";
 import ForgotPasswordChange from "./pages/ForgotPasswordChange";
 import Notifications from "./pages/Notifications";
 import Messages from "./pages/Messages";
@@ -20,7 +18,6 @@ import Welcome from "./pages/Welcome";
 import WelcomeHeader from "./components/WelcomeHeader";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-import VerifyEmail from "./pages/VerifyEmail";
 import ChooseInterests from "./pages/ChooseInterests";
 import ScrollToTop from "./components/ScrollToTop";
 import PrivateRoute from "./components/PrivateRoute";
@@ -195,28 +192,10 @@ function App() {
           }
         />
         <Route
-          path="/verify-email"
-          element={
-            <PrivateRoute>
-              <StandaloneLayout>
-                <VerifyEmail />
-              </StandaloneLayout>
-            </PrivateRoute>
-          }
-        />
-        <Route
           path="/forgot-password"
           element={
             <StandaloneLayout>
               <ForgotPasswordSearch />
-            </StandaloneLayout>
-          }
-        />
-        <Route
-          path="/forgot-password/verify"
-          element={
-            <StandaloneLayout>
-              <ForgotPasswordVerify />
             </StandaloneLayout>
           }
         />
@@ -378,16 +357,6 @@ function App() {
           }
         />
         <Route
-          path="/settings/confirm-email-change"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <ConfirmEmailChange />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
-        <Route
           path="/settings/change-password"
           element={
             <PrivateRoute>
@@ -405,14 +374,6 @@ function App() {
                 <DangerZone />
               </MainLayout>
             </PrivateRoute>
-          }
-        />
-        <Route
-          path="/confirm-email-change"
-          element={
-            <StandaloneLayout>
-              <ConfirmEmailChange />
-            </StandaloneLayout>
           }
         />
         <Route

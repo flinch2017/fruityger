@@ -18,9 +18,10 @@ import notificationRoutes from "./routes/notifications.js";
 import repostRoutes from "./routes/reposts.js";
 import adminRoutes from "./routes/admin.js";
 import gameLobbyRoutes from "./routes/gameLobbies.js";
-import { cleanupExpiredUnverifiedUsers, ensureEmailVerificationSchema } from "./utils/emailVerification.js";
+import { ensureEmailVerificationSchema } from "./utils/emailVerification.js";
 import { backfillPostHashtags, ensureHashtagSchema } from "./utils/hashtags.js";
 import { ensurePerformanceIndexes } from "./utils/performanceIndexes.js";
+import { ensurePasskeySchema } from "./utils/webauthn.js";
 
 
 
@@ -79,8 +80,7 @@ app.get("/", (req, res) => {
 });
 
 ensureEmailVerificationSchema()
-  .then(() => cleanupExpiredUnverifiedUsers())
-  .catch((err) => console.error("Email verification bootstrap failed:", err));
+  .catch((err) => console.error("Email verification schema bootstrap failed:", err));
 
 ensureHashtagSchema()
   .then(() => backfillPostHashtags())
@@ -92,10 +92,8 @@ ensurePerformanceIndexes().catch((err) => {
   console.error("Performance index bootstrap failed:", err);
 });
 
-setInterval(() => {
-  cleanupExpiredUnverifiedUsers().catch((err) => {
-    console.error("Email verification cleanup failed:", err);
-  });
-}, 60 * 60 * 1000);
+ensurePasskeySchema().catch((err) => {
+  console.error("Passkey schema bootstrap failed:", err);
+});
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

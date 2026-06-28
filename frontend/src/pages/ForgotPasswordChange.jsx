@@ -76,7 +76,7 @@ export default function ForgotPasswordChange() {
         <p className="forgot-password-kicker">Password Reset</p>
         <h1>Choose a new password</h1>
         <p className="forgot-password-subtitle">
-          Set a fresh password after your email verification step.
+          Set a fresh password after your passkey check.
         </p>
 
         {feedback.message && (

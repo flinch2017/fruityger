@@ -313,7 +313,7 @@ export default function Signup() {
       }
 
       persistAuthSession(data);
-      setCustomMessage("success", "Account created. You can verify your email anytime from Settings.");
+      setCustomMessage("success", "Account created. Let's tune your interests first.");
       setTimeout(() => {
         navigate("/onboarding/interests", { replace: true });
       }, 500);
@@ -371,7 +371,7 @@ export default function Signup() {
                   onChange={handleChange}
                   required
                 />
-                <p className="signup-password-hint">Use a real email you can access for verification codes.</p>
+                <p className="signup-password-hint">Use the email address you want tied to this account.</p>
               </>
             )}
 

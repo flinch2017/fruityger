@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import "../css/Settings.css";
 import { persistAuthSession } from "../utils/authSession";
 import { applyTheme } from "../utils/theme";
+import { createPasskeyCredential } from "../utils/webauthn";
 
 const maskEmail = (email = "") => {
   const [localPart = "", domainPart = ""] = String(email).split("@");
@@ -25,18 +26,15 @@ const maskPassword = () => "************";
 export default function Settings() {
   const navigate = useNavigate();
   const [email, setEmail] = useState(localStorage.getItem("verificationEmail") || "");
-  const [pendingEmail, setPendingEmail] = useState(localStorage.getItem("pendingEmail") || "");
   const [theme, setTheme] = useState(() => localStorage.getItem("appearanceTheme") || "light");
   const [newsletterEnabled, setNewsletterEnabled] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [notificationSaving, setNotificationSaving] = useState(false);
   const [privateProfile, setPrivateProfile] = useState(false);
   const [privacySaving, setPrivacySaving] = useState(false);
-  const [emailVerified, setEmailVerified] = useState(localStorage.getItem("emailVerified") === "true");
-  const [verificationCode, setVerificationCode] = useState("");
-  const [verificationSubmitting, setVerificationSubmitting] = useState(false);
-  const [verificationResending, setVerificationResending] = useState(false);
-  const [verificationFeedback, setVerificationFeedback] = useState({ type: "", message: "" });
+  const [passkeys, setPasskeys] = useState([]);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [passkeyFeedback, setPasskeyFeedback] = useState({ type: "", message: "" });
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -56,8 +54,6 @@ export default function Settings() {
           if (data.user.email) {
             setEmail(data.user.email);
           }
-          setEmailVerified(Boolean(data.user.email_verified));
-          setPendingEmail(data.user.pending_email || "");
           persistAuthSession({ user: data.user });
         }
       } catch (error) {
@@ -127,37 +123,110 @@ export default function Settings() {
   }, []);
 
   const maskedEmail = useMemo(() => maskEmail(email), [email]);
-  const maskedPendingEmail = useMemo(() => maskEmail(pendingEmail), [pendingEmail]);
-  const formattedVerificationCode = useMemo(
-    () => verificationCode.replace(/\D/g, "").slice(0, 6),
-    [verificationCode]
-  );
 
-  const handleCancelPendingEmailChange = async () => {
+  const loadPasskeys = async () => {
     const token = localStorage.getItem("token");
-    if (!token) {
-      navigate("/login", { replace: true });
-      return;
-    }
+    if (!token) return;
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/cancel-email-change", {
-        method: "POST",
+      const res = await fetch("http://localhost:5000/api/auth/passkeys", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
       const data = await res.json().catch(() => ({}));
-
       if (!res.ok) {
-        return;
+        throw new Error(data.error || "Failed to load passkeys");
       }
 
-      setPendingEmail("");
-      persistAuthSession({ user: data.user });
+      setPasskeys(Array.isArray(data.passkeys) ? data.passkeys : []);
     } catch (error) {
       console.error(error);
+      setPasskeyFeedback({ type: "error", message: error.message || "Failed to load passkeys." });
+    }
+  };
+
+  useEffect(() => {
+    loadPasskeys();
+  }, []);
+
+  const handleAddPasskey = async () => {
+    const token = localStorage.getItem("token");
+    if (!token || passkeyBusy) return;
+
+    setPasskeyBusy(true);
+    setPasskeyFeedback({ type: "", message: "" });
+
+    try {
+      const optionsRes = await fetch("http://localhost:5000/api/auth/passkeys/register/options", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const optionsData = await optionsRes.json().catch(() => ({}));
+      if (!optionsRes.ok) {
+        throw new Error(optionsData.error || "Couldn't start passkey setup.");
+      }
+
+      const credential = await createPasskeyCredential(optionsData.options);
+
+      const verifyRes = await fetch("http://localhost:5000/api/auth/passkeys/register/verify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          credential,
+          name: "Fruityger passkey",
+        }),
+      });
+
+      const verifyData = await verifyRes.json().catch(() => ({}));
+      if (!verifyRes.ok) {
+        throw new Error(verifyData.error || "Couldn't save this passkey.");
+      }
+
+      setPasskeys((current) => [verifyData.passkey, ...current.filter((item) => item.id !== verifyData.passkey.id)]);
+      setPasskeyFeedback({ type: "success", message: "Passkey added. You can use it for password recovery." });
+    } catch (error) {
+      console.error(error);
+      setPasskeyFeedback({ type: "error", message: error.message || "Passkey setup failed." });
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
+
+  const handleRemovePasskey = async (passkeyId) => {
+    const token = localStorage.getItem("token");
+    if (!token || passkeyBusy) return;
+
+    setPasskeyBusy(true);
+    setPasskeyFeedback({ type: "", message: "" });
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/auth/passkeys/${passkeyId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Couldn't remove this passkey.");
+      }
+
+      setPasskeys((current) => current.filter((item) => item.id !== passkeyId));
+      setPasskeyFeedback({ type: "success", message: "Passkey removed." });
+    } catch (error) {
+      console.error(error);
+      setPasskeyFeedback({ type: "error", message: error.message || "Couldn't remove this passkey." });
+    } finally {
+      setPasskeyBusy(false);
     }
   };
 
@@ -246,87 +315,6 @@ export default function Settings() {
     }
   };
 
-  const handleVerifyEmail = async () => {
-    const token = localStorage.getItem("token");
-    if (!token || verificationSubmitting) return;
-
-    if (formattedVerificationCode.length !== 6) {
-      setVerificationFeedback({ type: "error", message: "Enter the full 6-digit code." });
-      return;
-    }
-
-    setVerificationSubmitting(true);
-    setVerificationFeedback({ type: "", message: "" });
-
-    try {
-      const res = await fetch("http://localhost:5000/api/auth/verify-email", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ code: formattedVerificationCode }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setVerificationFeedback({
-          type: "error",
-          message: data.error || "Verification failed.",
-        });
-        return;
-      }
-
-      setEmailVerified(Boolean(data.user?.email_verified));
-      persistAuthSession({ user: data.user });
-      setVerificationFeedback({ type: "success", message: "Email verified successfully." });
-      setVerificationCode("");
-    } catch (error) {
-      console.error(error);
-      setVerificationFeedback({ type: "error", message: "Verification request failed." });
-    } finally {
-      setVerificationSubmitting(false);
-    }
-  };
-
-  const handleResendVerificationCode = async () => {
-    const token = localStorage.getItem("token");
-    if (!token || verificationResending) return;
-
-    setVerificationResending(true);
-    setVerificationFeedback({ type: "", message: "" });
-
-    try {
-      const res = await fetch("http://localhost:5000/api/auth/resend-verification", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setVerificationFeedback({
-          type: "error",
-          message: data.error || "Failed to resend code.",
-        });
-        return;
-      }
-
-      setVerificationFeedback({
-        type: "success",
-        message: data.message || "A new verification code was sent.",
-      });
-    } catch (error) {
-      console.error(error);
-      setVerificationFeedback({ type: "error", message: "Failed to resend code." });
-    } finally {
-      setVerificationResending(false);
-    }
-  };
-
   return (
     <div className="settings-page">
       <div className="settings-hero">
@@ -348,90 +336,16 @@ export default function Settings() {
             <div className="settings-row-copy">
               <span className="settings-row-label">Email</span>
               <span className="settings-row-value">{maskedEmail}</span>
-              <span className={`settings-verify-status ${emailVerified ? "verified" : "unverified"}`}>
-                {emailVerified ? "Verified" : "Not verified"}
-              </span>
-              {pendingEmail && (
-                <span className="settings-row-pending">
-                  Pending: {maskedPendingEmail}
-                </span>
-              )}
             </div>
 
-            {pendingEmail ? (
-              <div className="settings-row-actions">
-                <button
-                  type="button"
-                  className="settings-row-btn"
-                  onClick={() => navigate("/settings/confirm-email-change")}
-                >
-                  Enter code
-                </button>
-
-                <button
-                  type="button"
-                  className="settings-row-btn settings-row-btn-secondary"
-                  onClick={handleCancelPendingEmailChange}
-                >
-                  Cancel changes
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="settings-row-btn"
-                onClick={() => navigate("/settings/verify-current-password?action=email")}
-              >
-                Change
-              </button>
-            )}
+            <button
+              type="button"
+              className="settings-row-btn"
+              onClick={() => navigate("/settings/verify-current-password?action=email")}
+            >
+              Change
+            </button>
           </div>
-
-          {!emailVerified && (
-            <div className="settings-verify-panel">
-              <p className="settings-verify-title">Verify your email</p>
-              <p className="settings-verify-subtitle">
-                Enter the 6-digit code sent to your email. You can resend a new code anytime.
-              </p>
-
-              {verificationFeedback.message && (
-                <div className={`settings-verify-feedback ${verificationFeedback.type}`}>
-                  {verificationFeedback.message}
-                </div>
-              )}
-
-              <div className="settings-verify-actions">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  placeholder="000000"
-                  className="settings-verify-input"
-                  value={formattedVerificationCode}
-                  onChange={(event) => {
-                    setVerificationFeedback({ type: "", message: "" });
-                    setVerificationCode(event.target.value);
-                  }}
-                />
-                <button
-                  type="button"
-                  className="settings-row-btn"
-                  onClick={handleVerifyEmail}
-                  disabled={verificationSubmitting}
-                >
-                  {verificationSubmitting ? "Verifying..." : "Verify email"}
-                </button>
-                <button
-                  type="button"
-                  className="settings-row-btn settings-row-btn-secondary"
-                  onClick={handleResendVerificationCode}
-                  disabled={verificationResending}
-                >
-                  {verificationResending ? "Sending..." : "Resend code"}
-                </button>
-              </div>
-            </div>
-          )}
 
           <div className="settings-row">
             <div className="settings-row-copy">
@@ -447,6 +361,52 @@ export default function Settings() {
               Change
             </button>
           </div>
+
+          <div className="settings-row settings-passkey-row">
+            <div className="settings-row-copy">
+              <span className="settings-row-label">Passkeys</span>
+              <span className="settings-row-value">
+                {passkeys.length
+                  ? `${passkeys.length} passkey${passkeys.length === 1 ? "" : "s"} ready for password recovery`
+                  : "Add a passkey to reset your password without email codes"}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              className="settings-row-btn"
+              onClick={handleAddPasskey}
+              disabled={passkeyBusy}
+            >
+              {passkeyBusy ? "Working..." : "Add passkey"}
+            </button>
+          </div>
+
+          {passkeyFeedback.message && (
+            <div className={`settings-verify-feedback ${passkeyFeedback.type}`}>
+              {passkeyFeedback.message}
+            </div>
+          )}
+
+          {passkeys.map((passkey) => (
+            <div key={passkey.id} className="settings-row settings-passkey-item">
+              <div className="settings-row-copy">
+                <span className="settings-row-label">{passkey.name || "Passkey"}</span>
+                <span className="settings-row-value">
+                  Added {passkey.created_at ? new Date(passkey.created_at).toLocaleDateString() : "recently"}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                className="settings-row-btn settings-row-btn-secondary"
+                onClick={() => handleRemovePasskey(passkey.id)}
+                disabled={passkeyBusy}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
         </div>
 
         <button

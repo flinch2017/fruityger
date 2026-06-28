@@ -57,7 +57,7 @@ export default function ChooseInterests() {
           return;
         }
 
-        if (data.user?.email_verified && data.user?.interests_completed) {
+        if (data.user?.interests_completed) {
           navigate("/feed", { replace: true });
           return;
         }
