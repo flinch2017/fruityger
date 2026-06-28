@@ -115,7 +115,11 @@ const decodeAttestationObject = (attestationObject) =>
   mapToObject(decodeCbor(fromBase64Url(attestationObject)));
 
 const getRpId = (req) => {
-  const origin = getExpectedOrigin(req);
+  if (process.env.PASSKEY_RP_ID) {
+    return String(process.env.PASSKEY_RP_ID).trim();
+  }
+
+  const origin = getPasskeyOrigin(req);
   return new URL(origin).hostname;
 };
 
@@ -127,6 +131,48 @@ const getExpectedOrigin = (req) => {
     process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS?.split(",")[0] || "http://localhost:5173"
   ).trim();
   return configured.replace(/\/+$/, "");
+};
+
+const normalizeOrigin = (value = "") => {
+  const trimmed = String(value || "").trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return trimmed;
+  }
+};
+
+const getPasskeyOrigin = (req) =>
+  normalizeOrigin(process.env.PASSKEY_ORIGIN || process.env.WEB_BASE_URL || getExpectedOrigin(req));
+
+const getAllowedPasskeyOrigins = (req) => {
+  const origins = new Set();
+  [
+    getExpectedOrigin(req),
+    getPasskeyOrigin(req),
+    process.env.FRONTEND_URL,
+    process.env.WEB_BASE_URL,
+    ...(process.env.ALLOWED_ORIGINS || "").split(","),
+    ...(process.env.PASSKEY_ALLOWED_ORIGINS || "").split(","),
+    ...(process.env.MOBILE_PASSKEY_ALLOWED_ORIGINS || "").split(","),
+  ].forEach((origin) => {
+    const normalized = normalizeOrigin(origin);
+    if (normalized) origins.add(normalized);
+  });
+
+  return origins;
+};
+
+const isAllowedPasskeyOrigin = (origin, req) => {
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (getAllowedPasskeyOrigins(req).has(normalizedOrigin)) {
+    return true;
+  }
+
+  const allowAndroidOrigins = String(process.env.PASSKEY_ALLOW_ANDROID_ORIGINS || "true") !== "false";
+  return allowAndroidOrigins && /^android:apk-key-hash:/i.test(normalizedOrigin);
 };
 
 const parseAuthenticatorData = (authData) => {
@@ -262,7 +308,7 @@ const validateClientData = async ({ clientDataJSON, type, challenge, req, userId
     throw new Error("Invalid passkey challenge");
   }
 
-  if (clientData.origin !== getExpectedOrigin(req)) {
+  if (!isAllowedPasskeyOrigin(clientData.origin, req)) {
     throw new Error("Invalid passkey origin");
   }
 
