@@ -728,10 +728,17 @@ router.post("/forgot-password/send-code", async (req, res) => {
         masked_email: maskEmail(user.email),
       },
     });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      error: getFriendlyEmailErrorMessage(error),
+  } catch (err) {
+    console.error("Password reset email failed:", {
+      message: err.message,
+      code: err.code,
+      status: err.response?.status,
+      data: err.response?.data,
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: getFriendlyEmailErrorMessage(err),
     });
   }
 });

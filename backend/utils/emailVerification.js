@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import axios from "axios";
+import mailjet from "node-mailjet";
 import pool from "../db.js";
 
 const VERIFICATION_WINDOW_HOURS = 24;
@@ -186,44 +187,38 @@ const sendWithMailjet = async ({ from, to, subject, text, html }) => {
   }
 
   try {
-    const response = await axios.post(
-      "https://api.mailjet.com/v3.1/send",
-      {
-        Messages: [
-          {
-            From: {
-              Email: parsedFrom.email,
-              ...(parsedFrom.name ? { Name: parsedFrom.name } : {}),
-            },
-            To: recipients,
-            Subject: subject,
-            TextPart: text,
-            HTMLPart: html,
+    const client = mailjet.apiConnect(apiKey, secretKey);
+
+    const result = await client.post("send", { version: "v3.1" }).request({
+      Messages: [
+        {
+          From: {
+            Email: parsedFrom.email,
+            ...(parsedFrom.name ? { Name: parsedFrom.name } : {}),
           },
-        ],
-      },
-      {
-        timeout: 20000,
-        auth: {
-          username: apiKey,
-          password: secretKey,
+          To: recipients,
+          Subject: subject,
+          TextPart: text,
+          HTMLPart: html,
         },
-        headers: {
-          "Content-Type": "application/json",
-          Connection: "close",
-        },
-      }
-    );
+      ],
+    });
 
     console.log("Mailjet email sent:", {
-      status: response.status,
+      status: result.response?.status,
       to: recipients.map((item) => item.Email),
       from: parsedFrom.email,
     });
 
-    return response.data;
+    return result.body;
   } catch (error) {
-    logSafeMailjetError(error);
+    console.error("Mailjet send failed:", {
+      message: error.message,
+      code: error.code,
+      status: error.statusCode || error.response?.status,
+      data: error.response?.data || error.ErrorMessage,
+    });
+
     throw error;
   }
 };
