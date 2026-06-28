@@ -53,6 +53,43 @@ app.use(
 );
 app.use(express.json());
 
+const androidPasskeyFingerprints = String(
+  process.env.ANDROID_PASSKEY_CERT_FINGERPRINTS ||
+    [
+      "FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C",
+      "2C:BF:76:84:32:77:5E:94:89:A3:FD:F8:DE:BB:2F:F5:5E:D8:A8:8A:9F:3E:8C:17:E3:CF:0B:06:53:B5:04:97",
+    ].join(",")
+)
+  .split(",")
+  .map((fingerprint) => fingerprint.trim())
+  .filter(Boolean);
+
+app.get("/.well-known/assetlinks.json", (req, res) => {
+  res.type("application/json").send([
+    {
+      relation: [
+        "delegate_permission/common.handle_all_urls",
+        "delegate_permission/common.get_login_creds",
+      ],
+      target: {
+        namespace: "android_app",
+        package_name: "com.dossiercreatives.fruityger",
+        sha256_cert_fingerprints: androidPasskeyFingerprints,
+      },
+    },
+  ]);
+});
+
+app.get("/.well-known/apple-app-site-association", (req, res) => {
+  const appleTeamId = String(process.env.APPLE_TEAM_ID || "").trim();
+
+  res.type("application/json").send({
+    webcredentials: {
+      apps: appleTeamId ? [`${appleTeamId}.com.dossiercreatives.fruityger`] : [],
+    },
+  });
+});
+
 // Auth routes
 app.use("/api/auth", authRoutes);
 app.use("/mobile", mobileRoutes);
