@@ -601,6 +601,144 @@ router.post("/login", async (req, res) => {
   }
 });
 
+router.post("/login/passkey/options", async (req, res) => {
+  const { identifier } = req.body || {};
+  const normalizedIdentifier = String(identifier || "").trim().toLowerCase();
+
+  await ensureEmailVerificationSchema();
+  await ensureUserOnboardingSchema();
+  await ensureAccountChangeSchema();
+  await ensureAccountStatusSchema();
+  await ensureUserCreatedAtSchema();
+  await ensurePasskeySchema();
+  await cleanupExpiredUnverifiedUsers();
+  await cleanupExpiredDeletedUsers();
+
+  if (!normalizedIdentifier) {
+    return res.status(400).json({ error: "Enter your email or username first" });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT *
+      FROM users
+      WHERE LOWER(email) = $1
+         OR LOWER(username) = $1
+      LIMIT 1
+      `,
+      [normalizedIdentifier]
+    );
+
+    const user = rows[0];
+    if (!user) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+
+    if (user.deleted_at && (!user.deletion_recovery_expires_at || new Date(user.deletion_recovery_expires_at) <= new Date())) {
+      return res.status(403).json({ error: "This account can no longer be recovered" });
+    }
+
+    if (user.admin_banned_at) {
+      return res.status(403).json({
+        error: "This account has been banned for violating community rules.",
+      });
+    }
+
+    const options = await getAssertionOptions({
+      req,
+      userId: user.id,
+      purpose: "passkey-login",
+    });
+
+    res.json({
+      userId: user.id,
+      options,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(400).json({ error: error.message || "Couldn't start passkey login" });
+  }
+});
+
+router.post("/login/passkey/verify", async (req, res) => {
+  const { userId, credential } = req.body || {};
+
+  await ensureEmailVerificationSchema();
+  await ensureUserOnboardingSchema();
+  await ensureAccountChangeSchema();
+  await ensureAccountStatusSchema();
+  await ensureUserCreatedAtSchema();
+  await ensurePasskeySchema();
+  await cleanupExpiredUnverifiedUsers();
+  await cleanupExpiredDeletedUsers();
+
+  if (!userId || !credential) {
+    return res.status(400).json({ error: "Passkey response is required" });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT *
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [userId]
+    );
+
+    const user = rows[0];
+    if (!user) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+
+    await verifyAssertion({
+      req,
+      userId: user.id,
+      purpose: "passkey-login",
+      credential,
+    });
+
+    let sessionUser = user;
+
+    if (
+      user.deleted_at &&
+      user.deletion_recovery_expires_at &&
+      new Date(user.deletion_recovery_expires_at) > new Date()
+    ) {
+      const restoredUser = await reactivateUserAccount(user.id);
+      if (!restoredUser) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      sessionUser = restoredUser;
+    } else if (user.deleted_at) {
+      return res.status(403).json({ error: "This account can no longer be recovered" });
+    } else if (user.admin_banned_at) {
+      return res.status(403).json({
+        error: "This account has been banned for violating community rules.",
+      });
+    } else if (user.deactivated_at) {
+      const reactivatedUser = await reactivateUserAccount(user.id);
+      if (!reactivatedUser) {
+        return res.status(403).json({
+          error: "This account has been banned for violating community rules.",
+        });
+      }
+      sessionUser = reactivatedUser;
+    }
+
+    res.json({
+      user: sanitizeUser(sessionUser),
+      token: signToken(sessionUser.id),
+      requiresVerification: false,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(400).json({ error: error.message || "Passkey login failed" });
+  }
+});
+
 router.post("/forgot-password/search", async (req, res) => {
   const { query } = req.body || {};
   const normalizedQuery = String(query || "").trim().toLowerCase();

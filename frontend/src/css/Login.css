@@ -213,6 +213,25 @@
     inset 0 0 15px rgba(255,255,255,0.3);
 }
 
+.login-passkey-btn {
+  margin-top: 0;
+  color: #0c7da7;
+  background: linear-gradient(
+    160deg,
+    rgba(255,255,255,0.96),
+    rgba(210,245,255,0.78)
+  );
+  box-shadow:
+    0 8px 18px rgba(0, 180, 255, 0.18),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+}
+
+.login-passkey-btn:hover {
+  box-shadow:
+    0 12px 24px rgba(0, 180, 255, 0.26),
+    inset 0 1px 0 rgba(255,255,255,0.98);
+}
+
 /* ===== CREATE ACCOUNT LINK ===== */
 .login-aero-create {
   text-align: center;

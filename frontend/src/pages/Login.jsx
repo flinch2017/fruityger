@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import "../css/Login.css";
 import { persistAuthSession } from "../utils/authSession";
 import TurnstileWidget from "../components/TurnstileWidget";
+import { getPasskeyCredential } from "../utils/webauthn";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -10,6 +11,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [passkeySubmitting, setPasskeySubmitting] = useState(false);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
   const captchaRef = useRef(null);
   const siteKey =
@@ -26,6 +28,25 @@ export default function Login() {
 
   const clearMessage = () => {
     setFeedback({ type: "", message: "" });
+  };
+
+  const finishLogin = (data) => {
+    persistAuthSession(data);
+    const requiresInterests = !data.user?.interests_completed;
+
+    setCustomMessage(
+      "success",
+      requiresInterests
+        ? "Login successful. Let's tune your interests first."
+        : "Login successful. Redirecting to your feed..."
+    );
+
+    setTimeout(() => {
+      navigate(
+        requiresInterests ? "/onboarding/interests" : "/feed",
+        { replace: true }
+      );
+    }, 500);
   };
 
   const handleSubmit = async (e) => {
@@ -66,28 +87,62 @@ export default function Login() {
         return;
       }
 
-      persistAuthSession(data);
-      const requiresInterests = !data.user?.interests_completed;
-
-      setCustomMessage(
-        "success",
-        requiresInterests
-          ? "Login successful. Let's tune your interests first."
-          : "Login successful. Redirecting to your feed..."
-      );
-
-      setTimeout(() => {
-        navigate(
-          requiresInterests ? "/onboarding/interests" : "/feed",
-          { replace: true }
-        );
-      }, 500);
+      finishLogin(data);
     } catch (err) {
       console.error(err);
       setCustomMessage("error", "Login request failed.");
       captchaRef.current?.reset();
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handlePasskeyLogin = async () => {
+    clearMessage();
+
+    if (!email) {
+      setCustomMessage("error", "Enter your email or username first.");
+      return;
+    }
+
+    setPasskeySubmitting(true);
+
+    try {
+      const optionsRes = await fetch("http://localhost:5000/api/auth/login/passkey/options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: email }),
+      });
+
+      const optionsData = await optionsRes.json().catch(() => ({}));
+      if (!optionsRes.ok) {
+        setCustomMessage("error", optionsData.error || "Couldn't start passkey login.");
+        return;
+      }
+
+      const credential = await getPasskeyCredential(optionsData.options);
+
+      const verifyRes = await fetch("http://localhost:5000/api/auth/login/passkey/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: optionsData.userId,
+          credential,
+        }),
+      });
+
+      const verifyData = await verifyRes.json().catch(() => ({}));
+      if (!verifyRes.ok) {
+        setCustomMessage("error", verifyData.error || "Passkey login failed.");
+        return;
+      }
+
+      finishLogin(verifyData);
+    } catch (error) {
+      console.error(error);
+      setCustomMessage("error", error.message || "Passkey login failed.");
+    } finally {
+      setPasskeySubmitting(false);
     }
   };
 
@@ -148,6 +203,15 @@ export default function Login() {
 
             <button type="submit" className="login-aero-btn" disabled={submitting}>
               {submitting ? "Logging in..." : "Log In"}
+            </button>
+
+            <button
+              type="button"
+              className="login-aero-btn login-passkey-btn"
+              onClick={handlePasskeyLogin}
+              disabled={passkeySubmitting || submitting}
+            >
+              {passkeySubmitting ? "Checking passkey..." : "Login with passkey"}
             </button>
 
             <div className="login-aero-forgot">
