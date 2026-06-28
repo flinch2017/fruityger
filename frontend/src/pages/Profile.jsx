@@ -10,6 +10,7 @@ import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
+import FollowSuggestions from "../components/FollowSuggestions";
 
 export default function Profile() {
 
@@ -61,9 +62,14 @@ export default function Profile() {
   const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
   const [notice, setNotice] = useState(null);
   const [privatePostsHidden, setPrivatePostsHidden] = useState(false);
+  const [showFollowSuggestions, setShowFollowSuggestions] = useState(false);
 
   const LIMIT = 5;
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setShowFollowSuggestions(false);
+  }, [username]);
 
   const goToProfile = (targetUsername) => {
     if (!targetUsername) return;
@@ -935,6 +941,9 @@ export default function Profile() {
 
       setFollowing(nextFollowing);
       setFollowRequested(nextRequested);
+      if (!wasFollowing && (nextFollowing || nextRequested)) {
+        setShowFollowSuggestions(true);
+      }
       setUser(prev => ({
         ...prev,
         followers_count: Math.max(
@@ -1236,6 +1245,14 @@ export default function Profile() {
           </div>
         </div>
       </div>
+
+      {showFollowSuggestions && !isOwnProfile && !isBlockedProfile && token && (
+        <FollowSuggestions
+          variant="profile"
+          limit={10}
+          contextUsername={user.username}
+        />
+      )}
 
       <div className="profile-posts">
         <h3>Posts & Reposts</h3>

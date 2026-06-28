@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { FaUser } from "react-icons/fa";
 import "../css/FollowListPage.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import VerifiedBadge from "../components/VerifiedBadge";
+import FollowSuggestions from "../components/FollowSuggestions";
 
 export default function FollowListPage() {
   const navigate = useNavigate();
@@ -118,7 +120,7 @@ export default function FollowListPage() {
       <div className="follow-list-card">
         <div className="follow-list-header">
           <button className="follow-list-back" onClick={() => navigate(-1)}>
-            ←
+            &larr;
           </button>
 
           <div className="follow-list-header-text">
@@ -137,57 +139,67 @@ export default function FollowListPage() {
             <div className="follow-list-spinner"></div>
             <p>Loading {pageTitle.toLowerCase()}...</p>
           </div>
-        ) : accounts.length === 0 ? (
-          <p className="follow-list-empty">No {pageTitle.toLowerCase()} yet</p>
         ) : (
-          <div className="follow-list-items">
-            {accounts.map((account) => (
-              <div key={account.id} className="follow-list-item">
-                <div
-                  className="follow-list-user"
-                  onClick={() => navigate(`/profile/${account.username}`)}
-                >
-                  <div className="follow-list-avatar">
-                    {account.profile_pic ? (
-                      <img src={getSafeMediaUrl(account.profile_pic)} alt={account.username} />
-                    ) : (
-                      "👤"
+          <>
+            <FollowSuggestions
+              variant="follow-list"
+              limit={10}
+              contextUsername={ownerUsername}
+            />
+
+            {accounts.length === 0 ? (
+              <p className="follow-list-empty">No {pageTitle.toLowerCase()} yet</p>
+            ) : (
+              <div className="follow-list-items">
+                {accounts.map((account) => (
+                  <div key={account.id} className="follow-list-item">
+                    <div
+                      className="follow-list-user"
+                      onClick={() => navigate(`/profile/${account.username}`)}
+                    >
+                      <div className="follow-list-avatar">
+                        {account.profile_pic ? (
+                          <img src={getSafeMediaUrl(account.profile_pic)} alt={account.username} />
+                        ) : (
+                          <FaUser />
+                        )}
+                      </div>
+
+                      <div className="follow-list-user-text">
+                        <span className="follow-list-username">
+                          <span className="username-with-badge">
+                            {account.username}
+                            <VerifiedBadge verified={account.is_verified} />
+                          </span>
+                        </span>
+                        <span className="follow-list-subtitle">
+                          {account.is_self ? "You" : `@${account.username}`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {!account.is_self && (
+                      <button
+                        className={`follow-list-action ${account.is_following ? "following" : ""}`}
+                        onClick={() => toggleFollow(account)}
+                        disabled={!!togglingMap[account.id]}
+                      >
+                        {togglingMap[account.id]
+                          ? "..."
+                          : account.is_following
+                            ? "Unfollow"
+                            : account.requested
+                              ? "Requested"
+                              : account.is_private
+                                ? "Request"
+                                : "Follow"}
+                      </button>
                     )}
                   </div>
-
-                  <div className="follow-list-user-text">
-                    <span className="follow-list-username">
-                      <span className="username-with-badge">
-                        {account.username}
-                        <VerifiedBadge verified={account.is_verified} />
-                      </span>
-                    </span>
-                    <span className="follow-list-subtitle">
-                      {account.is_self ? "You" : `@${account.username}`}
-                    </span>
-                  </div>
-                </div>
-
-                {!account.is_self && (
-                  <button
-                    className={`follow-list-action ${account.is_following ? "following" : ""}`}
-                    onClick={() => toggleFollow(account)}
-                    disabled={!!togglingMap[account.id]}
-                  >
-                    {togglingMap[account.id]
-                      ? "..."
-                      : account.is_following
-                        ? "Unfollow"
-                        : account.requested
-                          ? "Requested"
-                          : account.is_private
-                            ? "Request"
-                            : "Follow"}
-                  </button>
-                )}
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
     </div>

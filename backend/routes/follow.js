@@ -2,6 +2,7 @@ import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { createNotification } from "../utils/notifications.js";
+import { ensureHashtagSchema } from "../utils/hashtags.js";
 import { ensurePrivateAccountSchema } from "../utils/privacy.js";
 import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
 
@@ -192,53 +193,94 @@ router.get("/status", authenticateToken, async (req, res) => {
 
 router.get("/suggestions", authenticateToken, async (req, res) => {
   const currentUserId = req.user.id;
-  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 5, 1), 12);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 16);
+  const contextUsername = String(req.query.contextUsername || "").trim();
 
   try {
     await ensurePrivateAccountSchema();
     await ensureVerificationBadgeSchema();
+    await ensureHashtagSchema();
     await ensureBlockedUsersTable();
 
-    const suggestionFields = `
-      u.id,
-      u.username,
-      u.profile_pic,
-      u.is_verified,
-      COALESCE(u.is_private, false) AS is_private,
-      COALESCE(stats.followers_count, 0)::int AS followers_count,
-      COALESCE(stats.posts_count, 0)::int AS posts_count,
-      EXISTS (
-        SELECT 1
-        FROM follow_requests fr
-        WHERE fr.requester_id = $1
-          AND fr.requested_id = u.id
-      ) AS requested
-    `;
-
-    const baseFilters = `
-      u.id <> $1
-      AND u.deactivated_at IS NULL
-      AND u.deleted_at IS NULL
-      AND NOT EXISTS (
-        SELECT 1
-        FROM follows existing_follow
-        WHERE existing_follow.follower_id = $1
-          AND existing_follow.following_id = u.id
-      )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM blocked_users bu
-        WHERE (
-          bu.blocker_id = $1
-          AND bu.blocked_id = u.id
-        ) OR (
-          bu.blocker_id = u.id
-          AND bu.blocked_id = $1
+    const contextUserResult = contextUsername
+      ? await pool.query(
+          `
+          SELECT id
+          FROM users
+          WHERE LOWER(username) = LOWER($1)
+            AND deactivated_at IS NULL
+            AND deleted_at IS NULL
+          LIMIT 1
+          `,
+          [contextUsername]
         )
-      )
-    `;
+      : { rows: [] };
 
-    const statsJoin = `
+    const contextUserId = contextUserResult.rows[0]?.id || null;
+
+    const preferenceResult = await pool.query(
+      `
+      SELECT EXISTS (
+        SELECT 1
+        FROM follows f
+        JOIN users followed_user
+          ON followed_user.id = f.following_id
+        WHERE f.follower_id = $1
+          AND COALESCE(followed_user.is_verified, false) = false
+          AND followed_user.deactivated_at IS NULL
+          AND followed_user.deleted_at IS NULL
+      ) AS follows_ordinary_accounts
+      `,
+      [currentUserId]
+    );
+
+    const allowOrdinaryAccounts = Boolean(
+      preferenceResult.rows[0]?.follows_ordinary_accounts
+    );
+
+    const suggestionsResult = await pool.query(
+      `
+      WITH viewer_interests AS (
+        SELECT LOWER(TRIM(value)) AS value
+        FROM jsonb_array_elements_text(
+          COALESCE((SELECT interests FROM users WHERE id = $1), '[]'::jsonb)
+        ) viewer_interest(value)
+        WHERE TRIM(value) <> ''
+      ),
+      viewer_interest_tags AS (
+        SELECT REPLACE(value, ' ', '_') AS tag
+        FROM viewer_interests
+      )
+      SELECT
+        u.id,
+        u.username,
+        u.profile_pic,
+        u.is_verified,
+        COALESCE(u.is_private, false) AS is_private,
+        COALESCE(stats.followers_count, 0)::int AS followers_count,
+        COALESCE(stats.posts_count, 0)::int AS posts_count,
+        COALESCE(mutuals.mutual_count, 0)::int AS mutual_count,
+        EXISTS (
+          SELECT 1
+          FROM follow_requests fr
+          WHERE fr.requester_id = $1
+            AND fr.requested_id = u.id
+        ) AS requested,
+        CASE
+          WHEN COALESCE(mutuals.mutual_count, 0) > 0
+            THEN COALESCE(mutuals.mutual_count, 0)::int || ' mutual connection' ||
+              CASE WHEN COALESCE(mutuals.mutual_count, 0)::int = 1 THEN '' ELSE 's' END
+          WHEN COALESCE(context_links.link_count, 0) > 0
+            THEN 'Connected to this profile'
+          WHEN COALESCE(content_matches.match_count, 0) > 0
+            THEN 'Posts about your interests'
+          WHEN COALESCE(shared_interests.shared_count, 0) > 0
+            THEN 'Shares your interests'
+          WHEN COALESCE(u.is_verified, false)
+            THEN 'Verified account'
+          ELSE 'Suggested for you'
+        END AS reason
+      FROM users u
       LEFT JOIN LATERAL (
         SELECT
           (SELECT COUNT(*) FROM follows f WHERE f.following_id = u.id) AS followers_count,
@@ -255,47 +297,6 @@ router.get("/suggestions", authenticateToken, async (req, res) => {
               AND p.date_posted >= NOW() - INTERVAL '30 days'
           ) AS recent_engagement
       ) stats ON TRUE
-    `;
-
-    const creatorsResult = await pool.query(
-      `
-      SELECT
-        ${suggestionFields},
-        CASE
-          WHEN COALESCE(stats.posts_count, 0) = 0 THEN 'New creator'
-          WHEN COALESCE(stats.recent_engagement, 0) >= 10 THEN 'Popular creator'
-          ELSE 'Active creator'
-        END AS reason
-      FROM users u
-      ${statsJoin}
-      WHERE ${baseFilters}
-        AND COALESCE(stats.posts_count, 0) > 0
-      ORDER BY
-        (COALESCE(stats.recent_engagement, 0) * 1.4) +
-        (COALESCE(stats.followers_count, 0) * 0.45) +
-        (CASE WHEN stats.latest_post_at >= NOW() - INTERVAL '7 days' THEN 18 ELSE 0 END) +
-        (RANDOM() * 8) DESC,
-        u.username ASC
-      LIMIT $2
-      `,
-      [currentUserId, limit]
-    );
-
-    const peopleResult = await pool.query(
-      `
-      SELECT
-        ${suggestionFields},
-        COALESCE(mutuals.mutual_count, 0)::int AS mutual_count,
-        CASE
-          WHEN COALESCE(mutuals.mutual_count, 0) > 0
-            THEN COALESCE(mutuals.mutual_count, 0)::int || ' mutual connection' ||
-              CASE WHEN COALESCE(mutuals.mutual_count, 0)::int = 1 THEN '' ELSE 's' END
-          WHEN COALESCE(shared_interests.shared_count, 0) > 0
-            THEN 'Shares your interests'
-          ELSE 'Suggested for you'
-        END AS reason
-      FROM users u
-      ${statsJoin}
       LEFT JOIN LATERAL (
         SELECT COUNT(DISTINCT f2.follower_id) AS mutual_count
         FROM follows f1
@@ -307,23 +308,71 @@ router.get("/suggestions", authenticateToken, async (req, res) => {
       LEFT JOIN LATERAL (
         SELECT COUNT(*) AS shared_count
         FROM jsonb_array_elements_text(COALESCE(u.interests, '[]'::jsonb)) target_interest(value)
-        WHERE LOWER(TRIM(target_interest.value)) IN (
-          SELECT LOWER(TRIM(my_interest.value))
-          FROM jsonb_array_elements_text(
-            COALESCE((SELECT interests FROM users WHERE id = $1), '[]'::jsonb)
-          ) my_interest(value)
-        )
+        WHERE LOWER(TRIM(target_interest.value)) IN (SELECT value FROM viewer_interests)
       ) shared_interests ON TRUE
-      WHERE ${baseFilters}
+      LEFT JOIN LATERAL (
+        SELECT COUNT(DISTINCT p.post_id) AS match_count
+        FROM posts p
+        WHERE p.user_id = u.id
+          AND p.date_posted >= NOW() - INTERVAL '90 days'
+          AND (
+            EXISTS (
+              SELECT 1
+              FROM post_hashtags ph
+              WHERE ph.post_id = p.post_id
+                AND ph.tag IN (SELECT tag FROM viewer_interest_tags)
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM viewer_interests vi
+              WHERE LOWER(COALESCE(p.caption, '')) LIKE '%' || vi.value || '%'
+            )
+          )
+      ) content_matches ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*) AS link_count
+        FROM follows context_follow
+        WHERE $3::uuid IS NOT NULL
+          AND (
+            (context_follow.follower_id = $3::uuid AND context_follow.following_id = u.id)
+            OR (context_follow.follower_id = u.id AND context_follow.following_id = $3::uuid)
+          )
+      ) context_links ON TRUE
+      WHERE u.id <> $1
+        AND u.deactivated_at IS NULL
+        AND u.deleted_at IS NULL
+        AND ($4::boolean = true OR COALESCE(u.is_verified, false) = true)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM follows existing_follow
+          WHERE existing_follow.follower_id = $1
+            AND existing_follow.following_id = u.id
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM blocked_users bu
+          WHERE (
+            bu.blocker_id = $1
+            AND bu.blocked_id = u.id
+          ) OR (
+            bu.blocker_id = u.id
+            AND bu.blocked_id = $1
+          )
+        )
       ORDER BY
-        (COALESCE(mutuals.mutual_count, 0) * 16) +
-        (COALESCE(shared_interests.shared_count, 0) * 8) +
-        (COALESCE(stats.followers_count, 0) * 0.25) +
-        (RANDOM() * 6) DESC,
+        (COALESCE(mutuals.mutual_count, 0) * 24) +
+        (COALESCE(context_links.link_count, 0) * 20) +
+        (COALESCE(content_matches.match_count, 0) * 14) +
+        (COALESCE(shared_interests.shared_count, 0) * 10) +
+        (CASE WHEN COALESCE(u.is_verified, false) THEN 8 ELSE 0 END) +
+        (CASE WHEN stats.latest_post_at >= NOW() - INTERVAL '14 days' THEN 7 ELSE 0 END) +
+        (COALESCE(stats.recent_engagement, 0) * 0.7) +
+        (COALESCE(stats.followers_count, 0) * 0.18) +
+        (RANDOM() * 4) DESC,
         u.username ASC
       LIMIT $2
       `,
-      [currentUserId, limit]
+      [currentUserId, limit, contextUserId, allowOrdinaryAccounts]
     );
 
     const normalizeSuggestion = (row) => ({
@@ -335,9 +384,13 @@ router.get("/suggestions", authenticateToken, async (req, res) => {
       mutual_count: Number(row.mutual_count || 0),
     });
 
+    const accounts = suggestionsResult.rows.map(normalizeSuggestion);
+
     return res.json({
-      creators: creatorsResult.rows.map(normalizeSuggestion),
-      people: peopleResult.rows.map(normalizeSuggestion),
+      accounts,
+      creators: accounts,
+      people: [],
+      ordinary_accounts_allowed: allowOrdinaryAccounts,
     });
   } catch (err) {
     console.error(err);

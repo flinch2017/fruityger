@@ -55,6 +55,7 @@ export default function Feed() {
     const params = new URLSearchParams(location.search);
     return params.get("mode") === "following" ? "following" : "discover";
   }, [location.search]);
+  const suggestionInsertIndex = posts.length > 1 ? 1 : 0;
 
   const mergeUniquePosts = (existingPosts, incomingPosts) => {
     const seen = new Set();
@@ -792,8 +793,6 @@ export default function Feed() {
         />
       )}
 
-      <FollowSuggestions variant="feed" limit={4} />
-
       <div
         className="feed"
         onTouchStart={handleFeedTouchStart}
@@ -844,13 +843,13 @@ export default function Feed() {
           </div>
         )}
 
-        {posts.map((post) => (
-          <div
-            key={post.post_id}
-            className={`feed-post-card ${
-              disappearingPosts.includes(post.post_id) ? "feed-fade-out" : "feed-fade-in"
-            }`}
-          >
+        {posts.map((post, index) => (
+          <React.Fragment key={post.post_id}>
+            <div
+              className={`feed-post-card ${
+                disappearingPosts.includes(post.post_id) ? "feed-fade-out" : "feed-fade-in"
+              }`}
+            >
             <div
               className="feed-post-more-wrapper"
               ref={activeMenuPostId === post.post_id ? dropdownRef : null}
@@ -1116,7 +1115,12 @@ export default function Feed() {
                 </div>
               </div>
             </div>
-          </div>
+            </div>
+
+            {index === suggestionInsertIndex && (
+              <FollowSuggestions variant="feed" limit={10} />
+            )}
+          </React.Fragment>
         ))}
 
         {hasMore && (

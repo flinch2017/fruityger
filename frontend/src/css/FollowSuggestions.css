@@ -1,9 +1,6 @@
 .follow-suggestions {
   width: min(720px, 100%);
   margin: 0 auto 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
   font-family: "Segoe UI", sans-serif;
 }
 
@@ -12,15 +9,28 @@
   margin-bottom: 18px;
 }
 
+.follow-suggestions.feed {
+  margin: 8px auto 22px;
+}
+
+.follow-suggestions.profile {
+  margin: -6px auto 22px;
+}
+
+.follow-suggestions.follow-list {
+  width: 100%;
+  margin: 2px 0 20px;
+}
+
 .follow-suggestion-section,
 .follow-suggestions-loading {
-  border-radius: 24px;
-  padding: 16px;
-  background: linear-gradient(160deg, rgba(255,255,255,0.86), rgba(214,246,255,0.68));
-  border: 1px solid rgba(255,255,255,0.94);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.88);
   box-shadow:
-    0 14px 32px rgba(0, 165, 255, 0.13),
-    inset 0 1px 0 rgba(255,255,255,0.96);
+    0 12px 28px rgba(0, 165, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
 .follow-suggestions-loading {
@@ -30,6 +40,10 @@
 }
 
 .follow-suggestion-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
@@ -40,50 +54,59 @@
 }
 
 .follow-suggestion-heading p {
-  margin: 5px 0 0;
+  margin: 0;
   color: #587b89;
-  font-size: 0.86rem;
+  font-size: 0.78rem;
+  text-align: right;
 }
 
 .follow-suggestion-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(220px, 240px);
   gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 8px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
 }
 
 .follow-suggestion-card {
   min-width: 0;
+  min-height: 148px;
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
+  grid-template-rows: auto 1fr auto;
+  justify-items: center;
+  gap: 8px;
   padding: 12px;
-  border-radius: 18px;
+  border-radius: 16px;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.82);
   box-shadow:
-    0 10px 20px rgba(0, 169, 255, 0.1),
-    inset 0 1px 0 rgba(255,255,255,0.96);
+    0 8px 18px rgba(0, 169, 255, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96);
+  scroll-snap-align: start;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .follow-suggestion-card:hover {
   transform: translateY(-2px);
   box-shadow:
-    0 14px 24px rgba(0, 169, 255, 0.16),
-    inset 0 1px 0 rgba(255,255,255,0.98);
+    0 12px 22px rgba(0, 169, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.98);
 }
 
 .follow-suggestion-avatar {
-  width: 46px;
-  height: 46px;
+  width: 52px;
+  height: 52px;
   overflow: hidden;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #0a7da6;
-  background: linear-gradient(180deg, rgba(230,251,255,0.95), rgba(181,238,255,0.84));
+  background: linear-gradient(180deg, rgba(230, 251, 255, 0.95), rgba(181, 238, 255, 0.84));
 }
 
 .follow-suggestion-avatar img {
@@ -94,11 +117,12 @@
 
 .follow-suggestion-copy {
   min-width: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 3px;
-  text-align: left;
+  text-align: center;
 }
 
 .follow-suggestion-copy strong {
@@ -128,6 +152,7 @@
 }
 
 .follow-suggestion-action {
+  min-width: 92px;
   border: none;
   border-radius: 999px;
   padding: 8px 12px;
@@ -138,7 +163,7 @@
   background: linear-gradient(145deg, #00d7ff, #33bfff, #48a8ff);
   box-shadow:
     0 8px 16px rgba(0, 183, 255, 0.24),
-    inset 0 0 12px rgba(255,255,255,0.28);
+    inset 0 0 12px rgba(255, 255, 255, 0.28);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -146,7 +171,7 @@
   transform: translateY(-1px);
   box-shadow:
     0 10px 18px rgba(0, 183, 255, 0.3),
-    inset 0 0 12px rgba(255,255,255,0.34);
+    inset 0 0 12px rgba(255, 255, 255, 0.34);
 }
 
 @media (max-width: 620px) {
@@ -154,17 +179,23 @@
     width: 100%;
   }
 
+  .follow-suggestion-section,
+  .follow-suggestions-loading {
+    border-radius: 16px;
+    padding: 12px;
+  }
+
+  .follow-suggestion-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .follow-suggestion-heading p {
+    text-align: left;
+  }
+
   .follow-suggestion-list {
-    grid-template-columns: 1fr;
-  }
-
-  .follow-suggestion-card {
-    grid-template-columns: 42px minmax(0, 1fr) auto;
-    padding: 11px;
-  }
-
-  .follow-suggestion-avatar {
-    width: 42px;
-    height: 42px;
+    grid-auto-columns: minmax(190px, 72vw);
   }
 }
