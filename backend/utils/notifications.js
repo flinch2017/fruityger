@@ -4,6 +4,14 @@ import pool from "../db.js";
 let notificationsTableReadyPromise = null;
 let pushSubscriptionsTableReadyPromise = null;
 
+const PUSH_ONLY_NOTIFICATION_TYPES = new Set([
+  "direct_message",
+  "group_message",
+  "group_message_reply",
+  "message_reaction",
+  "group_message_reaction",
+]);
+
 export async function ensureNotificationsTable() {
   if (!notificationsTableReadyPromise) {
     notificationsTableReadyPromise = (async () => {
@@ -297,30 +305,36 @@ export async function createNotification({
   }
 
   try {
-    await ensureNotificationsTable();
     await ensurePushNotificationSubscriptionsTable();
+    let notificationRow = null;
 
-    const { rows } = await pool.query(
-      `
-      INSERT INTO notifications
-        (notification_id, recipient_id, actor_id, type, post_id, comment_id, chat_id, group_chat_id, message_id, game_lobby_id, game_match_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING *
-      `,
-      [
-        uuidv4(),
-        recipientId,
-        actorId,
-        type,
-        postId,
-        commentId,
-        chatId,
-        groupChatId,
-        messageId,
-        gameLobbyId,
-        gameMatchId,
-      ]
-    );
+    if (!PUSH_ONLY_NOTIFICATION_TYPES.has(type)) {
+      await ensureNotificationsTable();
+
+      const { rows } = await pool.query(
+        `
+        INSERT INTO notifications
+          (notification_id, recipient_id, actor_id, type, post_id, comment_id, chat_id, group_chat_id, message_id, game_lobby_id, game_match_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *
+        `,
+        [
+          uuidv4(),
+          recipientId,
+          actorId,
+          type,
+          postId,
+          commentId,
+          chatId,
+          groupChatId,
+          messageId,
+          gameLobbyId,
+          gameMatchId,
+        ]
+      );
+
+      notificationRow = rows[0] || null;
+    }
 
     const actorResult = await pool.query(
       `
@@ -353,7 +367,7 @@ export async function createNotification({
         },
     });
 
-    return rows[0] || null;
+    return notificationRow;
   } catch (error) {
     console.error("Notification creation failed:", error);
     return null;

@@ -5,6 +5,14 @@ import { ensureNotificationsTable } from "../utils/notifications.js";
 
 const router = express.Router();
 
+const CHAT_ALERT_NOTIFICATION_TYPES = [
+  "direct_message",
+  "group_message",
+  "group_message_reply",
+  "message_reaction",
+  "group_message_reaction",
+];
+
 router.get("/", authenticateToken, async (req, res) => {
   try {
     await ensureNotificationsTable();
@@ -39,10 +47,11 @@ router.get("/", authenticateToken, async (req, res) => {
       LEFT JOIN comments c
         ON c.comment_id = n.comment_id
       WHERE n.recipient_id = $1
+        AND n.type <> ALL($4::text[])
       ORDER BY n.created_at DESC
       LIMIT $2 OFFSET $3
       `,
-      [req.user.id, limit, offset]
+      [req.user.id, limit, offset, CHAT_ALERT_NOTIFICATION_TYPES]
     );
 
     res.json({ notifications: rows });
@@ -62,8 +71,9 @@ router.get("/unread-count", authenticateToken, async (req, res) => {
       FROM notifications
       WHERE recipient_id = $1
         AND is_read = false
+        AND type <> ALL($2::text[])
       `,
-      [req.user.id]
+      [req.user.id, CHAT_ALERT_NOTIFICATION_TYPES]
     );
 
     res.json({ unreadCount: rows[0]?.unread_count || 0 });
@@ -83,8 +93,9 @@ router.post("/read-all", authenticateToken, async (req, res) => {
       SET is_read = true
       WHERE recipient_id = $1
         AND is_read = false
+        AND type <> ALL($2::text[])
       `,
-      [req.user.id]
+      [req.user.id, CHAT_ALERT_NOTIFICATION_TYPES]
     );
 
     res.json({ success: true });
@@ -109,8 +120,9 @@ router.post("/clear", authenticateToken, async (req, res) => {
         `
         DELETE FROM notifications
         WHERE recipient_id = $1
+          AND type <> ALL($2::text[])
         `,
-        [req.user.id]
+        [req.user.id, CHAT_ALERT_NOTIFICATION_TYPES]
       );
 
       return res.json({ success: true });
