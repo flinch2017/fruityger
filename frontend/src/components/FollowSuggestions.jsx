@@ -86,14 +86,46 @@ export default function FollowSuggestions({
     setAccounts((current) => current.filter((item) => item.username !== username));
   };
 
+  const updateSuggestion = (username, updates) => {
+    setAccounts((current) =>
+      current.map((item) => (item.username === username ? { ...item, ...updates } : item))
+    );
+  };
+
+  const getActionLabel = (account) => {
+    if (busyUsername === account.username) return "...";
+    if (account.requested) return "Requested";
+    if (account.requested_me) return "Accept";
+    return account.is_private ? "Request" : "Follow";
+  };
+
   const handleFollow = async (event, account) => {
     event.stopPropagation();
     const token = localStorage.getItem("token");
     if (!token || busyUsername) return;
+    if (account.requested) return;
 
     setBusyUsername(account.username);
 
     try {
+      if (account.requested_me) {
+        const res = await fetch(`http://localhost:5000/api/follow/requests/${account.id}/accept`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.message || "Failed to accept follow request");
+        }
+
+        removeSuggestion(account.username);
+        onFollowed?.(account, { accepted: true });
+        return;
+      }
+
       const res = await fetch("http://localhost:5000/api/follow/toggle", {
         method: "POST",
         headers: {
@@ -108,8 +140,11 @@ export default function FollowSuggestions({
         throw new Error(data.message || "Failed to follow account");
       }
 
-      if (data.following || data.requested) {
+      if (data.following) {
         removeSuggestion(account.username);
+        onFollowed?.(account, data);
+      } else if (data.requested) {
+        updateSuggestion(account.username, { requested: true, reason: "Request pending" });
         onFollowed?.(account, data);
       }
     } catch (error) {
@@ -149,14 +184,11 @@ export default function FollowSuggestions({
 
           <button
             type="button"
-            className="follow-suggestion-action"
+            className={`follow-suggestion-action ${account.requested ? "disabled" : ""}`}
             onClick={(event) => handleFollow(event, account)}
+            disabled={busyUsername === account.username || account.requested}
           >
-            {busyUsername === account.username
-              ? "..."
-              : account.is_private
-                ? "Request"
-                : "Follow"}
+            {getActionLabel(account)}
           </button>
         </div>
       )),

@@ -266,7 +266,20 @@ router.get("/suggestions", authenticateToken, async (req, res) => {
           WHERE fr.requester_id = $1
             AND fr.requested_id = u.id
         ) AS requested,
+        EXISTS (
+          SELECT 1
+          FROM follow_requests fr
+          WHERE fr.requester_id = u.id
+            AND fr.requested_id = $1
+        ) AS requested_me,
         CASE
+          WHEN EXISTS (
+            SELECT 1
+            FROM follow_requests fr
+            WHERE fr.requester_id = u.id
+              AND fr.requested_id = $1
+          )
+            THEN 'Requested to follow you'
           WHEN COALESCE(mutuals.mutual_count, 0) > 0
             THEN COALESCE(mutuals.mutual_count, 0)::int || ' mutual connection' ||
               CASE WHEN COALESCE(mutuals.mutual_count, 0)::int = 1 THEN '' ELSE 's' END
@@ -379,6 +392,7 @@ router.get("/suggestions", authenticateToken, async (req, res) => {
       ...row,
       is_following: false,
       requested: Boolean(row.requested),
+      requested_me: Boolean(row.requested_me),
       followers_count: Number(row.followers_count || 0),
       posts_count: Number(row.posts_count || 0),
       mutual_count: Number(row.mutual_count || 0),

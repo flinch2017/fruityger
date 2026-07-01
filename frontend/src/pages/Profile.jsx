@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useParams } from "react-router-dom";
 import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaTimes, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
@@ -11,6 +11,13 @@ import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
 import FollowSuggestions from "../components/FollowSuggestions";
+
+const PROFILE_TABS = [
+  { key: "general", label: "General" },
+  { key: "posts", label: "Posts" },
+  { key: "reposts", label: "Reposts" },
+  { key: "tapes", label: "Tapes" },
+];
 
 export default function Profile() {
 
@@ -63,6 +70,9 @@ export default function Profile() {
   const [notice, setNotice] = useState(null);
   const [privatePostsHidden, setPrivatePostsHidden] = useState(false);
   const [showFollowSuggestions, setShowFollowSuggestions] = useState(false);
+  const [activeProfileTab, setActiveProfileTab] = useState("general");
+  const [gridFeedOpen, setGridFeedOpen] = useState(false);
+  const [activeProfilePostId, setActiveProfilePostId] = useState(null);
 
   const LIMIT = 5;
   const navigate = useNavigate();
@@ -75,6 +85,41 @@ export default function Profile() {
     if (!targetUsername) return;
     window.scrollTo({ top: 0, behavior: "smooth" });
     navigate(`/profile/${targetUsername}`);
+  };
+
+  const isTapePost = (post) =>
+    Array.isArray(post?.media) && post.media.some((media) => media.media_type === "video");
+
+  const profileTabPosts = useMemo(
+    () => ({
+      general: posts,
+      posts: posts.filter((post) => post.activity_type !== "repost"),
+      reposts: posts.filter((post) => post.activity_type === "repost"),
+      tapes: posts.filter(isTapePost),
+    }),
+    [posts]
+  );
+
+  const activeTabPosts = profileTabPosts[activeProfileTab] || [];
+
+  const getProfileGridMedia = (post) => {
+    if (!Array.isArray(post?.media) || post.media.length === 0) return null;
+    if (activeProfileTab === "tapes") {
+      return post.media.find((media) => media.media_type === "video") || post.media[0];
+    }
+    return post.media[0];
+  };
+
+  const openProfileGridItem = (post) => {
+    setActiveProfilePostId(post.post_id);
+    setGridFeedOpen(true);
+  };
+
+  const changeProfileTab = (tabKey) => {
+    setActiveProfileTab(tabKey);
+    setGridFeedOpen(false);
+    setActiveProfilePostId(null);
+    setActiveMenuPostId(null);
   };
   
 
@@ -393,10 +438,23 @@ export default function Profile() {
     setActiveCommentPost(null);
     setFollowRequested(false);
     setPrivatePostsHidden(false);
+    setActiveProfileTab("general");
+    setGridFeedOpen(false);
+    setActiveProfilePostId(null);
     fetchCurrentUser();
     fetchUser();
     fetchPosts(true);
   }, [username]);
+
+  useEffect(() => {
+    if (!gridFeedOpen || !activeProfilePostId) return;
+
+    requestAnimationFrame(() => {
+      document
+        .getElementById(`profile-post-${activeProfilePostId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [gridFeedOpen, activeProfilePostId, activeProfileTab]);
 
   /* ================= FIXED INFINITE SCROLL ================= */
 
@@ -1255,7 +1313,38 @@ export default function Profile() {
       )}
 
       <div className="profile-posts">
-        <h3>Posts & Reposts</h3>
+        <div className="profile-content-header">
+          <h3>{PROFILE_TABS.find((tab) => tab.key === activeProfileTab)?.label || "General"}</h3>
+          {gridFeedOpen && (
+            <button
+              type="button"
+              className="profile-grid-back"
+              onClick={() => {
+                setGridFeedOpen(false);
+                setActiveProfilePostId(null);
+                setActiveMenuPostId(null);
+              }}
+            >
+              Grid
+            </button>
+          )}
+        </div>
+
+        <div className="profile-tabs" role="tablist" aria-label="Profile content">
+          {PROFILE_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={activeProfileTab === tab.key}
+              className={`profile-tab ${activeProfileTab === tab.key ? "active" : ""}`}
+              onClick={() => changeProfileTab(tab.key)}
+            >
+              <span>{tab.label}</span>
+              <small>{formatCount(profileTabPosts[tab.key]?.length || 0)}</small>
+            </button>
+          ))}
+        </div>
 
         {isBlockedProfile && !isOwnProfile ? (
           <p className="no-posts-message">
@@ -1267,13 +1356,55 @@ export default function Profile() {
           <p className="no-posts-message">
             This profile is private. Follow @{user.username} to see their posts and reposts.
           </p>
-        ) : posts.length === 0 && !loadingPosts && (
+        ) : posts.length === 0 && !loadingPosts ? (
           <p className="no-posts-message">No posts yet</p>
+        ) : activeTabPosts.length === 0 && !loadingPosts ? (
+          <p className="no-posts-message">No {PROFILE_TABS.find((tab) => tab.key === activeProfileTab)?.label.toLowerCase()} yet</p>
+        ) : null}
+
+        {!isBlockedProfile && !privatePostsHidden && activeTabPosts.length > 0 && (
+          <div className="profile-grid" aria-label="Profile grid">
+            {activeTabPosts.map((post) => {
+              const gridMedia = getProfileGridMedia(post);
+              const isVideoTile = gridMedia?.media_type === "video";
+
+              return (
+                <button
+                  key={`${activeProfileTab}-${post.post_id}`}
+                  type="button"
+                  className={`profile-grid-tile ${!gridMedia ? "text-only" : ""}`}
+                  onClick={() => openProfileGridItem(post)}
+                >
+                  {gridMedia ? (
+                    isVideoTile ? (
+                      <video
+                        src={getSafeMediaUrl(gridMedia.media_url)}
+                        muted
+                        playsInline
+                        preload="metadata"
+                      />
+                    ) : (
+                      <img src={getSafeMediaUrl(gridMedia.media_url)} alt="" />
+                    )
+                  ) : (
+                    <span className="profile-grid-text">
+                      {post.caption || "Post"}
+                    </span>
+                  )}
+
+                  <span className="profile-grid-overlay">
+                    {post.activity_type === "repost" ? "Repost" : isTapePost(post) ? "Tape" : "Post"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         )}
 
-        {!isBlockedProfile && !privatePostsHidden && posts.map(post => (
+        {!isBlockedProfile && !privatePostsHidden && gridFeedOpen && activeTabPosts.map(post => (
           <div
             key={post.post_id}
+            id={`profile-post-${post.post_id}`}
             className={`post-card ${disappearingPosts.includes(post.post_id) ? "fade-out" : "fade-in"}`}
           >
             {/* ===== MORE OPTIONS (TOP RIGHT) ===== */}
@@ -1557,3 +1688,4 @@ export default function Profile() {
     </div>
   );
 }
+

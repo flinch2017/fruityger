@@ -10,6 +10,30 @@ import CaptionWithHashtags from "./CaptionWithHashtags";
 import VerifiedBadge from "./VerifiedBadge";
 import FollowSuggestions from "./FollowSuggestions";
 
+const FEED_SUGGESTION_COOLDOWN_MS = 10 * 60 * 1000;
+const FEED_SUGGESTION_CHANCE = 0.35;
+
+const shouldShowFeedSuggestionsThisVisit = (feedMode) => {
+  try {
+    const storageKey = `fruityger-feed-suggestions-last-shown-${feedMode}`;
+    const lastShownAt = Number(sessionStorage.getItem(storageKey) || 0);
+    const now = Date.now();
+
+    if (lastShownAt && now - lastShownAt < FEED_SUGGESTION_COOLDOWN_MS) {
+      return false;
+    }
+
+    const shouldShow = Math.random() < FEED_SUGGESTION_CHANCE;
+    if (shouldShow) {
+      sessionStorage.setItem(storageKey, String(now));
+    }
+
+    return shouldShow;
+  } catch {
+    return Math.random() < FEED_SUGGESTION_CHANCE;
+  }
+};
+
 export default function Feed() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -56,6 +80,7 @@ export default function Feed() {
     return params.get("mode") === "following" ? "following" : "discover";
   }, [location.search]);
   const suggestionInsertIndex = posts.length > 1 ? 1 : 0;
+  const [showFeedSuggestions, setShowFeedSuggestions] = useState(false);
 
   const mergeUniquePosts = (existingPosts, incomingPosts) => {
     const seen = new Set();
@@ -181,6 +206,7 @@ export default function Feed() {
   };
 
   useEffect(() => {
+    setShowFeedSuggestions(shouldShowFeedSuggestionsThisVisit(feedMode));
     setPosts([]);
     setOffset(0);
     setHasMore(true);
@@ -1117,7 +1143,7 @@ export default function Feed() {
             </div>
             </div>
 
-            {index === suggestionInsertIndex && (
+            {showFeedSuggestions && index === suggestionInsertIndex && (
               <FollowSuggestions variant="feed" limit={10} />
             )}
           </React.Fragment>
