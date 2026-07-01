@@ -592,15 +592,46 @@ export default function Chat() {
     }
 
     setSending(true);
+    const draftContent = input.trim();
+    const draftAttachment = selectedAttachment;
+    const draftReply = replyingTo;
+    const tempMessageId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const optimisticMessage = {
+      id: tempMessageId,
+      chat_id: chatId,
+      sender_id: userId,
+      receiver_id: otherUser.id,
+      content: draftContent || (draftAttachment ? getAttachmentKindLabel(draftAttachment) : ""),
+      reply_to_message_id: draftReply?.id || null,
+      reply_to_content: draftReply?.content || null,
+      reply_to_sender_id: draftReply?.sender_id || null,
+      attachment_url: null,
+      attachment_type: null,
+      attachment_name: draftAttachment?.name || null,
+      attachment_size: draftAttachment?.size || null,
+      read_status: false,
+      reactions: [],
+      created_at: new Date().toISOString(),
+      send_status: "sending",
+    };
+
+    setMessages((prev) => [optimisticMessage, ...prev]);
+    setInput("");
+    setSelectedAttachment(null);
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = "";
+    }
+    setReplyingTo(null);
+    scrollToBottom("smooth");
 
     try {
       const formData = new FormData();
       formData.append("chatId", chatId);
       formData.append("receiverId", otherUser.id);
-      formData.append("content", input);
-      formData.append("replyToMessageId", replyingTo?.id || "");
-      if (selectedAttachment) {
-        formData.append("attachment", selectedAttachment);
+      formData.append("content", draftContent);
+      formData.append("replyToMessageId", draftReply?.id || "");
+      if (draftAttachment) {
+        formData.append("attachment", draftAttachment);
       }
 
       const res = await fetch("http://localhost:5000/api/messages/send", {
@@ -618,25 +649,29 @@ export default function Chat() {
       }
 
       setMessages((prev) => {
-        if (prev.some((message) => message.id === data.id)) {
-          return prev;
+        let replacedPending = false;
+        const nextMessages = prev.map((message) => {
+          if (message.id !== tempMessageId) return message;
+          replacedPending = true;
+          return data;
+        });
+
+        if (nextMessages.some((message) => message.id === data.id)) {
+          return nextMessages;
         }
 
-        return [data, ...prev];
+        return replacedPending ? nextMessages : [data, ...nextMessages];
       });
 
-      setInput("");
-      setSelectedAttachment(null);
-      if (attachmentInputRef.current) {
-        attachmentInputRef.current.value = "";
-      }
-      setReplyingTo(null);
-      scrollToBottom("smooth");
       dispatchMessagesRefresh();
       await broadcastChatSync("sent-message");
       await broadcastInboxSync("sent-message");
     } catch (err) {
       console.error(err);
+      setMessages((prev) => prev.filter((message) => message.id !== tempMessageId));
+      setInput(draftContent);
+      setSelectedAttachment(draftAttachment);
+      setReplyingTo(draftReply);
       setNotice({ type: "error", message: err.message || "Failed to send message." });
     } finally {
       setSending(false);
@@ -1088,6 +1123,7 @@ export default function Chat() {
           messages.map((msg, index) => {
             const isMine = String(msg.sender_id) === String(userId);
             const isLastMessage = index === 0;
+            const isSendingMessage = msg.send_status === "sending";
             const bubbleClass = `message-bubble ${
               isMine && isLastMessage ? "new-message" : ""
             }`;
@@ -1098,7 +1134,7 @@ export default function Chat() {
                 className={`message-wrapper ${isMine ? "sent" : "received"}`}
               >
                 <div className="message-row">
-                  {isMine && (
+                  {isMine && !isSendingMessage && (
                     <div className="message-options-wrapper">
                       <button
                         type="button"
@@ -1131,7 +1167,7 @@ export default function Chat() {
                     </button>
                   )}
 
-                  {isMine && (
+                  {isMine && !isSendingMessage && (
                     <div className="message-reaction-wrap">
                       <button
                         type="button"
@@ -1165,7 +1201,7 @@ export default function Chat() {
                     ) : null}
                   </div>
 
-                  {!isMine && (
+                  {!isMine && !isSendingMessage && (
                     <div className="message-reaction-wrap">
                       <button
                         type="button"
@@ -1241,9 +1277,9 @@ export default function Chat() {
                     {formatMessageTime(msg.created_at)}
                   </span>
 
-                  {isMine && isLastMessage && (
+                  {isMine && (isLastMessage || isSendingMessage) && (
                     <span className="seen-status">
-                      {msg.read_status ? "Seen" : "Sent"}
+                      {isSendingMessage ? "Sending..." : msg.read_status ? "Seen" : "Sent"}
                     </span>
                   )}
                 </div>

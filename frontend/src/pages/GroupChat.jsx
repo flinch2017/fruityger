@@ -446,13 +446,45 @@ export default function GroupChat() {
     if ((!input.trim() && !selectedAttachment) || sending) return;
 
     setSending(true);
+    const draftContent = input.trim();
+    const draftAttachment = selectedAttachment;
+    const draftReply = replyingTo;
+    const tempMessageId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const optimisticMessage = {
+      id: tempMessageId,
+      group_chat_id: groupChatId,
+      sender_id: userId,
+      sender_username: "You",
+      sender_profile_pic: null,
+      content: draftContent || (draftAttachment ? getAttachmentKindLabel(draftAttachment) : ""),
+      reply_to_message_id: draftReply?.id || null,
+      reply_to_content: draftReply?.content || null,
+      reply_to_sender_id: draftReply?.sender_id || null,
+      reply_to_sender_username: draftReply?.sender_username || null,
+      attachment_url: null,
+      attachment_type: null,
+      attachment_name: draftAttachment?.name || null,
+      attachment_size: draftAttachment?.size || null,
+      reactions: [],
+      created_at: new Date().toISOString(),
+      send_status: "sending",
+    };
+
+    setMessages((prev) => [optimisticMessage, ...prev]);
+    setInput("");
+    setReplyingTo(null);
+    setSelectedAttachment(null);
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = "";
+    }
+    scrollToBottom("smooth");
 
     try {
       const formData = new FormData();
-      formData.append("content", input);
-      formData.append("replyToMessageId", replyingTo?.id || "");
-      if (selectedAttachment) {
-        formData.append("attachment", selectedAttachment);
+      formData.append("content", draftContent);
+      formData.append("replyToMessageId", draftReply?.id || "");
+      if (draftAttachment) {
+        formData.append("attachment", draftAttachment);
       }
 
       const res = await fetch(`http://localhost:5000/api/messages/groups/chats/${groupChatId}/send`, {
@@ -468,17 +500,27 @@ export default function GroupChat() {
         throw new Error(data.error || "Failed to send group message");
       }
 
-      setMessages((prev) => [data, ...prev]);
-      setInput("");
-      setReplyingTo(null);
-      setSelectedAttachment(null);
-      if (attachmentInputRef.current) {
-        attachmentInputRef.current.value = "";
-      }
-      scrollToBottom("smooth");
+      setMessages((prev) => {
+        let replacedPending = false;
+        const nextMessages = prev.map((message) => {
+          if (message.id !== tempMessageId) return message;
+          replacedPending = true;
+          return data;
+        });
+
+        if (nextMessages.some((message) => message.id === data.id)) {
+          return nextMessages;
+        }
+
+        return replacedPending ? nextMessages : [data, ...nextMessages];
+      });
       dispatchMessagesRefresh();
     } catch (error) {
       console.error(error);
+      setMessages((prev) => prev.filter((message) => message.id !== tempMessageId));
+      setInput(draftContent);
+      setReplyingTo(draftReply);
+      setSelectedAttachment(draftAttachment);
       setNotice({ type: "error", message: error.message || "Failed to send group message." });
     } finally {
       setSending(false);
@@ -1196,12 +1238,13 @@ export default function GroupChat() {
           messages.map((msg, index) => {
             const isMine = String(msg.sender_id) === String(userId);
             const isLastMessage = index === 0;
+            const isSendingMessage = msg.send_status === "sending";
             const bubbleClass = `message-bubble ${isMine && isLastMessage ? "new-message" : ""}`;
 
             return (
               <div key={msg.id} className={`message-wrapper ${isMine ? "sent" : "received"}`}>
                 <div className="message-row">
-                  {isMine && (
+                  {isMine && !isSendingMessage && (
                     <div className="message-options-wrapper">
                       <button
                         type="button"
@@ -1237,7 +1280,7 @@ export default function GroupChat() {
                     </button>
                   )}
 
-                  {isMine && (
+                  {isMine && !isSendingMessage && (
                     <div className="message-reaction-wrap">
                       <button
                         type="button"
@@ -1277,7 +1320,7 @@ export default function GroupChat() {
                     {msg.content ? <div className="message-bubble-text">{msg.content}</div> : null}
                   </div>
 
-                  {!isMine && (
+                  {!isMine && !isSendingMessage && (
                     <div className="message-reaction-wrap">
                       <button
                         type="button"
@@ -1347,6 +1390,9 @@ export default function GroupChat() {
 
                 <div className="message-meta">
                   <span className="message-time">{formatMessageTime(msg.created_at)}</span>
+                  {isMine && isSendingMessage && (
+                    <span className="seen-status">Sending...</span>
+                  )}
                 </div>
               </div>
             );
