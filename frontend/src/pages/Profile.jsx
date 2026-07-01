@@ -21,7 +21,7 @@ const PROFILE_TABS = [
 
 export default function Profile() {
 
-  const { username } = useParams();
+  const { username, tab: routeTab, postId: routePostId } = useParams();
   const token = localStorage.getItem("token");
 
   const [user, setUser] = useState(null);
@@ -81,6 +81,21 @@ export default function Profile() {
     setShowFollowSuggestions(false);
   }, [username]);
 
+  useEffect(() => {
+    const validTab = PROFILE_TABS.some((tabItem) => tabItem.key === routeTab)
+      ? routeTab
+      : "general";
+
+    if (routePostId) {
+      setActiveProfileTab(validTab);
+      setGridFeedOpen(true);
+      setActiveProfilePostId(routePostId);
+    } else {
+      setGridFeedOpen(false);
+      setActiveProfilePostId(null);
+    }
+  }, [routeTab, routePostId]);
+
   const goToProfile = (targetUsername) => {
     if (!targetUsername) return;
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -111,8 +126,7 @@ export default function Profile() {
   };
 
   const openProfileGridItem = (post) => {
-    setActiveProfilePostId(post.post_id);
-    setGridFeedOpen(true);
+    navigate(`/profile/${user?.username || username}/${activeProfileTab}/${post.post_id}`);
   };
 
   const changeProfileTab = (tabKey) => {
@@ -120,6 +134,9 @@ export default function Profile() {
     setGridFeedOpen(false);
     setActiveProfilePostId(null);
     setActiveMenuPostId(null);
+    if (routePostId) {
+      navigate(`/profile/${user?.username || username}`, { replace: true });
+    }
   };
   
 
@@ -438,9 +455,9 @@ export default function Profile() {
     setActiveCommentPost(null);
     setFollowRequested(false);
     setPrivatePostsHidden(false);
-    setActiveProfileTab("general");
-    setGridFeedOpen(false);
-    setActiveProfilePostId(null);
+    setActiveProfileTab(PROFILE_TABS.some((tabItem) => tabItem.key === routeTab) ? routeTab : "general");
+    setGridFeedOpen(Boolean(routePostId));
+    setActiveProfilePostId(routePostId || null);
     fetchCurrentUser();
     fetchUser();
     fetchPosts(true);
@@ -452,7 +469,7 @@ export default function Profile() {
     requestAnimationFrame(() => {
       document
         .getElementById(`profile-post-${activeProfilePostId}`)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        ?.scrollIntoView({ behavior: "auto", block: "start" });
     });
   }, [gridFeedOpen, activeProfilePostId, activeProfileTab]);
 
@@ -1319,11 +1336,7 @@ export default function Profile() {
             <button
               type="button"
               className="profile-grid-back"
-              onClick={() => {
-                setGridFeedOpen(false);
-                setActiveProfilePostId(null);
-                setActiveMenuPostId(null);
-              }}
+              onClick={() => navigate(`/profile/${user?.username || username}`)}
             >
               Grid
             </button>
@@ -1362,7 +1375,7 @@ export default function Profile() {
           <p className="no-posts-message">No {PROFILE_TABS.find((tab) => tab.key === activeProfileTab)?.label.toLowerCase()} yet</p>
         ) : null}
 
-        {!isBlockedProfile && !privatePostsHidden && activeTabPosts.length > 0 && (
+        {!isBlockedProfile && !privatePostsHidden && !gridFeedOpen && activeTabPosts.length > 0 && (
           <div className="profile-grid" aria-label="Profile grid">
             {activeTabPosts.map((post) => {
               const gridMedia = getProfileGridMedia(post);

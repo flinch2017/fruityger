@@ -495,6 +495,14 @@ function App() {
           }
         />
         <Route
+          path="/profile/:username/:tab/:postId"
+          element={
+            <ProfileLayout>
+              <Profile />
+            </ProfileLayout>
+          }
+        />
+        <Route
           path="/profile/:username"
           element={
             <ProfileLayout>
