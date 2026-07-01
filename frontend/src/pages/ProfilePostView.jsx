@@ -40,19 +40,18 @@ export default function ProfilePostView() {
     return posts;
   }, [activeTab, posts]);
 
-  const orderedPosts = useMemo(() => {
-    const selectedIndex = tabPosts.findIndex((post) => String(post.post_id) === String(postId));
-    if (selectedIndex <= 0) return tabPosts;
-    return [
-      tabPosts[selectedIndex],
-      ...tabPosts.slice(selectedIndex + 1),
-      ...tabPosts.slice(0, selectedIndex),
-    ];
-  }, [postId, tabPosts]);
-
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "auto" });
-  }, [postId, activeTab]);
+    if (tabPosts.length === 0) return;
+
+    const target = tabPosts.find((post) => String(post.post_id) === String(postId));
+    if (!target) return;
+
+    window.setTimeout(() => {
+      document
+        .getElementById(`profile-post-view-${postId}`)
+        ?.scrollIntoView({ behavior: "auto", block: "start" });
+    }, 80);
+  }, [postId, activeTab, tabPosts.length]);
 
   useEffect(() => {
     if (initialPosts.length > 0) return;
@@ -221,16 +220,20 @@ export default function ProfilePostView() {
 
         {loading ? (
           <div className="post-loader">Loading post...</div>
-        ) : orderedPosts.length === 0 ? (
+        ) : tabPosts.length === 0 ? (
           <p className="no-posts-message">Post not found</p>
         ) : (
-          orderedPosts.map((post) => {
+          tabPosts.map((post) => {
             const activeIndex = activeIndexMap[post.post_id] || 0;
             const activeMedia = post.media?.[activeIndex];
             const videoKey = `${post.post_id}-${activeIndex}`;
 
             return (
-              <div key={`${activeTab}-${post.post_id}`} className="post-card fade-in">
+              <div
+                key={`${activeTab}-${post.post_id}`}
+                id={`profile-post-view-${post.post_id}`}
+                className="post-card fade-in"
+              >
                 <div className="post-header">
                   <div className="post-user-info">
                     <button
