@@ -6,6 +6,7 @@ import "../css/ReportPage.css";
 const REPORT_REASONS = [
   { value: "spam", label: "Spam" },
   { value: "harassment", label: "Harassment" },
+  { value: "sexual_abuse_exploitation", label: "Sexual abuse or exploitation" },
   { value: "offensive", label: "Offensive content" },
   { value: "misinformation", label: "Misinformation" },
   { value: "other", label: "Other" },
