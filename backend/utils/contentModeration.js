@@ -12,6 +12,8 @@ const OPENAI_MODERATION_URL = "https://api.openai.com/v1/moderations";
 const MODERATION_MODEL = process.env.OPENAI_MODERATION_MODEL || "omni-moderation-latest";
 const REVIEW_THRESHOLD = Number(process.env.CONTENT_MODERATION_REVIEW_THRESHOLD || 0.35);
 const BLOCK_THRESHOLD = Number(process.env.CONTENT_MODERATION_BLOCK_THRESHOLD || 0.85);
+const FAIL_OPEN_ON_MODERATION_ERROR =
+  String(process.env.CONTENT_MODERATION_FAIL_OPEN || "true").toLowerCase() !== "false";
 const MAX_IMAGE_BYTES_FOR_DIRECT_DATA_URL = 4 * 1024 * 1024;
 const MAX_TEXT_PREVIEW_LENGTH = 700;
 const FFMPEG_EXEC_OPTIONS = {
@@ -46,6 +48,18 @@ function isModerationEnabled() {
 function normalizeNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
+}
+
+function getModerationErrorSummary(error) {
+  const responseData = error?.response?.data;
+  const responseError = responseData?.error || responseData;
+
+  return {
+    status: error?.response?.status || null,
+    code: responseError?.code || error?.code || null,
+    type: responseError?.type || null,
+    message: responseError?.message || error?.message || "Unknown moderation error",
+  };
 }
 
 function getMediaKind(media) {
@@ -362,9 +376,12 @@ export async function assertContentAllowedOrReport({
   try {
     result = await moderateContent({ text, media });
   } catch (error) {
+    const errorSummary = getModerationErrorSummary(error);
+    console.error("OpenAI moderation request failed:", errorSummary);
+
     const details = JSON.stringify({
       status: "moderation_failed",
-      error: error?.response?.data || error?.message || "Unknown moderation error",
+      error: errorSummary,
       context,
     });
 
@@ -375,6 +392,15 @@ export async function assertContentAllowedOrReport({
       reason: "automated_content_moderation_failed",
       details,
     });
+
+    if (FAIL_OPEN_ON_MODERATION_ERROR) {
+      return {
+        status: "skipped",
+        reason: "moderation_failed",
+        flagged: false,
+        error: errorSummary,
+      };
+    }
 
     throw new ContentModerationError("Content safety check failed. Please try again.", {
       statusCode: 503,
