@@ -12,6 +12,7 @@ import { authenticateToken } from "../middleware/auth.js";
 import { ensureHashtagSchema, extractHashtags, MAX_HASHTAGS_PER_POST, syncPostHashtags } from "../utils/hashtags.js";
 import { syncPostMentions } from "../utils/mentions.js";
 import { transcodeVideoFileToMp4 } from "../utils/videoProcessing.js";
+import { assertContentAllowedOrReport, ContentModerationError } from "../utils/contentModeration.js";
 
 const router = express.Router();
 const sanitizeFileName = (value = "") =>
@@ -65,6 +66,27 @@ router.post(
 
             /* ⭐ Insert post */
             postId = uuidv4();
+
+            await assertContentAllowedOrReport({
+                userId: req.user.id,
+                contentType: "post",
+                contentId: postId,
+                text: caption,
+                media: files.map((file) => ({
+                    kind: file.mimetype?.startsWith("video")
+                        ? "video"
+                        : file.mimetype?.startsWith("image")
+                            ? "image"
+                            : "other",
+                    filePath: file.path,
+                    mimetype: file.mimetype,
+                    originalName: file.originalname,
+                })),
+                context: {
+                    surface: "post_create",
+                    media_count: files.length,
+                },
+            });
 
             await pool.query(
                 `INSERT INTO posts (post_id, user_id, caption)
@@ -150,6 +172,13 @@ router.post(
 
         } catch (err) {
             console.error(err);
+
+            if (err instanceof ContentModerationError) {
+                return res.status(err.statusCode || 400).json({
+                    error: err.message,
+                    moderation: err.result,
+                });
+            }
 
             if (postId) {
                 try {

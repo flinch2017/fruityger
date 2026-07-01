@@ -9,6 +9,7 @@ import { r2 } from "../utils/r2.js";
 import { createNotification, sendPushToUser } from "../utils/notifications.js";
 import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
 import { ensureAccountNameSchema } from "../utils/accountName.js";
+import { assertContentAllowedOrReport, ContentModerationError } from "../utils/contentModeration.js";
 
 const router = express.Router();
 
@@ -124,6 +125,23 @@ function getAttachmentFallbackText(type) {
   if (type === "pdf") return "Sent a PDF";
   if (type === "docx") return "Sent a DOCX file";
   return "Sent an attachment";
+}
+
+function getModerationAttachment(attachment) {
+  if (!attachment) return [];
+
+  return [
+    {
+      kind: attachment.mimetype?.startsWith("video")
+        ? "video"
+        : attachment.mimetype?.startsWith("image")
+          ? "image"
+          : "other",
+      buffer: attachment.buffer,
+      mimetype: attachment.mimetype,
+      originalName: attachment.originalname,
+    },
+  ];
 }
 
 async function ensureDeletedChatsTable() {
@@ -953,6 +971,20 @@ router.post("/send", authenticateToken, async (req, res) => {
       }
     }
 
+    await assertContentAllowedOrReport({
+      userId: senderId,
+      contentType: "message",
+      contentId: chatId,
+      text: trimmedContent,
+      media: getModerationAttachment(attachment),
+      context: {
+        surface: "direct_message_send",
+        chat_id: chatId,
+        receiver_id: receiverId,
+        has_attachment: Boolean(attachment),
+      },
+    });
+
     let attachmentUrl = null;
     let attachmentType = null;
     let attachmentName = null;
@@ -1050,6 +1082,13 @@ router.post("/send", authenticateToken, async (req, res) => {
     res.json(enrichedMessage || message.rows[0]);
   } catch (err) {
     console.error(err);
+    if (err instanceof ContentModerationError) {
+      return res.status(err.statusCode || 400).json({
+        error: err.message,
+        moderation: err.result,
+      });
+    }
+
     if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({ error: "Attachments must be 5MB or smaller" });
     }
@@ -2156,6 +2195,21 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
       replyTargetSenderId = replyTargetResult.rows[0].sender_id || null;
     }
 
+    const messageId = uuidv4();
+
+    await assertContentAllowedOrReport({
+      userId: senderId,
+      contentType: "group_message",
+      contentId: messageId,
+      text: content,
+      media: getModerationAttachment(attachment),
+      context: {
+        surface: "group_message_send",
+        group_chat_id: groupChatId,
+        has_attachment: Boolean(attachment),
+      },
+    });
+
     let attachmentUrl = null;
     let attachmentType = null;
     let attachmentName = null;
@@ -2183,7 +2237,6 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
     }
 
     const storedContent = content || getAttachmentFallbackText(attachmentType);
-    const messageId = uuidv4();
 
     const { rows } = await pool.query(
       `
@@ -2281,6 +2334,13 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
     );
   } catch (err) {
     console.error(err);
+    if (err instanceof ContentModerationError) {
+      return res.status(err.statusCode || 400).json({
+        error: err.message,
+        moderation: err.result,
+      });
+    }
+
     if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({ error: "Attachments must be 5MB or smaller" });
     }
