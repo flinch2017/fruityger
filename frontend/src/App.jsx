@@ -40,6 +40,7 @@ import HashtagPage from "./pages/HashtagPage";
 import ReportPage from "./pages/ReportPage";
 import FollowListPage from "./pages/FollowListPage";
 import PostDetail from "./pages/PostDetail";
+import ProfilePostView from "./pages/ProfilePostView";
 import TermsPage from "./pages/TermsPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import CookiePage from "./pages/CookiePage";
@@ -498,7 +499,7 @@ function App() {
           path="/profile/:username/:tab/:postId"
           element={
             <ProfileLayout>
-              <Profile />
+              <ProfilePostView />
             </ProfileLayout>
           }
         />
