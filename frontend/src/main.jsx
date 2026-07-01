@@ -22,7 +22,9 @@ const TAB_NAME_PREFIX = "fruityger-tab:";
 const TAB_HISTORY_STATE_KEY = "__fruityger_tab_id__";
 
 const normalizeBaseUrl = (value) => String(value || "").trim().replace(/\/+$/, "");
-const configuredApiBaseUrl = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL);
+const configuredApiBaseUrl = normalizeBaseUrl(
+  import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL
+);
 
 const mapApiUrl = (url) => {
   if (typeof url !== "string") {

@@ -75,13 +75,13 @@ export default function Login() {
         return;
       }
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
+      const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, turnstileToken }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         setCustomMessage("error", data.error || "Login failed.");
@@ -109,7 +109,7 @@ export default function Login() {
     setPasskeySubmitting(true);
 
     try {
-      const optionsRes = await fetch("http://localhost:5000/api/auth/login/passkey/options", {
+      const optionsRes = await fetch("/api/auth/login/passkey/options", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier: email }),
@@ -123,7 +123,7 @@ export default function Login() {
 
       const credential = await getPasskeyCredential(optionsData.options);
 
-      const verifyRes = await fetch("http://localhost:5000/api/auth/login/passkey/verify", {
+      const verifyRes = await fetch("/api/auth/login/passkey/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
