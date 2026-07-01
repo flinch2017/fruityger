@@ -19,6 +19,7 @@ import supabase from "../lib/supabaseClient";
 import AeroNotice from "../components/AeroNotice";
 import "../css/Chat.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
+import { getDisplayName } from "../utils/displayName";
 
 export default function GroupChat() {
   const reactionOptions = [
@@ -134,7 +135,10 @@ export default function GroupChat() {
     if (!message) return "Message";
     return String(message.sender_id) === String(userId)
       ? "You"
-      : message.sender_username || "Member";
+      : getDisplayName(
+          { account_name: message.sender_account_name, username: message.sender_username },
+          "Member"
+        );
   };
 
   const getReplyPreviewText = (content) => {
@@ -1135,7 +1139,7 @@ export default function GroupChat() {
 
   const memberPreview = useMemo(() => {
     const names = (groupChat?.members || [])
-      .map((member) => member.username)
+      .map((member) => getDisplayName(member))
       .slice(0, 4)
       .join(", ");
 
@@ -1301,7 +1305,10 @@ export default function GroupChat() {
                         className="group-message-sender"
                         onClick={() => redirectTo(`/profile/${msg.sender_username}`)}
                       >
-                        {msg.sender_username || "Member"}
+                        {getDisplayName(
+                          { account_name: msg.sender_account_name, username: msg.sender_username },
+                          "Member"
+                        )}
                       </button>
                     )}
                     {msg.reply_to_message_id && (
@@ -1310,7 +1317,13 @@ export default function GroupChat() {
                           Replying to {msg.reply_to_sender_id
                             ? String(msg.reply_to_sender_id) === String(userId)
                               ? "You"
-                              : msg.reply_to_sender_username || "Member"
+                              : getDisplayName(
+                                  {
+                                    account_name: msg.reply_to_sender_account_name,
+                                    username: msg.reply_to_sender_username,
+                                  },
+                                  "Member"
+                                )
                             : "Message"}
                         </span>
                         <p>{getReplyPreviewText(msg.reply_to_content)}</p>
@@ -1508,13 +1521,13 @@ export default function GroupChat() {
                     <div className="message-reaction-modal-user">
                       <div className="message-reaction-modal-avatar">
                         {reaction.profile_pic ? (
-                          <img src={getSafeMediaUrl(reaction.profile_pic)} alt={reaction.username} />
+                          <img src={getSafeMediaUrl(reaction.profile_pic)} alt={getDisplayName(reaction)} />
                         ) : (
                           <FaUserCircle />
                         )}
                       </div>
                       <div className="message-reaction-modal-copy">
-                        <strong>{reaction.username}</strong>
+                        <strong>{getDisplayName(reaction)}</strong>
                         <span>
                           {getReactionEmoji(reaction.reaction)} {reaction.reaction}
                         </span>
@@ -1677,15 +1690,15 @@ export default function GroupChat() {
                       <div className="message-reaction-modal-user">
                         <div className="message-reaction-modal-avatar">
                           {request.requester?.profile_pic ? (
-                            <img src={getSafeMediaUrl(request.requester.profile_pic)} alt={request.requester.username} />
+                            <img src={getSafeMediaUrl(request.requester.profile_pic)} alt={getDisplayName(request.requester)} />
                           ) : (
                             <FaUserCircle />
                           )}
                         </div>
                         <div className="message-reaction-modal-copy">
-                          <strong>{request.requester?.username || "Member"} requested</strong>
+                          <strong>{getDisplayName(request.requester, "Member")} requested</strong>
                           <span>
-                            {(request.requested_members || []).map((member) => member.username).join(", ") || "No members"}
+                            {(request.requested_members || []).map((member) => getDisplayName(member)).join(", ") || "No members"}
                           </span>
                         </div>
                       </div>
@@ -1718,13 +1731,13 @@ export default function GroupChat() {
                     <div className="message-reaction-modal-user">
                       <div className="message-reaction-modal-avatar">
                         {member.profile_pic ? (
-                          <img src={getSafeMediaUrl(member.profile_pic)} alt={member.username} />
+                          <img src={getSafeMediaUrl(member.profile_pic)} alt={getDisplayName(member)} />
                         ) : (
                           <FaUserCircle />
                         )}
                       </div>
                       <div className="message-reaction-modal-copy">
-                        <strong>{member.username}</strong>
+                        <strong>{getDisplayName(member)}</strong>
                         <span>{member.is_admin ? "Admin" : "Member"}</span>
                       </div>
                     </div>
@@ -1798,8 +1811,8 @@ export default function GroupChat() {
               <div className="group-member-chip-list">
                 {selectedNewMembers.map((member) => (
                   <span key={member.id} className="group-member-chip">
-                    <span>{member.username}</span>
-                    <button type="button" onClick={() => removeSelectedNewMember(member.id)} aria-label={`Remove ${member.username}`}>
+                    <span>{getDisplayName(member)}</span>
+                    <button type="button" onClick={() => removeSelectedNewMember(member.id)} aria-label={`Remove ${getDisplayName(member)}`}>
                       <FaTimes />
                     </button>
                   </span>
@@ -1823,13 +1836,13 @@ export default function GroupChat() {
                     <div className="message-reaction-modal-user">
                       <div className="message-reaction-modal-avatar">
                         {member.profile_pic ? (
-                          <img src={getSafeMediaUrl(member.profile_pic)} alt={member.username} />
+                          <img src={getSafeMediaUrl(member.profile_pic)} alt={getDisplayName(member)} />
                         ) : (
                           <FaUserCircle />
                         )}
                       </div>
                       <div className="message-reaction-modal-copy">
-                        <strong>{member.username}</strong>
+                        <strong>{getDisplayName(member)}</strong>
                         <span>Tap to add</span>
                       </div>
                     </div>
@@ -1888,13 +1901,13 @@ export default function GroupChat() {
                   <div className="message-reaction-modal-user">
                     <div className="message-reaction-modal-avatar">
                       {member.profile_pic ? (
-                        <img src={getSafeMediaUrl(member.profile_pic)} alt={member.username} />
+                        <img src={getSafeMediaUrl(member.profile_pic)} alt={getDisplayName(member)} />
                       ) : (
                         <FaUserCircle />
                       )}
                     </div>
                     <div className="message-reaction-modal-copy">
-                      <strong>{member.username}</strong>
+                      <strong>{getDisplayName(member)}</strong>
                       <span>{member.is_admin ? "Already an admin" : "Member"}</span>
                     </div>
                   </div>

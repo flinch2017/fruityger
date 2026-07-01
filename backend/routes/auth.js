@@ -20,6 +20,7 @@ import {
   verifyAssertion,
   verifyRegistration,
 } from "../utils/webauthn.js";
+import { ensureAccountNameSchema } from "../utils/accountName.js";
 
 const router = express.Router();
 const SALT_ROUNDS = 10;
@@ -270,6 +271,16 @@ const verifyTurnstile = async (challengeToken, remoteIp) => {
     return false;
   }
 
+  const devBypassEnabled =
+    process.env.NODE_ENV !== "production" &&
+    String(process.env.TURNSTILE_DEV_BYPASS || "").toLowerCase() === "true";
+  const devBypassToken =
+    process.env.TURNSTILE_DEV_BYPASS_TOKEN || "fruityger-dev-turnstile";
+
+  if (devBypassEnabled && challengeToken === devBypassToken) {
+    return true;
+  }
+
   const secret =
     process.env.TURNSTILE_SECRET_KEY ||
     process.env.TURNSTILE_SECRET ||
@@ -417,6 +428,7 @@ const verifyAccountChangeToken = (token, userId, purpose) => {
 const sanitizeUser = (user) => ({
   id: user.id,
   username: user.username,
+  account_name: user.account_name || null,
   email: user.email,
   pending_email: user.pending_email || null,
   profile_pic: user.profile_pic,
@@ -977,10 +989,11 @@ router.get("/session", authenticateTokenAllowUnverified, async (req, res) => {
   await ensureAccountStatusSchema();
   await cleanupExpiredUnverifiedUsers();
   await cleanupExpiredDeletedUsers();
+  await ensureAccountNameSchema();
 
   const { rows } = await pool.query(
     `
-    SELECT id, username, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, email_verification_expires_at, created_at, deactivated_at, deleted_at, admin_banned_at
+    SELECT id, username, account_name, email, pending_email, profile_pic, birth_date, email_verified, interests, interests_completed, email_verification_expires_at, created_at, deactivated_at, deleted_at, admin_banned_at
     FROM users
     WHERE id = $1
     LIMIT 1

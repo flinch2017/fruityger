@@ -32,7 +32,8 @@ import { ensurePasskeySchema } from "./utils/webauthn.js";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const parsedPort = Number.parseInt(String(process.env.PORT || "5000"), 10);
+const PORT = Number.isFinite(parsedPort) ? parsedPort : 5000;
 const allowedOrigins = String(
   process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || ""
 )

@@ -2,7 +2,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import "../css/Signup.css";
 import { persistAuthSession } from "../utils/authSession";
-import TurnstileWidget from "../components/TurnstileWidget";
+import TurnstileWidget, { isTurnstileDevBypassEnabled } from "../components/TurnstileWidget";
 
 const SIGNUP_STEPS = ["Email", "Username", "Birthday", "Password", "Confirm"];
 
@@ -138,6 +138,7 @@ export default function Signup() {
   const captchaRef = useRef(null);
   const siteKey =
     import.meta.env.VITE_TURNSTILE_SITE_KEY || import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+  const turnstileDevBypass = isTurnstileDevBypassEnabled();
   const passwordChecklist = getPasswordChecklist(form.password);
   const passwordStrength = getPasswordStrength(form.password);
   const confirmMatches =
@@ -277,7 +278,7 @@ export default function Signup() {
       return;
     }
 
-    if (!siteKey || !captchaRef.current) {
+    if ((!siteKey && !turnstileDevBypass) || !captchaRef.current) {
       setCustomMessage("error", "Turnstile is not configured properly.");
       return;
     }

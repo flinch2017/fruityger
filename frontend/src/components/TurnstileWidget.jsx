@@ -7,6 +7,13 @@ import {
 
 let turnstileScriptPromise = null;
 
+export const TURNSTILE_DEV_BYPASS_TOKEN =
+  import.meta.env.VITE_TURNSTILE_DEV_BYPASS_TOKEN || "fruityger-dev-turnstile";
+
+export const isTurnstileDevBypassEnabled = () =>
+  import.meta.env.DEV &&
+  String(import.meta.env.VITE_TURNSTILE_DEV_BYPASS || "").toLowerCase() === "true";
+
 const loadTurnstileScript = () => {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Turnstile is only available in the browser"));
@@ -56,9 +63,14 @@ const TurnstileWidget = forwardRef(function TurnstileWidget({ siteKey }, ref) {
   const containerRef = useRef(null);
   const widgetIdRef = useRef(null);
   const pendingPromiseRef = useRef(null);
+  const devBypassEnabled = isTurnstileDevBypassEnabled();
 
   useEffect(() => {
     let disposed = false;
+
+    if (devBypassEnabled) {
+      return undefined;
+    }
 
     if (!siteKey || !containerRef.current) {
       return undefined;
@@ -117,10 +129,14 @@ const TurnstileWidget = forwardRef(function TurnstileWidget({ siteKey }, ref) {
         widgetIdRef.current = null;
       }
     };
-  }, [siteKey]);
+  }, [devBypassEnabled, siteKey]);
 
   useImperativeHandle(ref, () => ({
     async executeAsync() {
+      if (devBypassEnabled) {
+        return TURNSTILE_DEV_BYPASS_TOKEN;
+      }
+
       if (!siteKey) {
         throw new Error("Turnstile site key is missing");
       }
@@ -142,6 +158,11 @@ const TurnstileWidget = forwardRef(function TurnstileWidget({ siteKey }, ref) {
       });
     },
     reset() {
+      if (devBypassEnabled) {
+        pendingPromiseRef.current = null;
+        return;
+      }
+
       if (window.turnstile && widgetIdRef.current !== null) {
         window.turnstile.reset(widgetIdRef.current);
       }

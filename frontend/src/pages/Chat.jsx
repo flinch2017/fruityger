@@ -18,6 +18,7 @@ import AeroNotice from "../components/AeroNotice";
 import "../css/Chat.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import VerifiedBadge from "../components/VerifiedBadge";
+import { getDisplayName } from "../utils/displayName";
 
 export default function Chat() {
   const reactionOptions = [
@@ -57,6 +58,7 @@ export default function Chat() {
   const [reactionViewerLoading, setReactionViewerLoading] = useState(false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [onlineUserIds, setOnlineUserIds] = useState([]);
+  const otherUserDisplayName = getDisplayName(otherUser, "Conversation");
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -1064,7 +1066,7 @@ export default function Chat() {
           <div className="chat-user-avatar-wrap">
             <div className="chat-user-avatar">
               {otherUser.profile_pic ? (
-                <img src={getSafeMediaUrl(otherUser.profile_pic)} alt={otherUser.username} />
+                <img src={getSafeMediaUrl(otherUser.profile_pic)} alt={otherUserDisplayName} />
               ) : (
                 <FaUserCircle />
               )}
@@ -1074,7 +1076,7 @@ export default function Chat() {
           <div className="chat-user-heading">
             <h3>
               <span className="username-with-badge">
-                {otherUser.username}
+                {otherUserDisplayName}
                 <VerifiedBadge verified={otherUser.is_verified} />
               </span>
             </h3>
@@ -1189,7 +1191,7 @@ export default function Chat() {
                           {msg.reply_to_sender_id
                             ? String(msg.reply_to_sender_id) === String(userId)
                               ? "You"
-                              : otherUser.username
+                              : otherUserDisplayName
                             : "Message"}
                         </span>
                         <p>{getReplyPreviewText(msg.reply_to_content)}</p>
@@ -1405,14 +1407,14 @@ export default function Chat() {
                         {reaction.profile_pic ? (
                           <img
                             src={getSafeMediaUrl(reaction.profile_pic)}
-                            alt={reaction.username}
+                            alt={getDisplayName(reaction)}
                           />
                         ) : (
                           <FaUserCircle />
                         )}
                       </div>
                       <div className="message-reaction-modal-copy">
-                        <strong>{reaction.username}</strong>
+                        <strong>{getDisplayName(reaction)}</strong>
                         <span>
                           {getReactionEmoji(reaction.reaction)} {reaction.reaction}
                         </span>

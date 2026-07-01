@@ -22,6 +22,7 @@ export default function EditProfile() {
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
+    account_name: "",
     username: "",
     profile_pic: "",
     bio: "",
@@ -41,6 +42,7 @@ export default function EditProfile() {
         if (res.ok) {
           setUser(data.user);
           setForm({
+            account_name: data.user.account_name || "",
             username: data.user.username,
             profile_pic: data.user.profile_pic || "",
             bio: data.user.bio || "",
@@ -120,6 +122,7 @@ export default function EditProfile() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
+          account_name: form.account_name,
           username: form.username,
           profile_pic: profilePicUrl,
           profile_pic_key: profilePicKey,
@@ -132,10 +135,16 @@ export default function EditProfile() {
       if (res.ok) {
         showAlert("Profile updated successfully!", "success");
         setUser(data.user);
-        setForm({ ...form, profile_pic: profilePicUrl, bio: data.user.bio || "" });
+        setForm({
+          ...form,
+          account_name: data.user.account_name || "",
+          profile_pic: profilePicUrl,
+          bio: data.user.bio || "",
+        });
 
         // ✅ UPDATE LOCAL STORAGE
         localStorage.setItem("username", data.user.username);
+        localStorage.setItem("account_name", data.user.account_name || "");
 
         // (optional but good if you store it)
         localStorage.setItem("profile_pic", data.user.profile_pic || "");
@@ -209,6 +218,22 @@ export default function EditProfile() {
           className="edit-profile-form"
           onSubmit={handleSubmit}
         >
+          <label>
+            Account name
+            <input
+              type="text"
+              name="account_name"
+              value={form.account_name}
+              onChange={handleChange}
+              maxLength={80}
+              placeholder="Your name"
+              autoComplete="name"
+            />
+            <span className="edit-profile-hint">
+              This is shown as your display name. Leave it blank to show your username.
+            </span>
+          </label>
+
           <label>
             Username
             <input

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "../css/Login.css";
 import { persistAuthSession } from "../utils/authSession";
-import TurnstileWidget from "../components/TurnstileWidget";
+import TurnstileWidget, { isTurnstileDevBypassEnabled } from "../components/TurnstileWidget";
 import { getPasskeyCredential } from "../utils/webauthn";
 
 export default function Login() {
@@ -16,6 +16,7 @@ export default function Login() {
   const captchaRef = useRef(null);
   const siteKey =
     import.meta.env.VITE_TURNSTILE_SITE_KEY || import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+  const turnstileDevBypass = isTurnstileDevBypassEnabled();
 
   useEffect(() => {
     document.body.classList.add("welcome");
@@ -58,7 +59,7 @@ export default function Login() {
       return;
     }
 
-    if (!siteKey || !captchaRef.current) {
+    if ((!siteKey && !turnstileDevBypass) || !captchaRef.current) {
       setCustomMessage("error", "Turnstile is not configured properly.");
       return;
     }
@@ -74,7 +75,7 @@ export default function Login() {
         return;
       }
 
-      const response = await fetch("http://localhost:5000/api/auth/login", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, turnstileToken }),

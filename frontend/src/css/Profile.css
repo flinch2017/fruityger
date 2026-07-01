@@ -177,6 +177,13 @@
   color: #0a6e92;
 }
 
+.profile-handle {
+  margin: 4px 0 0;
+  color: #5f8ea0;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
 .profile-private-badge {
   display: inline-flex;
   align-items: center;

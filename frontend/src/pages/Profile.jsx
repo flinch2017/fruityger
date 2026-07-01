@@ -11,6 +11,7 @@ import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
 import FollowSuggestions from "../components/FollowSuggestions";
+import { getDisplayName } from "../utils/displayName";
 
 const PROFILE_TABS = [
   { key: "general", label: "General", icon: FaTh },
@@ -122,6 +123,7 @@ export default function Profile() {
   const activeTabPosts = profileTabPosts[activeProfileTab] || [];
   const activeProfileTabMeta = PROFILE_TABS.find((tab) => tab.key === activeProfileTab) || PROFILE_TABS[0];
   const ActiveProfileTabIcon = activeProfileTabMeta.icon;
+  const profileDisplayName = getDisplayName(user, user?.username || "Profile");
   const displayedProfilePosts = useMemo(() => {
     if (!gridFeedOpen || !activeProfilePostId) {
       return activeTabPosts;
@@ -1267,10 +1269,13 @@ export default function Profile() {
 
           <h2>
             <span className="username-with-badge">
-              {user.username}
+              {profileDisplayName}
               <VerifiedBadge verified={user.is_verified} />
             </span>
           </h2>
+          {user.account_name && (
+            <p className="profile-handle">@{user.username}</p>
+          )}
           {user.is_private && (
             <span className="profile-private-badge">Private</span>
           )}

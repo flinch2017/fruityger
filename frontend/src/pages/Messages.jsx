@@ -5,11 +5,15 @@ import supabase from "../lib/supabaseClient";
 import "../css/Messages.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import VerifiedBadge from "../components/VerifiedBadge";
+import { getDisplayInitial, getDisplayName } from "../utils/displayName";
 
 function buildGroupTitle(groupChat) {
   if (groupChat.group_name?.trim()) return groupChat.group_name.trim();
   return "Group chat";
 }
+
+const getMessageSenderName = (chat) =>
+  String(chat?.last_message_sender_account_name || chat?.last_message_sender_username || "").trim();
 
 export default function Messages() {
   const navigate = useNavigate();
@@ -446,7 +450,7 @@ export default function Messages() {
           if (Boolean(a.is_online) !== Boolean(b.is_online)) {
             return a.is_online ? -1 : 1;
           }
-          return String(a.username || "").localeCompare(String(b.username || ""));
+          return getDisplayName(a, "").localeCompare(getDisplayName(b, ""));
         }),
     [onlineCandidates, onlineUserIds]
   );
@@ -601,9 +605,9 @@ export default function Messages() {
               className={`group-avatar-bubble group-avatar-bubble-${index + 1}`}
             >
               {member.profile_pic ? (
-                <img src={getSafeMediaUrl(member.profile_pic)} alt={member.username} />
+                <img src={getSafeMediaUrl(member.profile_pic)} alt={getDisplayName(member)} />
               ) : (
-                member.username?.[0]?.toUpperCase() || "?"
+                getDisplayInitial(member)
               )}
             </span>
           ))
@@ -693,7 +697,7 @@ export default function Messages() {
                 >
                   <span className={`messages-online-avatar ${user.is_online ? "online" : "offline"}`}>
                     {user.profile_pic ? (
-                      <img src={getSafeMediaUrl(user.profile_pic)} alt={user.username} />
+                      <img src={getSafeMediaUrl(user.profile_pic)} alt={getDisplayName(user)} />
                     ) : (
                       <FaUser />
                     )}
@@ -701,7 +705,7 @@ export default function Messages() {
                   {user.is_online && <span className="messages-online-dot online"></span>}
                   <span className="messages-online-name">
                     <span className="username-with-badge">
-                      {user.username}
+                      {getDisplayName(user)}
                       <VerifiedBadge verified={user.is_verified} />
                     </span>
                   </span>
@@ -723,7 +727,7 @@ export default function Messages() {
               >
                 <div className="chat-avatar">
                   {user.profile_pic ? (
-                    <img src={getSafeMediaUrl(user.profile_pic)} alt={user.username} />
+                    <img src={getSafeMediaUrl(user.profile_pic)} alt={getDisplayName(user)} />
                   ) : (
                     <FaUser />
                   )}
@@ -731,7 +735,7 @@ export default function Messages() {
                 <div className="chat-info">
                   <h4>
                     <span className="username-with-badge">
-                      {user.username}
+                      {getDisplayName(user)}
                       <VerifiedBadge verified={user.is_verified} />
                     </span>
                   </h4>
@@ -765,8 +769,8 @@ export default function Messages() {
                 const chat = entry.data;
                 const isUnread = Number(chat.unread_count || 0) > 0;
                 const previewText = chat.last_message
-                  ? chat.last_message_sender_username
-                    ? `${chat.last_message_sender_username}: ${chat.last_message}`
+                  ? getMessageSenderName(chat)
+                    ? `${getMessageSenderName(chat)}: ${chat.last_message}`
                     : chat.last_message
                   : "Group created";
 
@@ -836,10 +840,10 @@ export default function Messages() {
 
                   <div className="chat-avatar">
                     {otherUser?.profile_pic ? (
-                      <img src={getSafeMediaUrl(otherUser.profile_pic)} alt={otherUser.username} />
+                      <img src={getSafeMediaUrl(otherUser.profile_pic)} alt={getDisplayName(otherUser)} />
                     ) : (
                       <span className="avatar-initial">
-                        {otherUser?.username?.[0]?.toUpperCase() || "?"}
+                        {getDisplayInitial(otherUser)}
                       </span>
                     )}
                   </div>
@@ -848,7 +852,7 @@ export default function Messages() {
                     <div className="chat-top">
                       <h4>
                         <span className="username-with-badge">
-                          {otherUser?.username || "Conversation"}
+                          {getDisplayName(otherUser, "Conversation")}
                           <VerifiedBadge verified={otherUser?.is_verified} />
                         </span>
                       </h4>
@@ -922,11 +926,11 @@ export default function Messages() {
               <div className="messages-group-selected">
                 {selectedGroupMembers.map((member) => (
                   <span key={member.id} className="messages-group-chip">
-                    {member.username}
+                    {getDisplayName(member)}
                     <button
                       type="button"
                       onClick={() => removeGroupMember(member.id)}
-                      aria-label={`Remove ${member.username}`}
+                      aria-label={`Remove ${getDisplayName(member)}`}
                     >
                       <FaTimes />
                     </button>
@@ -946,7 +950,7 @@ export default function Messages() {
                   >
                     <span className="messages-group-result-avatar">
                       {user.profile_pic ? (
-                        <img src={getSafeMediaUrl(user.profile_pic)} alt={user.username} />
+                        <img src={getSafeMediaUrl(user.profile_pic)} alt={getDisplayName(user)} />
                       ) : (
                         <FaUser />
                       )}
@@ -954,7 +958,7 @@ export default function Messages() {
                     <span className="messages-group-result-copy">
                       <strong>
                         <span className="username-with-badge">
-                          {user.username}
+                          {getDisplayName(user)}
                           <VerifiedBadge verified={user.is_verified} />
                         </span>
                       </strong>

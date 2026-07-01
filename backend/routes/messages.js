@@ -8,6 +8,7 @@ import path from "path";
 import { r2 } from "../utils/r2.js";
 import { createNotification, sendPushToUser } from "../utils/notifications.js";
 import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
+import { ensureAccountNameSchema } from "../utils/accountName.js";
 
 const router = express.Router();
 
@@ -551,6 +552,7 @@ async function fetchChatMembers(chatId) {
     SELECT
       u.id,
       u.username,
+      u.account_name,
       u.profile_pic
     FROM chat_members cm
     JOIN users u
@@ -621,6 +623,7 @@ async function fetchMessageReactionViewers(messageId, userId) {
       mr.created_at,
       u.id AS user_id,
       u.username,
+      u.account_name,
       u.profile_pic,
       mr.user_id = $2 AS reacted_by_me
     FROM message_reactions mr
@@ -641,6 +644,7 @@ async function fetchGroupMessageForUser(messageId, userId) {
     SELECT
       gm.*,
       sender.username AS sender_username,
+      sender.account_name AS sender_account_name,
       sender.profile_pic AS sender_profile_pic,
       CASE
         WHEN reply_dgm.message_id IS NULL THEN reply_message.content
@@ -651,6 +655,7 @@ async function fetchGroupMessageForUser(messageId, userId) {
         ELSE NULL
       END AS reply_to_sender_id,
       reply_sender.username AS reply_to_sender_username,
+      reply_sender.account_name AS reply_to_sender_account_name,
       COALESCE(reactions_agg.reactions, '[]'::json) AS reactions
     FROM group_messages gm
     JOIN users sender
@@ -699,6 +704,7 @@ async function fetchGroupMessageReactionViewers(messageId, userId) {
       gmr.created_at,
       u.id AS user_id,
       u.username,
+      u.account_name,
       u.profile_pic,
       gmr.user_id = $2 AS reacted_by_me
     FROM group_message_reactions gmr
@@ -721,6 +727,7 @@ router.get("/chats", authenticateToken, async (req, res) => {
     await ensureDeletedMessagesTable();
     await ensureMessageAttachmentsSchema();
     await ensureVerificationBadgeSchema();
+    await ensureAccountNameSchema();
 
     const { rows } = await pool.query(
       `
@@ -730,9 +737,11 @@ router.get("/chats", authenticateToken, async (req, res) => {
         c.user2_id,
         dc.deleted_at,
         u1.username AS user1_username,
+        u1.account_name AS user1_account_name,
         u1.profile_pic AS user1_profile_pic,
         u1.is_verified AS user1_is_verified,
         u2.username AS user2_username,
+        u2.account_name AS user2_account_name,
         u2.profile_pic AS user2_profile_pic,
         u2.is_verified AS user2_is_verified,
         m.content AS last_message,
@@ -801,12 +810,14 @@ router.get("/chats", authenticateToken, async (req, res) => {
         user1: {
           id: chat.user1_id,
           username: chat.user1_username,
+          account_name: chat.user1_account_name,
           profile_pic: chat.user1_profile_pic,
           is_verified: chat.user1_is_verified,
         },
         user2: {
           id: chat.user2_id,
           username: chat.user2_username,
+          account_name: chat.user2_account_name,
           profile_pic: chat.user2_profile_pic,
           is_verified: chat.user2_is_verified,
         },
@@ -874,6 +885,7 @@ router.post("/send", authenticateToken, async (req, res) => {
     await ensureDeletedMessagesTable();
     await ensureMessageRepliesSchema();
     await ensureMessageReactionsSchema();
+    await ensureAccountNameSchema();
     await ensureVerificationBadgeSchema();
     await ensureMessageAttachmentsSchema();
 
@@ -1013,7 +1025,7 @@ router.post("/send", authenticateToken, async (req, res) => {
 
     const senderResult = await pool.query(
       `
-      SELECT username
+      SELECT username, account_name
       FROM users
       WHERE id = $1
       LIMIT 1
@@ -1022,7 +1034,7 @@ router.post("/send", authenticateToken, async (req, res) => {
     );
 
     await sendPushToUser(receiverId, {
-      title: senderResult.rows[0]?.username || "New message",
+      title: senderResult.rows[0]?.account_name || senderResult.rows[0]?.username || "New message",
       body: storedContent,
       categoryId: "messageReply",
       data: {
@@ -1104,11 +1116,12 @@ router.get("/search-users", authenticateToken, async (req, res) => {
 
   try {
     await ensureVerificationBadgeSchema();
+    await ensureAccountNameSchema();
     const { rows } = await pool.query(
       `
-      SELECT id, username, profile_pic, is_verified
+      SELECT id, username, account_name, profile_pic, is_verified
       FROM users
-      WHERE username ILIKE $1
+      WHERE (username ILIKE $1 OR account_name ILIKE $1)
         AND id <> $2
         AND deactivated_at IS NULL
         AND deleted_at IS NULL
@@ -1133,6 +1146,7 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
     await ensureBlockedUsersTable();
     await ensureActiveUsersTable();
     await ensureVerificationBadgeSchema();
+    await ensureAccountNameSchema();
 
     const { rows } = await pool.query(
       `
@@ -1140,6 +1154,7 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
         SELECT
           u.id,
           u.username,
+          u.account_name,
           u.profile_pic,
           u.is_verified,
           NULL::uuid AS chat_id,
@@ -1153,6 +1168,7 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
         SELECT DISTINCT ON (other_user.id)
           other_user.id,
           other_user.username,
+          other_user.account_name,
           other_user.profile_pic,
           other_user.is_verified,
           c.id AS chat_id,
@@ -1186,11 +1202,12 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
       combined AS (
         SELECT * FROM followed_people
         UNION ALL
-        SELECT id, username, profile_pic, is_verified, chat_id, has_chat FROM chat_people
+        SELECT id, username, account_name, profile_pic, is_verified, chat_id, has_chat FROM chat_people
       )
       SELECT DISTINCT ON (combined.id)
         combined.id,
         combined.username,
+        combined.account_name,
         combined.profile_pic,
         combined.is_verified,
         combined.chat_id,
@@ -1305,9 +1322,11 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
         c.user2_id,
         dc.deleted_at,
         u1.username AS user1_username,
+        u1.account_name AS user1_account_name,
         u1.profile_pic AS user1_profile_pic,
         u1.is_verified AS user1_is_verified,
         u2.username AS user2_username,
+        u2.account_name AS user2_account_name,
         u2.profile_pic AS user2_profile_pic,
         u2.is_verified AS user2_is_verified
       FROM chats c
@@ -1374,6 +1393,7 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
       SELECT
         m.*,
         sender_user.username AS sender_username,
+        sender_user.account_name AS sender_account_name,
         sender_user.profile_pic AS sender_profile_pic,
         CASE
           WHEN reply_dm.message_id IS NULL THEN reply_message.content
@@ -1433,12 +1453,14 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
         user1: {
           id: chat.user1_id,
           username: chat.user1_username,
+          account_name: chat.user1_account_name,
           profile_pic: chat.user1_profile_pic,
           is_verified: chat.user1_is_verified,
         },
         user2: {
           id: chat.user2_id,
           username: chat.user2_username,
+          account_name: chat.user2_account_name,
           profile_pic: chat.user2_profile_pic,
           is_verified: chat.user2_is_verified,
         },
@@ -1457,6 +1479,7 @@ router.get("/:messageId/reactions", authenticateToken, async (req, res) => {
 
   try {
     await ensureMessageReactionsSchema();
+    await ensureAccountNameSchema();
 
     const messageResult = await pool.query(
       `
@@ -1493,6 +1516,7 @@ router.post("/:messageId/react", authenticateToken, async (req, res) => {
 
   try {
     await ensureMessageReactionsSchema();
+    await ensureAccountNameSchema();
 
     const messageResult = await pool.query(
       `
@@ -1746,6 +1770,7 @@ router.get("/groups/chats", authenticateToken, async (req, res) => {
   try {
     await ensureGroupChatSchema();
     await ensureDeletedGroupChatsTable();
+    await ensureAccountNameSchema();
 
     const { rows } = await pool.query(
       `
@@ -1763,6 +1788,7 @@ router.get("/groups/chats", authenticateToken, async (req, res) => {
         gm.created_at AS last_message_at,
         gm.sender_id AS last_message_sender_id,
         sender.username AS last_message_sender_username,
+        sender.account_name AS last_message_sender_account_name,
         (
           SELECT COUNT(*)::int
           FROM group_messages unread
@@ -1798,6 +1824,7 @@ router.get("/groups/chats", authenticateToken, async (req, res) => {
           json_build_object(
             'id', u.id,
             'username', u.username,
+            'account_name', u.account_name,
             'profile_pic', u.profile_pic
           )
           ORDER BY CASE WHEN u.id = $1 THEN 1 ELSE 0 END, LOWER(u.username) ASC
@@ -1833,6 +1860,7 @@ router.get("/groups/chats", authenticateToken, async (req, res) => {
         last_message_at: chat.last_message_at,
         last_message_sender_id: chat.last_message_sender_id,
         last_message_sender_username: chat.last_message_sender_username,
+        last_message_sender_account_name: chat.last_message_sender_account_name,
         unread_count: chat.unread_count,
         members: Array.isArray(chat.members) ? chat.members : [],
       }))
@@ -1938,6 +1966,7 @@ router.get("/groups/chats/:groupChatId", authenticateToken, async (req, res) => 
     await ensureDeletedGroupMessagesTable();
     await ensureGroupMessageRepliesSchema();
     await ensureGroupMessageReactionsSchema();
+    await ensureAccountNameSchema();
 
     const groupResult = await pool.query(
       `
@@ -1971,6 +2000,7 @@ router.get("/groups/chats/:groupChatId", authenticateToken, async (req, res) => 
       SELECT
         u.id,
         u.username,
+        u.account_name,
         u.profile_pic,
         gcm.joined_at,
         u.id = ANY($2::uuid[]) AS is_admin
@@ -1988,6 +2018,7 @@ router.get("/groups/chats/:groupChatId", authenticateToken, async (req, res) => 
       SELECT
         gm.*,
         sender.username AS sender_username,
+        sender.account_name AS sender_account_name,
         sender.profile_pic AS sender_profile_pic,
         CASE
           WHEN reply_dgm.message_id IS NULL THEN reply_message.content
@@ -1998,6 +2029,7 @@ router.get("/groups/chats/:groupChatId", authenticateToken, async (req, res) => 
           ELSE NULL
         END AS reply_to_sender_id,
         reply_sender.username AS reply_to_sender_username,
+        reply_sender.account_name AS reply_to_sender_account_name,
         COALESCE(reactions_agg.reactions, '[]'::json) AS reactions
       FROM group_messages gm
       JOIN users sender
@@ -2082,6 +2114,7 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
     await ensureGroupMessageRepliesSchema();
     await ensureGroupMessageReactionsSchema();
     await ensureDeletedGroupMessagesTable();
+    await ensureAccountNameSchema();
 
     if (!content && !attachment) {
       return res.status(400).json({ error: "Message content or an attachment is required" });
@@ -2195,7 +2228,7 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
 
     const senderResult = await pool.query(
       `
-      SELECT username, profile_pic
+      SELECT username, account_name, profile_pic
       FROM users
       WHERE id = $1
       LIMIT 1
@@ -2223,7 +2256,7 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
             : "group_message";
 
         return sendPushToUser(row.user_id, {
-          title: senderResult.rows[0]?.username || "New group message",
+          title: senderResult.rows[0]?.account_name || senderResult.rows[0]?.username || "New group message",
           body: storedContent,
           categoryId: "messageReply",
           data: {
@@ -2242,6 +2275,7 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
       enrichedMessage || {
         ...message,
         sender_username: senderResult.rows[0]?.username || "Member",
+        sender_account_name: senderResult.rows[0]?.account_name || null,
         sender_profile_pic: senderResult.rows[0]?.profile_pic || null,
       }
     );
@@ -2285,6 +2319,7 @@ router.get("/groups/messages/:messageId/reactions", authenticateToken, async (re
   try {
     await ensureGroupChatSchema();
     await ensureGroupMessageReactionsSchema();
+    await ensureAccountNameSchema();
 
     const messageResult = await pool.query(
       `
@@ -2604,6 +2639,7 @@ router.get("/groups/chats/:groupChatId/members", authenticateToken, async (req, 
 
   try {
     await ensureGroupChatSchema();
+    await ensureAccountNameSchema();
 
     const groupResult = await pool.query(
       `
@@ -2632,6 +2668,7 @@ router.get("/groups/chats/:groupChatId/members", authenticateToken, async (req, 
       SELECT
         u.id,
         u.username,
+        u.account_name,
         u.profile_pic,
         gcm.joined_at,
         u.id = ANY($2::uuid[]) AS is_admin
@@ -2747,6 +2784,7 @@ router.post("/groups/chats/:groupChatId/members", authenticateToken, async (req,
       SELECT
         u.id,
         u.username,
+        u.account_name,
         u.profile_pic,
         gcm.joined_at,
         u.id = ANY($2::uuid[]) AS is_admin
@@ -2819,6 +2857,7 @@ router.post("/groups/chats/:groupChatId/member-add-requests", authenticateToken,
   try {
     await ensureGroupChatSchema();
     await ensureGroupMemberAddRequestsSchema();
+    await ensureAccountNameSchema();
     await ensureBlockedUsersTable();
 
     const groupResult = await pool.query(
@@ -2956,6 +2995,7 @@ router.get("/groups/chats/:groupChatId/member-add-requests", authenticateToken, 
         r.created_at,
         requester.id AS requester_id,
         requester.username AS requester_username,
+        requester.account_name AS requester_account_name,
         requester.profile_pic AS requester_profile_pic
       FROM group_member_add_requests r
       JOIN users requester
@@ -2973,7 +3013,7 @@ router.get("/groups/chats/:groupChatId/member-add-requests", authenticateToken, 
       const requestedIds = Array.isArray(row.requested_member_ids) ? row.requested_member_ids : [];
       const usersResult = await pool.query(
         `
-        SELECT id, username, profile_pic
+        SELECT id, username, account_name, profile_pic
         FROM users
         WHERE id = ANY($1::uuid[])
           AND deactivated_at IS NULL
@@ -2989,6 +3029,7 @@ router.get("/groups/chats/:groupChatId/member-add-requests", authenticateToken, 
         requester: {
           id: row.requester_id,
           username: row.requester_username,
+          account_name: row.requester_account_name,
           profile_pic: row.requester_profile_pic,
         },
         requested_members: usersResult.rows,
@@ -3150,7 +3191,7 @@ router.patch("/groups/chats/:groupChatId/admins/:memberId", authenticateToken, a
 
     const memberResult = await pool.query(
       `
-      SELECT u.id, u.username
+      SELECT u.id, u.username, u.account_name
       FROM group_chat_members gcm
       JOIN users u
         ON u.id = gcm.user_id
@@ -3195,6 +3236,7 @@ router.patch("/groups/chats/:groupChatId/admins/:memberId", authenticateToken, a
       SELECT
         u.id,
         u.username,
+        u.account_name,
         u.profile_pic,
         gcm.joined_at,
         u.id = ANY($2::uuid[]) AS is_admin
