@@ -22,8 +22,10 @@ import { getSafeMediaUrl } from "../utils/mediaUrl";
 
 export default function GroupChat() {
   const reactionOptions = [
+    { key: "like", emoji: "\u{1F44D}", label: "Like" },
     { key: "heart", emoji: "\u2764\uFE0F", label: "Heart" },
     { key: "laugh", emoji: "\u{1F602}", label: "Laugh" },
+    { key: "wow", emoji: "\u{1F62E}", label: "Wow" },
     { key: "sad", emoji: "\u{1F622}", label: "Sad" },
     { key: "angry", emoji: "\u{1F621}", label: "Angry" },
     { key: "care", emoji: "\u{1F917}", label: "Care" },
@@ -483,11 +485,13 @@ export default function GroupChat() {
     }
   };
 
-  const handleDelete = async (msg) => {
+  const handleDelete = async (msg, mode = "auto") => {
     try {
       let res;
+      const deleteForEveryone =
+        mode === "everyone" || (mode === "auto" && String(msg.sender_id) === String(userId));
 
-      if (String(msg.sender_id) === String(userId)) {
+      if (deleteForEveryone) {
         res = await fetch(`http://localhost:5000/api/messages/groups/messages/${msg.id}`, {
           method: "DELETE",
           headers: {
@@ -1210,8 +1214,11 @@ export default function GroupChat() {
 
                       {openMenuId === msg.id && (
                         <div className={`message-dropdown ${openMenuDirection === "up" ? "flip-up" : ""}`}>
-                          <div className="dropdown-item" onClick={() => handleDelete(msg)}>
+                          <div className="dropdown-item danger" onClick={() => handleDelete(msg, "everyone")}>
                             Delete
+                          </div>
+                          <div className="dropdown-item" onClick={() => handleDelete(msg, "me")}>
+                            Delete for me
                           </div>
                         </div>
                       )}
@@ -1309,8 +1316,8 @@ export default function GroupChat() {
 
                       {openMenuId === msg.id && (
                         <div className={`message-dropdown ${openMenuDirection === "up" ? "flip-up" : ""}`}>
-                          <div className="dropdown-item" onClick={() => handleDelete(msg)}>
-                            Delete
+                          <div className="dropdown-item" onClick={() => handleDelete(msg, "me")}>
+                            Delete for me
                           </div>
                           <div className="dropdown-item danger" onClick={() => handleReport(msg)}>
                             Report

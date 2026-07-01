@@ -6,7 +6,7 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import { r2 } from "../utils/r2.js";
-import { createNotification } from "../utils/notifications.js";
+import { createNotification, sendPushToUser } from "../utils/notifications.js";
 import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
 
 const router = express.Router();
@@ -1021,16 +1021,11 @@ router.post("/send", authenticateToken, async (req, res) => {
       [senderId]
     );
 
-    await createNotification({
-      recipientId: receiverId,
-      actorId: senderId,
-      type: "direct_message",
-      chatId,
-      messageId: message.rows[0].id,
-      pushTitle: senderResult.rows[0]?.username || "New message",
-      pushBody: storedContent,
-      pushCategoryId: "messageReply",
-      pushData: {
+    await sendPushToUser(receiverId, {
+      title: senderResult.rows[0]?.username || "New message",
+      body: storedContent,
+      categoryId: "messageReply",
+      data: {
         type: "message",
         chatId,
         senderId,
@@ -1490,7 +1485,7 @@ router.post("/:messageId/react", authenticateToken, async (req, res) => {
   const { messageId } = req.params;
   const { reaction = null } = req.body || {};
   const userId = req.user.id;
-  const allowedReactions = new Set(["heart", "laugh", "sad", "angry", "care"]);
+  const allowedReactions = new Set(["like", "heart", "laugh", "wow", "sad", "angry", "care"]);
 
   if (reaction && !allowedReactions.has(reaction)) {
     return res.status(400).json({ error: "Invalid reaction" });
@@ -2221,30 +2216,24 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
     );
 
     await Promise.all(
-      memberIdsResult.rows.map((row) =>
-        createNotification({
-          recipientId: row.user_id,
-          actorId: senderId,
-          type:
-            replyTargetSenderId && String(row.user_id) === String(replyTargetSenderId)
-              ? "group_message_reply"
-              : "group_message",
-          groupChatId,
-          messageId,
-          pushTitle: senderResult.rows[0]?.username || "New group message",
-          pushBody: storedContent,
-          pushCategoryId: "messageReply",
-          pushData: {
-            type:
-              replyTargetSenderId && String(row.user_id) === String(replyTargetSenderId)
-                ? "group_message_reply"
-                : "group_message",
+      memberIdsResult.rows.map((row) => {
+        const pushType =
+          replyTargetSenderId && String(row.user_id) === String(replyTargetSenderId)
+            ? "group_message_reply"
+            : "group_message";
+
+        return sendPushToUser(row.user_id, {
+          title: senderResult.rows[0]?.username || "New group message",
+          body: storedContent,
+          categoryId: "messageReply",
+          data: {
+            type: pushType,
             groupChatId,
             senderId,
             messageId,
           },
-        })
-      )
+        });
+      })
     );
 
     const enrichedMessage = await fetchGroupMessageForUser(message.id, senderId);
@@ -2326,7 +2315,7 @@ router.post("/groups/messages/:messageId/react", authenticateToken, async (req, 
   const { messageId } = req.params;
   const { reaction = null } = req.body || {};
   const userId = req.user.id;
-  const allowedReactions = new Set(["heart", "laugh", "sad", "angry", "care"]);
+  const allowedReactions = new Set(["like", "heart", "laugh", "wow", "sad", "angry", "care"]);
 
   if (reaction && !allowedReactions.has(reaction)) {
     return res.status(400).json({ error: "Invalid reaction" });

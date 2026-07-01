@@ -21,8 +21,10 @@ import VerifiedBadge from "../components/VerifiedBadge";
 
 export default function Chat() {
   const reactionOptions = [
+    { key: "like", emoji: "\u{1F44D}", label: "Like" },
     { key: "heart", emoji: "\u2764\uFE0F", label: "Heart" },
     { key: "laugh", emoji: "\u{1F602}", label: "Laugh" },
+    { key: "wow", emoji: "\u{1F62E}", label: "Wow" },
     { key: "sad", emoji: "\u{1F622}", label: "Sad" },
     { key: "angry", emoji: "\u{1F621}", label: "Angry" },
     { key: "care", emoji: "\u{1F917}", label: "Care" },
