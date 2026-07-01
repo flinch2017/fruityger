@@ -120,6 +120,25 @@ export default function Profile() {
   );
 
   const activeTabPosts = profileTabPosts[activeProfileTab] || [];
+  const displayedProfilePosts = useMemo(() => {
+    if (!gridFeedOpen || !activeProfilePostId) {
+      return activeTabPosts;
+    }
+
+    const selectedIndex = activeTabPosts.findIndex(
+      (post) => String(post.post_id) === String(activeProfilePostId)
+    );
+
+    if (selectedIndex <= 0) {
+      return activeTabPosts;
+    }
+
+    return [
+      activeTabPosts[selectedIndex],
+      ...activeTabPosts.slice(selectedIndex + 1),
+      ...activeTabPosts.slice(0, selectedIndex),
+    ];
+  }, [activeTabPosts, activeProfilePostId, gridFeedOpen]);
 
   const getProfileGridMedia = (post) => {
     if (!Array.isArray(post?.media) || post.media.length === 0) return null;
@@ -481,14 +500,10 @@ export default function Profile() {
 
   useEffect(() => {
     if (!gridFeedOpen || !activeProfilePostId) return;
-    if (!activeTabPosts.some((post) => String(post.post_id) === String(activeProfilePostId))) return;
+    if (!displayedProfilePosts.some((post) => String(post.post_id) === String(activeProfilePostId))) return;
 
-    window.setTimeout(() => {
-      document
-        .getElementById(`profile-post-${activeProfilePostId}`)
-        ?.scrollIntoView({ behavior: "auto", block: "start" });
-    }, 0);
-  }, [gridFeedOpen, activeProfilePostId, activeProfileTab, activeTabPosts.length]);
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [gridFeedOpen, activeProfilePostId, activeProfileTab, displayedProfilePosts.length]);
 
   /* ================= FIXED INFINITE SCROLL ================= */
 
@@ -1431,7 +1446,7 @@ export default function Profile() {
           </div>
         )}
 
-        {!isBlockedProfile && !privatePostsHidden && gridFeedOpen && activeTabPosts.map(post => (
+        {!isBlockedProfile && !privatePostsHidden && gridFeedOpen && displayedProfilePosts.map(post => (
           <div
             key={post.post_id}
             id={`profile-post-${post.post_id}`}
