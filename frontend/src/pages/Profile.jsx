@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useParams } from "react-router-dom";
 import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaTimes, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import AeroNotice from "../components/AeroNotice";
@@ -76,6 +76,10 @@ export default function Profile() {
 
   const LIMIT = 5;
   const navigate = useNavigate();
+  const location = useLocation();
+  const routedProfilePosts = Array.isArray(location.state?.profilePosts)
+    ? location.state.profilePosts
+    : null;
 
   useEffect(() => {
     setShowFollowSuggestions(false);
@@ -126,7 +130,11 @@ export default function Profile() {
   };
 
   const openProfileGridItem = (post) => {
-    navigate(`/profile/${user?.username || username}/${activeProfileTab}/${post.post_id}`);
+    navigate(`/profile/${user?.username || username}/${activeProfileTab}/${post.post_id}`, {
+      state: {
+        profilePosts: posts,
+      },
+    });
   };
 
   const changeProfileTab = (tabKey) => {
@@ -447,8 +455,14 @@ export default function Profile() {
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
-    setPosts([]);
-    setOffset(0);
+    const hasRoutedProfilePosts = routePostId && routedProfilePosts?.length > 0;
+    if (hasRoutedProfilePosts) {
+      setPosts(routedProfilePosts);
+      setOffset(routedProfilePosts.length);
+    } else {
+      setPosts([]);
+      setOffset(0);
+    }
     setHasMore(true);
     setActiveIndexMap({});
     setActiveMenuPostId(null);
@@ -460,18 +474,21 @@ export default function Profile() {
     setActiveProfilePostId(routePostId || null);
     fetchCurrentUser();
     fetchUser();
-    fetchPosts(true);
+    if (!hasRoutedProfilePosts) {
+      fetchPosts(true);
+    }
   }, [username]);
 
   useEffect(() => {
     if (!gridFeedOpen || !activeProfilePostId) return;
+    if (!activeTabPosts.some((post) => String(post.post_id) === String(activeProfilePostId))) return;
 
-    requestAnimationFrame(() => {
+    window.setTimeout(() => {
       document
         .getElementById(`profile-post-${activeProfilePostId}`)
         ?.scrollIntoView({ behavior: "auto", block: "start" });
-    });
-  }, [gridFeedOpen, activeProfilePostId, activeProfileTab]);
+    }, 0);
+  }, [gridFeedOpen, activeProfilePostId, activeProfileTab, activeTabPosts.length]);
 
   /* ================= FIXED INFINITE SCROLL ================= */
 
