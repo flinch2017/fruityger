@@ -523,6 +523,13 @@
   transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 
+.profile-content-header h3 svg,
+.profile-tab svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
 .profile-tab small {
   color: #6c95a3;
   font-size: 11px;
@@ -600,15 +607,23 @@
   left: 8px;
   bottom: 8px;
   z-index: 2;
-  max-width: calc(100% - 16px);
-  padding: 5px 8px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border-radius: 999px;
   color: #ffffff;
   background: rgba(5, 51, 70, 0.5);
   backdrop-filter: blur(8px);
-  font-size: 11px;
-  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-shadow: 0 1px 4px rgba(0,0,0,0.22);
+}
+
+.profile-grid-overlay svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
 }
 
 .post-card {
@@ -819,6 +834,12 @@
   .profile-tab {
     min-height: 44px;
     font-size: 12px;
+  }
+
+  .profile-content-header h3 svg,
+  .profile-tab svg {
+    width: 17px;
+    height: 17px;
   }
 
   .profile-tab small {

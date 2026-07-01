@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useParams } from "react-router-dom";
-import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaTimes, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
+import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaImage, FaPlayCircle, FaRegHeart, FaRetweet, FaTh, FaTimes, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import AeroNotice from "../components/AeroNotice";
 import "../css/Profile.css";
 import CommentSheet from "../components/CommentSheet";
@@ -13,10 +13,10 @@ import VerifiedBadge from "../components/VerifiedBadge";
 import FollowSuggestions from "../components/FollowSuggestions";
 
 const PROFILE_TABS = [
-  { key: "general", label: "General" },
-  { key: "posts", label: "Posts" },
-  { key: "reposts", label: "Reposts" },
-  { key: "tapes", label: "Tapes" },
+  { key: "general", label: "General", icon: FaTh },
+  { key: "posts", label: "Posts", icon: FaImage },
+  { key: "reposts", label: "Reposts", icon: FaRetweet },
+  { key: "tapes", label: "Tapes", icon: FaPlayCircle },
 ];
 
 export default function Profile() {
@@ -120,6 +120,8 @@ export default function Profile() {
   );
 
   const activeTabPosts = profileTabPosts[activeProfileTab] || [];
+  const activeProfileTabMeta = PROFILE_TABS.find((tab) => tab.key === activeProfileTab) || PROFILE_TABS[0];
+  const ActiveProfileTabIcon = activeProfileTabMeta.icon;
   const displayedProfilePosts = useMemo(() => {
     if (!gridFeedOpen || !activeProfilePostId) {
       return activeTabPosts;
@@ -146,6 +148,16 @@ export default function Profile() {
       return post.media.find((media) => media.media_type === "video") || post.media[0];
     }
     return post.media[0];
+  };
+
+  const getProfileGridMeta = (post) => {
+    if (post.activity_type === "repost") {
+      return PROFILE_TABS.find((tab) => tab.key === "reposts");
+    }
+    if (isTapePost(post)) {
+      return PROFILE_TABS.find((tab) => tab.key === "tapes");
+    }
+    return PROFILE_TABS.find((tab) => tab.key === "posts");
   };
 
   const openProfileGridItem = (post) => {
@@ -1363,7 +1375,9 @@ export default function Profile() {
 
       <div className="profile-posts">
         <div className="profile-content-header">
-          <h3>{PROFILE_TABS.find((tab) => tab.key === activeProfileTab)?.label || "General"}</h3>
+          <h3 aria-label={activeProfileTabMeta.label} title={activeProfileTabMeta.label}>
+            <ActiveProfileTabIcon aria-hidden="true" />
+          </h3>
           {gridFeedOpen && (
             <button
               type="button"
@@ -1376,19 +1390,26 @@ export default function Profile() {
         </div>
 
         <div className="profile-tabs" role="tablist" aria-label="Profile content">
-          {PROFILE_TABS.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              role="tab"
-              aria-selected={activeProfileTab === tab.key}
-              className={`profile-tab ${activeProfileTab === tab.key ? "active" : ""}`}
-              onClick={() => changeProfileTab(tab.key)}
-            >
-              <span>{tab.label}</span>
-              <small>{formatCount(profileTabPosts[tab.key]?.length || 0)}</small>
-            </button>
-          ))}
+          {PROFILE_TABS.map((tab) => {
+            const TabIcon = tab.icon;
+            const tabCount = profileTabPosts[tab.key]?.length || 0;
+
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-label={`${tab.label} ${formatCount(tabCount)}`}
+                title={tab.label}
+                aria-selected={activeProfileTab === tab.key}
+                className={`profile-tab ${activeProfileTab === tab.key ? "active" : ""}`}
+                onClick={() => changeProfileTab(tab.key)}
+              >
+                <TabIcon aria-hidden="true" />
+                <small>{formatCount(tabCount)}</small>
+              </button>
+            );
+          })}
         </div>
 
         {isBlockedProfile && !isOwnProfile ? (
@@ -1412,12 +1433,15 @@ export default function Profile() {
             {activeTabPosts.map((post) => {
               const gridMedia = getProfileGridMedia(post);
               const isVideoTile = gridMedia?.media_type === "video";
+              const gridMeta = getProfileGridMeta(post);
+              const GridIcon = gridMeta?.icon || FaImage;
 
               return (
                 <button
                   key={`${activeProfileTab}-${post.post_id}`}
                   type="button"
                   className={`profile-grid-tile ${!gridMedia ? "text-only" : ""}`}
+                  aria-label={`${gridMeta?.label || "Post"}: ${post.caption || "profile post"}`}
                   onClick={() => openProfileGridItem(post)}
                 >
                   {gridMedia ? (
@@ -1437,8 +1461,12 @@ export default function Profile() {
                     </span>
                   )}
 
-                  <span className="profile-grid-overlay">
-                    {post.activity_type === "repost" ? "Repost" : isTapePost(post) ? "Tape" : "Post"}
+                  <span
+                    className="profile-grid-overlay"
+                    aria-hidden="true"
+                    title={gridMeta?.label || "Post"}
+                  >
+                    <GridIcon />
                   </span>
                 </button>
               );
