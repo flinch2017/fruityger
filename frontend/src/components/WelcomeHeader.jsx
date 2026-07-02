@@ -35,6 +35,7 @@ export default function WelcomeHeader() {
           <a onClick={() => handleNavigate("/terms")}>Terms & Conditions</a>
           <a onClick={() => handleNavigate("/privacy")}>Privacy Policy</a>
           <a onClick={() => handleNavigate("/cookies")}>Cookie Policy</a>
+          <a onClick={() => handleNavigate("/community-guidelines")}>Guidelines</a>
           <a onClick={() => handleNavigate("/about")}>About</a>
           <button
             className="welcome-login-btn"
@@ -51,6 +52,7 @@ export default function WelcomeHeader() {
           <a onClick={() => handleNavigate("/terms")}>Terms & Conditions</a>
           <a onClick={() => handleNavigate("/privacy")}>Privacy Policy</a>
           <a onClick={() => handleNavigate("/cookies")}>Cookie Policy</a>
+          <a onClick={() => handleNavigate("/community-guidelines")}>Community Guidelines</a>
           <a onClick={() => handleNavigate("/about")}>About</a>
         </nav>
 

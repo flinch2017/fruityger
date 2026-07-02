@@ -23,6 +23,14 @@ const maskEmail = (email = "") => {
 
 const maskPassword = () => "************";
 
+const legalLinks = [
+  { label: "Terms", path: "/terms" },
+  { label: "Privacy", path: "/privacy" },
+  { label: "Cookies", path: "/cookies" },
+  { label: "Guidelines", path: "/community-guidelines" },
+  { label: "About", path: "/about" },
+];
+
 export default function Settings() {
   const navigate = useNavigate();
   const [email, setEmail] = useState(localStorage.getItem("verificationEmail") || "");
@@ -529,6 +537,19 @@ export default function Settings() {
           </div>
         </div>
       </section>
+
+      <div className="settings-legal-capsules" aria-label="Legal and information pages">
+        {legalLinks.map((link) => (
+          <button
+            key={link.path}
+            type="button"
+            className="settings-legal-capsule"
+            onClick={() => navigate(link.path)}
+          >
+            {link.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

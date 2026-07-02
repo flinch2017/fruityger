@@ -60,6 +60,7 @@ export default function Welcome() {
             <Link to="/terms">Terms and Conditions</Link>
             <Link to="/privacy">Privacy Policy</Link>
             <Link to="/cookies">Cookie Policy</Link>
+            <Link to="/community-guidelines">Community Guidelines</Link>
             <Link to="/about">About</Link>
           </div>
           <p className="welcome-copyright">

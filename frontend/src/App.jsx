@@ -44,6 +44,7 @@ import ProfilePostView from "./pages/ProfilePostView";
 import TermsPage from "./pages/TermsPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import CookiePage from "./pages/CookiePage";
+import CommunityGuidelinesPage from "./pages/CommunityGuidelinesPage";
 import AboutPage from "./pages/AboutPage";
 import ShareProfile from "./pages/ShareProfile";
 import AdminRoute from "./components/AdminRoute";
@@ -239,6 +240,14 @@ function App() {
           element={
             <StandaloneLayout>
               <CookiePage />
+            </StandaloneLayout>
+          }
+        />
+        <Route
+          path="/community-guidelines"
+          element={
+            <StandaloneLayout>
+              <CommunityGuidelinesPage />
             </StandaloneLayout>
           }
         />
