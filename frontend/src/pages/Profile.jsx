@@ -8,6 +8,7 @@ import CommentSheet from "../components/CommentSheet";
 import "../css/CommentSheet.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
+import { getMediaThumbnailUrl, getVideoPosterUrl } from "../utils/mediaThumbnail";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
 import FollowSuggestions from "../components/FollowSuggestions";
@@ -1438,6 +1439,7 @@ export default function Profile() {
             {activeTabPosts.map((post) => {
               const gridMedia = getProfileGridMedia(post);
               const isVideoTile = gridMedia?.media_type === "video";
+              const gridThumbnailUrl = getMediaThumbnailUrl(gridMedia);
               const gridMeta = getProfileGridMeta(post);
               const GridIcon = gridMeta?.icon || FaImage;
 
@@ -1450,7 +1452,9 @@ export default function Profile() {
                   onClick={() => openProfileGridItem(post)}
                 >
                   {gridMedia ? (
-                    isVideoTile ? (
+                    isVideoTile && gridThumbnailUrl ? (
+                      <img src={getSafeMediaUrl(gridThumbnailUrl)} alt="" />
+                    ) : isVideoTile ? (
                       <video
                         src={getSafeMediaUrl(gridMedia.media_url)}
                         muted
@@ -1643,6 +1647,7 @@ export default function Profile() {
                               }
                             }}
                             src={getSafeMediaUrl(m.media_url)}
+                            poster={getVideoPosterUrl(m) ? getSafeMediaUrl(getVideoPosterUrl(m)) : undefined}
                             playsInline
                             muted={videoMutedMap[getVideoControlKey(post.post_id, i)] ?? true}
                             preload="metadata"

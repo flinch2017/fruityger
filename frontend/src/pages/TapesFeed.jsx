@@ -15,6 +15,7 @@ import "../css/CommentSheet.css";
 import "../css/TapesFeed.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
+import { getVideoPosterUrl } from "../utils/mediaThumbnail";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
 
@@ -712,6 +713,7 @@ export default function TapesFeed() {
                   }}
                   className="tape-video"
                   src={getSafeMediaUrl(tape.primaryVideo.media_url)}
+                  poster={getVideoPosterUrl(tape.primaryVideo) ? getSafeMediaUrl(getVideoPosterUrl(tape.primaryVideo)) : undefined}
                   playsInline
                   autoPlay
                   muted={videoMutedMap[tape.post_id] ?? true}

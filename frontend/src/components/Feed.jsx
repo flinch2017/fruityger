@@ -6,6 +6,7 @@ import "../css/Feed.css";
 import "../css/CommentSheet.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
+import { getVideoPosterUrl } from "../utils/mediaThumbnail";
 import CaptionWithHashtags from "./CaptionWithHashtags";
 import VerifiedBadge from "./VerifiedBadge";
 import FollowSuggestions from "./FollowSuggestions";
@@ -1045,6 +1046,7 @@ export default function Feed() {
                               el.muted = videoMutedMap[getVideoControlKey(post.post_id, index)] ?? true;
                             }}
                             src={getSafeMediaUrl(media.media_url)}
+                            poster={getVideoPosterUrl(media) ? getSafeMediaUrl(getVideoPosterUrl(media)) : undefined}
                             playsInline
                             muted={videoMutedMap[getVideoControlKey(post.post_id, index)] ?? true}
                             preload="metadata"

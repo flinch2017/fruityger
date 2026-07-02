@@ -6,6 +6,7 @@ import "../css/Profile.css";
 import "../css/CommentSheet.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
+import { getVideoPosterUrl } from "../utils/mediaThumbnail";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
 
@@ -299,6 +300,7 @@ export default function ProfilePostView() {
                           {media.media_type === "video" ? (
                             <video
                               src={getSafeMediaUrl(media.media_url)}
+                              poster={getVideoPosterUrl(media) ? getSafeMediaUrl(getVideoPosterUrl(media)) : undefined}
                               playsInline
                               controls
                               muted={videoMutedMap[`${post.post_id}-${index}`] ?? true}

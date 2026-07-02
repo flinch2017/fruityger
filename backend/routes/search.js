@@ -6,6 +6,7 @@ import { ensureRepostSchema } from "../utils/reposts.js";
 import { ensurePrivateAccountSchema } from "../utils/privacy.js";
 import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
 import { ensureAccountNameSchema } from "../utils/accountName.js";
+import { ensurePostMediaThumbnailSchema } from "../utils/postMediaSchema.js";
 
 const router = express.Router();
 
@@ -30,6 +31,7 @@ router.get("/hashtags/:tag", authenticateToken, async (req, res) => {
     await ensureVerificationBadgeSchema();
     await ensureRepostSchema();
     await ensurePrivateAccountSchema();
+    await ensurePostMediaThumbnailSchema();
     await ensureVerificationBadgeSchema();
     await ensureRepostSchema();
     await ensurePrivateAccountSchema();
@@ -75,6 +77,7 @@ router.get("/hashtags/:tag", authenticateToken, async (req, res) => {
         u.is_verified,
         preview.media_url AS preview_media_url,
         preview.media_type AS preview_media_type,
+        preview.thumbnail_url AS preview_thumbnail_url,
         COUNT(DISTINCT l.like_id)::int AS like_count,
         (
           SELECT COUNT(*)
@@ -89,7 +92,7 @@ router.get("/hashtags/:tag", authenticateToken, async (req, res) => {
        AND u.deactivated_at IS NULL
        AND u.deleted_at IS NULL
       LEFT JOIN LATERAL (
-        SELECT pm.media_url, pm.media_type
+        SELECT pm.media_url, pm.media_type, pm.thumbnail_url
         FROM post_media pm
         WHERE pm.post_id = p.post_id
         ORDER BY pm.media_order ASC
@@ -128,7 +131,8 @@ router.get("/hashtags/:tag", authenticateToken, async (req, res) => {
         u.profile_pic,
         u.is_verified,
         preview.media_url,
-        preview.media_type
+        preview.media_type,
+        preview.thumbnail_url
       ORDER BY like_count DESC, comment_count DESC, p.date_posted DESC
       LIMIT 60
       `,
@@ -211,6 +215,7 @@ router.get("/", authenticateToken, async (req, res) => {
     await backfillPostHashtags();
     await ensureBlockedUsersTable();
     await ensureAccountNameSchema();
+    await ensurePostMediaThumbnailSchema();
 
     const keyword = req.query.q?.trim();
     const normalizedKeyword = normalizeTag(keyword);
@@ -284,7 +289,8 @@ router.get("/", authenticateToken, async (req, res) => {
               json_build_object(
                 'media_url', pm.media_url,
                 'media_type', pm.media_type,
-                'media_order', pm.media_order
+                'media_order', pm.media_order,
+                'thumbnail_url', pm.thumbnail_url
               )
               ORDER BY pm.media_order ASC
             )

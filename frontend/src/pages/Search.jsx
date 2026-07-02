@@ -10,6 +10,7 @@ import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
 import FollowSuggestions from "../components/FollowSuggestions";
 import { getDisplayName } from "../utils/displayName";
+import { getVideoPosterUrl } from "../utils/mediaThumbnail";
 
 const SEARCH_TABS = [
   { key: "profiles", label: "Profiles", resultKey: "users" },
@@ -909,6 +910,7 @@ export default function Search() {
                                         el.muted = videoMutedMap[getVideoControlKey(p.post_id, index)] ?? true;
                                       }}
                                       src={getSafeMediaUrl(media.media_url)}
+                                      poster={getVideoPosterUrl(media) ? getSafeMediaUrl(getVideoPosterUrl(media)) : undefined}
                                       playsInline
                                       muted={videoMutedMap[getVideoControlKey(p.post_id, index)] ?? true}
                                       preload="metadata"

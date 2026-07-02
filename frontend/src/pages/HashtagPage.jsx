@@ -144,7 +144,9 @@ export default function HashtagPage() {
             >
               <div className="hashtag-tile-media">
                 {post.preview_media_url ? (
-                  post.preview_media_type === "video" ? (
+                  post.preview_media_type === "video" && post.preview_thumbnail_url ? (
+                    <img src={getSafeMediaUrl(post.preview_thumbnail_url)} alt="" />
+                  ) : post.preview_media_type === "video" ? (
                     <video
                       src={getSafeMediaUrl(post.preview_media_url)}
                       muted

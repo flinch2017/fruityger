@@ -12,6 +12,7 @@ import { syncPostMentions } from "../utils/mentions.js";
 import { ensureRepostSchema } from "../utils/reposts.js";
 import { canViewUserActivity, ensurePrivateAccountSchema } from "../utils/privacy.js";
 import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
+import { ensurePostMediaThumbnailSchema } from "../utils/postMediaSchema.js";
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ router.get("/posts", authenticateToken, async (req, res) => {
     await ensureRepostSchema();
     await ensurePrivateAccountSchema();
     await ensureVerificationBadgeSchema();
+    await ensurePostMediaThumbnailSchema();
 
     const viewerId = req.user.id;
     let userId = viewerId;
@@ -121,7 +123,8 @@ router.get("/posts", authenticateToken, async (req, res) => {
               json_build_object(
                 'media_url', pm.media_url,
                 'media_type', pm.media_type,
-                'media_order', pm.media_order
+                'media_order', pm.media_order,
+                'thumbnail_url', pm.thumbnail_url
               )
               ORDER BY pm.media_order ASC
             )
@@ -202,6 +205,7 @@ router.get("/public-posts", async (req, res) => {
     await ensureRepostSchema();
     await ensurePrivateAccountSchema();
     await ensureVerificationBadgeSchema();
+    await ensurePostMediaThumbnailSchema();
     const username = req.query.username;
 
     if (!username) {
@@ -274,7 +278,8 @@ router.get("/public-posts", async (req, res) => {
               json_build_object(
                 'media_url', pm.media_url,
                 'media_type', pm.media_type,
-                'media_order', pm.media_order
+                'media_order', pm.media_order,
+                'thumbnail_url', pm.thumbnail_url
               )
               ORDER BY pm.media_order ASC
             )

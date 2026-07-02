@@ -12,6 +12,7 @@ import { ensureHashtagSchema } from "../utils/hashtags.js";
 import { ensurePrivateAccountSchema } from "../utils/privacy.js";
 import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
 import { ensureAccountNameSchema, normalizeAccountName } from "../utils/accountName.js";
+import { ensurePostMediaThumbnailSchema } from "../utils/postMediaSchema.js";
 
 const router = express.Router();
 
@@ -591,6 +592,7 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
     await ensureTapeViewEventsSchema();
     await ensurePrivateAccountSchema();
     await ensureVerificationBadgeSchema();
+    await ensurePostMediaThumbnailSchema();
     const userId = req.user.id;
     const { postId } = req.params;
 
@@ -602,7 +604,7 @@ router.get("/post/:postId", authenticateToken, async (req, res) => {
         u.profile_pic,
         u.is_verified,
         COALESCE(u.is_private, false) AS author_is_private,
-        COALESCE(( SELECT json_agg( json_build_object( 'media_url', pm.media_url, 'media_type', pm.media_type, 'media_order', pm.media_order ) ORDER BY pm.media_order ASC ) FROM post_media pm WHERE pm.post_id = p.post_id ), '[]') AS media,
+        COALESCE(( SELECT json_agg( json_build_object( 'media_url', pm.media_url, 'media_type', pm.media_type, 'media_order', pm.media_order, 'thumbnail_url', pm.thumbnail_url ) ORDER BY pm.media_order ASC ) FROM post_media pm WHERE pm.post_id = p.post_id ), '[]') AS media,
         (
           SELECT COUNT(*)::int
           FROM likes
@@ -732,6 +734,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
     await ensureHashtagSchema();
     await ensurePrivateAccountSchema();
     await ensureVerificationBadgeSchema();
+    await ensurePostMediaThumbnailSchema();
     const userId = req.user.id;
     const limit = parseInt(req.query.limit, 10) || 5;
     const offset = parseInt(req.query.offset, 10) || 0;
@@ -993,7 +996,7 @@ router.get("/feed", authenticateToken, async (req, res) => {
           WHEN latest_repost.reposter_id IS NOT NULL THEN 'repost'
           ELSE 'post'
         END AS feed_activity_type,
-        COALESCE(( SELECT json_agg( json_build_object( 'media_url', pm.media_url, 'media_type', pm.media_type, 'media_order', pm.media_order ) ORDER BY pm.media_order ASC ) FROM post_media pm WHERE pm.post_id = p.post_id ), '[]') AS media,
+        COALESCE(( SELECT json_agg( json_build_object( 'media_url', pm.media_url, 'media_type', pm.media_type, 'media_order', pm.media_order, 'thumbnail_url', pm.thumbnail_url ) ORDER BY pm.media_order ASC ) FROM post_media pm WHERE pm.post_id = p.post_id ), '[]') AS media,
         (
           SELECT COUNT(*)::int
           FROM likes

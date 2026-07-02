@@ -6,6 +6,7 @@ import pool from "../db.js";
 import { authenticateAdmin, ensureAdminSchema } from "../middleware/adminAuth.js";
 import { createNotification } from "../utils/notifications.js";
 import { ensurePrivateAccountSchema } from "../utils/privacy.js";
+import { ensurePostMediaThumbnailSchema } from "../utils/postMediaSchema.js";
 
 const router = express.Router();
 
@@ -195,16 +196,18 @@ const buildReportPreview = async (report) => {
 
   try {
     if (contentType === "post") {
+      await ensurePostMediaThumbnailSchema();
       const { rows } = await pool.query(
         `
         SELECT
           p.caption,
           pm.media_url,
-          pm.media_type
+          pm.media_type,
+          pm.thumbnail_url
         FROM posts
         p
         LEFT JOIN LATERAL (
-          SELECT media_url, media_type
+          SELECT media_url, media_type, thumbnail_url
           FROM post_media
           WHERE post_id = p.post_id
           ORDER BY media_order ASC
@@ -219,6 +222,7 @@ const buildReportPreview = async (report) => {
         text: rows[0]?.caption || null,
         media_url: rows[0]?.media_url || null,
         media_type: rows[0]?.media_type || null,
+        thumbnail_url: rows[0]?.thumbnail_url || null,
       };
     }
 

@@ -22,6 +22,7 @@ import { ensureEmailVerificationSchema } from "./utils/emailVerification.js";
 import { backfillPostHashtags, ensureHashtagSchema } from "./utils/hashtags.js";
 import { ensurePerformanceIndexes } from "./utils/performanceIndexes.js";
 import { ensurePasskeySchema } from "./utils/webauthn.js";
+import { ensurePostMediaThumbnailSchema } from "./utils/postMediaSchema.js";
 
 
 
@@ -132,6 +133,10 @@ ensurePerformanceIndexes().catch((err) => {
 
 ensurePasskeySchema().catch((err) => {
   console.error("Passkey schema bootstrap failed:", err);
+});
+
+ensurePostMediaThumbnailSchema().catch((err) => {
+  console.error("Post media thumbnail schema bootstrap failed:", err);
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

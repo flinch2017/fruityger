@@ -7,6 +7,7 @@ import "../css/CommentSheet.css";
 import "../css/PostDetail.css";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
+import { getVideoPosterUrl } from "../utils/mediaThumbnail";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
 
@@ -450,6 +451,7 @@ export default function PostDetail() {
                             el.muted = videoMutedMap[getVideoControlKey(index)] ?? true;
                           }}
                           src={getSafeMediaUrl(media.media_url)}
+                          poster={getVideoPosterUrl(media) ? getSafeMediaUrl(getVideoPosterUrl(media)) : undefined}
                           playsInline
                           loop
                           muted={videoMutedMap[getVideoControlKey(index)] ?? true}

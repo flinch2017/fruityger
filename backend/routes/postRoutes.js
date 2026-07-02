@@ -11,8 +11,9 @@ import { r2 } from "../utils/r2.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { ensureHashtagSchema, extractHashtags, MAX_HASHTAGS_PER_POST, syncPostHashtags } from "../utils/hashtags.js";
 import { syncPostMentions } from "../utils/mentions.js";
-import { transcodeVideoFileToMp4 } from "../utils/videoProcessing.js";
+import { createVideoThumbnailFile, transcodeVideoFileToMp4 } from "../utils/videoProcessing.js";
 import { assertContentAllowedOrReport, ContentModerationError } from "../utils/contentModeration.js";
+import { ensurePostMediaThumbnailSchema } from "../utils/postMediaSchema.js";
 
 const router = express.Router();
 const sanitizeFileName = (value = "") =>
@@ -53,6 +54,7 @@ router.post(
 
         try {
             await ensureHashtagSchema();
+            await ensurePostMediaThumbnailSchema();
 
             const { caption } = req.body;
             const files = req.files || [];
@@ -111,6 +113,8 @@ router.post(
                 let uploadBody;
                 let uploadContentType;
                 let uploadFileName;
+                let thumbnailUrl = null;
+                let thumbnailSourcePath = null;
 
                 cleanupTasks.push(() => fs.rm(file.path, { force: true }));
 
@@ -120,6 +124,7 @@ router.post(
                     uploadBody = createReadStream(processedFile.outputPath);
                     uploadContentType = processedFile.mimetype;
                     uploadFileName = sanitizeFileName(processedFile.fileName);
+                    thumbnailSourcePath = processedFile.outputPath;
                 } else {
                     uploadBody = createReadStream(file.path);
                     uploadContentType = file.mimetype;
@@ -141,12 +146,35 @@ router.post(
 
                 const mediaUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
 
+                if (isVideo) {
+                    const thumbnail = await createVideoThumbnailFile(
+                        thumbnailSourcePath || file.path,
+                        uploadFileName
+                    );
+                    cleanupTasks.push(thumbnail.cleanup);
+
+                    const thumbnailFileName = sanitizeFileName(thumbnail.fileName);
+                    const thumbnailKey = `posts/${postId}/${mediaId}-${thumbnailFileName}`;
+
+                    await r2.send(
+                        new PutObjectCommand({
+                            Bucket: bucketName,
+                            Key: thumbnailKey,
+                            Body: createReadStream(thumbnail.outputPath),
+                            ContentType: thumbnail.mimetype
+                        })
+                    );
+
+                    thumbnailUrl = `${process.env.R2_PUBLIC_URL}/${thumbnailKey}`;
+                }
+
                 mediaRecords.push([
                     mediaId,
                     postId,
                     mediaUrl,
                     isVideo ? "video" : "image",
-                    i
+                    i,
+                    thumbnailUrl
                 ]);
             }
 
@@ -157,9 +185,9 @@ router.post(
             if (mediaRecords.length > 0) {
                 await pool.query(
                     `INSERT INTO post_media
-                    (media_id, post_id, media_url, media_type, media_order)
+                    (media_id, post_id, media_url, media_type, media_order, thumbnail_url)
                     VALUES ${mediaRecords.map((_, i) =>
-                        `($${i*5+1},$${i*5+2},$${i*5+3},$${i*5+4},$${i*5+5})`
+                        `($${i*6+1},$${i*6+2},$${i*6+3},$${i*6+4},$${i*6+5},$${i*6+6})`
                     ).join(",")}`,
                     mediaRecords.flat()
                 );

@@ -144,3 +144,50 @@ export async function transcodeVideoFileToMp4(inputPath, originalName = "video")
     throw error;
   }
 }
+
+export async function createVideoThumbnailFile(inputPath, originalName = "video") {
+  if (!ffmpegPath) {
+    throw new Error("FFmpeg binary is not available");
+  }
+
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "fruityger-video-thumb-"));
+  const inputExt = path.extname(originalName) || path.extname(inputPath) || ".mp4";
+  const baseName = sanitizeBaseName(path.basename(originalName, inputExt));
+  const outputPath = path.join(tempDir, `${baseName}-thumbnail.jpg`);
+
+  try {
+    try {
+      await execFileAsync(ffmpegPath, [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        inputPath,
+        "-frames:v",
+        "1",
+        "-vf",
+        "scale=480:-2:force_original_aspect_ratio=decrease",
+        "-q:v",
+        "5",
+        outputPath,
+      ], FFMPEG_EXEC_OPTIONS);
+    } catch (error) {
+      const stderr = error?.stderr ? String(error.stderr).trim() : "";
+      const ffmpegMessage = stderr.split("\n").slice(-3).join(" ").trim();
+      throw new Error(ffmpegMessage || "Video thumbnail generation failed");
+    }
+
+    return {
+      outputPath,
+      mimetype: "image/jpeg",
+      fileName: `${baseName}-thumbnail.jpg`,
+      cleanup: async () => {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    await fs.rm(tempDir, { recursive: true, force: true });
+    throw error;
+  }
+}

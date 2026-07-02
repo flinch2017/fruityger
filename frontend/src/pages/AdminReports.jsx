@@ -187,6 +187,7 @@ export default function AdminReports() {
                       {report.preview?.media_url && report.preview?.media_type === "video" && (
                         <video
                           src={report.preview.media_url}
+                          poster={report.preview.thumbnail_url || undefined}
                           className="admin-media-thumb"
                           controls
                           preload="metadata"
