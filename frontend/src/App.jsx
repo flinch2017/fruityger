@@ -86,6 +86,24 @@ function StandaloneLayout({ children }) {
   );
 }
 
+function PublicInfoLayout({ children }) {
+  const hasToken = Boolean(localStorage.getItem("token"));
+
+  if (hasToken) {
+    return (
+      <MainLayout>
+        {children}
+      </MainLayout>
+    );
+  }
+
+  return (
+    <StandaloneLayout>
+      {children}
+    </StandaloneLayout>
+  );
+}
+
 function MiscPageLayout({ children }) {
   return (
     <>
@@ -222,41 +240,41 @@ function App() {
         <Route
           path="/terms"
           element={
-            <StandaloneLayout>
+            <PublicInfoLayout>
               <TermsPage />
-            </StandaloneLayout>
+            </PublicInfoLayout>
           }
         />
         <Route
           path="/privacy"
           element={
-            <StandaloneLayout>
+            <PublicInfoLayout>
               <PrivacyPage />
-            </StandaloneLayout>
+            </PublicInfoLayout>
           }
         />
         <Route
           path="/cookies"
           element={
-            <StandaloneLayout>
+            <PublicInfoLayout>
               <CookiePage />
-            </StandaloneLayout>
+            </PublicInfoLayout>
           }
         />
         <Route
           path="/community-guidelines"
           element={
-            <StandaloneLayout>
+            <PublicInfoLayout>
               <CommunityGuidelinesPage />
-            </StandaloneLayout>
+            </PublicInfoLayout>
           }
         />
         <Route
           path="/about"
           element={
-            <StandaloneLayout>
+            <PublicInfoLayout>
               <AboutPage />
-            </StandaloneLayout>
+            </PublicInfoLayout>
           }
         />
 
