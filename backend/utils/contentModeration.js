@@ -8,6 +8,7 @@ import * as nsfwjs from "nsfwjs";
 import jpeg from "jpeg-js";
 import ffmpegPath from "ffmpeg-static";
 import pool from "../db.js";
+import { moderationTextRules } from "./moderationTextRules.js";
 
 const execFileAsync = promisify(execFile);
 const REVIEW_THRESHOLD = Number(process.env.CONTENT_MODERATION_REVIEW_THRESHOLD || 0.45);
@@ -21,21 +22,6 @@ const FFMPEG_EXEC_OPTIONS = {
 };
 
 let nsfwModelPromise = null;
-
-const CHILD_SAFETY_TERMS = [
-  /\bchild\s*(porn|nudes?|sexual|sex|abuse|exploitation)\b/i,
-  /\bminor\s*(nudes?|sexual|sex|porn|abuse|exploitation)\b/i,
-  /\bunderage\s*(nudes?|sexual|sex|porn)\b/i,
-  /\bcsam\b/i,
-];
-
-const SEXUAL_REVIEW_TERMS = [
-  /\bnudes?\b/i,
-  /\bnsfw\b/i,
-  /\bporn\b/i,
-  /\bexplicit\b/i,
-  /\bsexual\b/i,
-];
 
 export class ContentModerationError extends Error {
   constructor(message, { statusCode = 400, result = null } = {}) {
@@ -316,21 +302,28 @@ function moderateText(text = "") {
     };
   }
 
-  if (CHILD_SAFETY_TERMS.some((pattern) => pattern.test(textValue))) {
-    return {
-      status: "blocked",
-      flagged: true,
-      blocked_categories: ["child_safety_text"],
-      review_categories: [],
-    };
+  const blockedCategories = [];
+  const reviewCategories = [];
+
+  for (const rule of moderationTextRules) {
+    if (!rule?.patterns?.some((pattern) => pattern.test(textValue))) {
+      continue;
+    }
+
+    if (rule.action === "block") {
+      blockedCategories.push(rule.category);
+      continue;
+    }
+
+    reviewCategories.push(rule.category);
   }
 
-  if (SEXUAL_REVIEW_TERMS.some((pattern) => pattern.test(textValue))) {
+  if (blockedCategories.length > 0 || reviewCategories.length > 0) {
     return {
-      status: "review",
+      status: blockedCategories.length > 0 ? "blocked" : "review",
       flagged: true,
-      blocked_categories: [],
-      review_categories: ["sexual_text"],
+      blocked_categories: blockedCategories,
+      review_categories: reviewCategories,
     };
   }
 
