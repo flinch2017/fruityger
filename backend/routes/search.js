@@ -228,13 +228,18 @@ router.get("/", authenticateToken, async (req, res) => {
 
     const users = await pool.query(
       `
-      SELECT id, username, account_name, profile_pic, is_verified
+      SELECT
+        id,
+        username,
+        account_name,
+        profile_pic,
+        is_verified,
+        id = $2 AS is_self
       FROM users u
       WHERE (
           u.username ILIKE $1
           OR u.account_name ILIKE $1
         )
-        AND u.id <> $2
         AND u.deactivated_at IS NULL
         AND u.deleted_at IS NULL
         AND NOT EXISTS (

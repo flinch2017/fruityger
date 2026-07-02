@@ -421,7 +421,7 @@ export default function Header() {
               </span>
               <span className="search-suggestion-copy">
                 <strong>{getDisplayName(user)}</strong>
-                <span>{user.account_name ? `@${user.username}` : "Open profile"}</span>
+                <span>{user.is_self ? "You" : user.account_name ? `@${user.username}` : "Open profile"}</span>
               </span>
             </button>
           ))}

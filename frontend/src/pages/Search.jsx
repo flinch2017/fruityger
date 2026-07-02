@@ -717,8 +717,10 @@ export default function Search() {
                         {getDisplayName(u)}
                         <VerifiedBadge verified={u.is_verified} />
                       </span>
-                      {u.account_name && (
-                        <span className="search-user-handle">@{u.username}</span>
+                      {(u.account_name || u.is_self) && (
+                        <span className="search-user-handle">
+                          {u.is_self ? `You · @${u.username}` : `@${u.username}`}
+                        </span>
                       )}
                     </div>
                   ))
