@@ -778,8 +778,8 @@ export default function Messages() {
                   </span>
                   {user.is_online && <span className="messages-online-dot online"></span>}
                   <span className="messages-online-name">
-                    <span className="username-with-badge">
-                      {getDisplayName(user)}
+                    <span className="username-with-badge messages-online-name-row">
+                      <span className="messages-online-name-text">{getDisplayName(user)}</span>
                       <VerifiedBadge verified={user.is_verified} />
                     </span>
                   </span>

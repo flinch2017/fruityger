@@ -398,7 +398,8 @@
 }
 
 .messages-online-item {
-  min-width: 76px;
+  width: 92px;
+  min-width: 92px;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -475,10 +476,19 @@
 }
 
 .messages-online-name {
-  max-width: 76px;
+  width: 100%;
   color: #026b90;
   font-size: 12px;
   font-weight: 700;
+}
+
+.messages-online-name-row {
+  width: 100%;
+  justify-content: center;
+}
+
+.messages-online-name-text {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
