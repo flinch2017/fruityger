@@ -5,6 +5,7 @@ import { createNotification } from "../utils/notifications.js";
 import { extractMentionUsernames } from "../utils/mentions.js";
 import { canViewUserActivity, ensurePrivateAccountSchema } from "../utils/privacy.js";
 import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
+import { assertContentAllowedOrReport, ContentModerationError } from "../utils/contentModeration.js";
 
 const router = express.Router();
 
@@ -122,6 +123,20 @@ router.post("/", authenticateToken, async (req, res) => {
       return res.status(403).json({ error: "This post is private" });
     }
 
+    const normalizedText = String(text || "").trim();
+    await assertContentAllowedOrReport({
+      userId,
+      contentType: "comment",
+      contentId: postId,
+      text: normalizedText,
+      context: {
+        surface: parentId ? "comment_reply_create" : "comment_create",
+        post_id: postId,
+        parent_comment_id: finalParentId,
+        reply_target_comment_id: parentId || null,
+      },
+    });
+
     const insert = await pool.query(
       `
       INSERT INTO comments
@@ -129,7 +144,7 @@ router.post("/", authenticateToken, async (req, res) => {
       VALUES ($1, $2, $3, $4)
       RETURNING *
       `,
-      [postId, userId, text, finalParentId]
+      [postId, userId, normalizedText, finalParentId]
     );
 
     const newComment = insert.rows[0];
@@ -154,7 +169,7 @@ router.post("/", authenticateToken, async (req, res) => {
       });
     }
 
-    const mentionUsernames = extractMentionUsernames(text);
+    const mentionUsernames = extractMentionUsernames(normalizedText);
     if (mentionUsernames.length > 0) {
       const mentionTargets = await pool.query(
         `
@@ -214,6 +229,13 @@ router.post("/", authenticateToken, async (req, res) => {
     res.status(201).json(full.rows[0]);
   } catch (err) {
     console.error(err);
+    if (err instanceof ContentModerationError) {
+      return res.status(err.statusCode || 400).json({
+        error: err.message,
+        moderation: err.result,
+      });
+    }
+
     res.status(500).json({ error: "Failed to create comment" });
   }
 });

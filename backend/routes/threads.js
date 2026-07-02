@@ -1,6 +1,7 @@
 import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/auth.js";
+import { assertContentAllowedOrReport, ContentModerationError } from "../utils/contentModeration.js";
 
 const router = express.Router();
 
@@ -23,6 +24,19 @@ router.post("/", authenticateToken, async (req, res) => {
     });
     }
 
+    const normalizedText = text.trim();
+    await assertContentAllowedOrReport({
+      userId,
+      contentType: "thread",
+      contentId: commentId || parentThreadId,
+      text: normalizedText,
+      context: {
+        surface: parentThreadId ? "thread_reply_create" : "thread_create",
+        comment_id: commentId || null,
+        parent_thread_id: parentThreadId || null,
+      },
+    });
+
     await pool.query(`
     INSERT INTO threads (
         comment_id,
@@ -36,7 +50,7 @@ router.post("/", authenticateToken, async (req, res) => {
         commentId || null,
         parentThreadId || null,
         userId,
-        text.trim()
+        normalizedText
     ]
     );
 
@@ -44,6 +58,13 @@ router.post("/", authenticateToken, async (req, res) => {
 
   } catch (err) {
     console.error(err);
+    if (err instanceof ContentModerationError) {
+      return res.status(err.statusCode || 400).json({
+        error: err.message,
+        moderation: err.result,
+      });
+    }
+
     res.status(500).json({ error: "Server error" });
   }
 });

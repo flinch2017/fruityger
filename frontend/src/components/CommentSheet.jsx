@@ -324,6 +324,7 @@ export default function CommentSheet({
     if (!text.trim()) return;
 
     setLoading(true);
+    setNotice(null);
 
     try {
 
@@ -350,6 +351,14 @@ export default function CommentSheet({
 
       const newComment = await res.json();
 
+      if (!res.ok) {
+        setNotice({
+          type: "error",
+          message: newComment.error || "Failed to post comment.",
+        });
+        return;
+      }
+
       
 
       setText("");
@@ -360,9 +369,10 @@ export default function CommentSheet({
 
     } catch (err) {
       console.error(err);
+      setNotice({ type: "error", message: "Failed to post comment." });
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const fetchMentionSuggestions = async (query) => {
