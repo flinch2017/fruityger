@@ -45,6 +45,8 @@ export default function Chat() {
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [blockedByMe, setBlockedByMe] = useState(false);
   const [blockedByThem, setBlockedByThem] = useState(false);
+  const [requestStatus, setRequestStatus] = useState("accepted");
+  const [requestedBy, setRequestedBy] = useState(null);
   const [notice, setNotice] = useState(null);
   const [sending, setSending] = useState(false);
   const [otherUserOnline, setOtherUserOnline] = useState(false);
@@ -59,6 +61,10 @@ export default function Chat() {
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [onlineUserIds, setOnlineUserIds] = useState([]);
   const otherUserDisplayName = getDisplayName(otherUser, "Conversation");
+  const isIncomingRequest =
+    requestStatus === "pending" &&
+    requestedBy &&
+    String(requestedBy) !== String(userId);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -276,6 +282,8 @@ export default function Chat() {
       setMessages([...(data.messages || [])].reverse());
       setBlockedByMe(Boolean(chat.blocked_by_me));
       setBlockedByThem(Boolean(chat.blocked_by_them));
+      setRequestStatus(chat.request_status || "accepted");
+      setRequestedBy(chat.requested_by || null);
       dispatchMessagesRefresh();
 
       return data;
@@ -588,8 +596,52 @@ export default function Chat() {
     setOtherUserOnline(onlineUserIds.includes(String(otherUser.id)));
   }, [otherUser?.id, onlineUserIds]);
 
+  const acceptMessageRequest = async () => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/requests/${chatId}/accept`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to accept message request");
+      }
+
+      setRequestStatus("accepted");
+      setRequestedBy(null);
+      setNotice({ type: "success", message: "Message request accepted." });
+      dispatchMessagesRefresh();
+      await broadcastInboxSync("accepted-message-request");
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: error.message || "Failed to accept request." });
+    }
+  };
+
+  const deleteMessageRequest = async () => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/requests/${chatId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete message request");
+      }
+
+      dispatchMessagesRefresh();
+      await broadcastInboxSync("deleted-message-request");
+      navigate("/messages", { replace: true });
+    } catch (error) {
+      console.error(error);
+      setNotice({ type: "error", message: error.message || "Failed to delete request." });
+    }
+  };
+
   const sendMessage = async () => {
-    if ((!input.trim() && !selectedAttachment) || blockedByMe || blockedByThem || sending) {
+    if ((!input.trim() && !selectedAttachment) || blockedByMe || blockedByThem || isIncomingRequest || sending) {
       return;
     }
 
@@ -1114,6 +1166,23 @@ export default function Chat() {
         </div>
       </div>
 
+      {isIncomingRequest && (
+        <div className="chat-request-banner">
+          <div>
+            <strong>{otherUserDisplayName} wants to message you.</strong>
+            <p>Accept the request to reply and move this conversation to your inbox.</p>
+          </div>
+          <div className="chat-request-actions">
+            <button type="button" className="chat-request-accept" onClick={acceptMessageRequest}>
+              Accept
+            </button>
+            <button type="button" className="chat-request-delete" onClick={deleteMessageRequest}>
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="chat-messages" ref={messagesContainerRef} onScroll={updateStickiness}>
         {loading ? (
           <div className="spinner-alpha-container">
@@ -1292,7 +1361,11 @@ export default function Chat() {
         <div ref={messagesEndRef} />
       </div>
 
-      {blockedByMe || blockedByThem ? (
+      {isIncomingRequest ? (
+        <div className="chat-blocked-banner">
+          Accept this message request before replying.
+        </div>
+      ) : blockedByMe || blockedByThem ? (
         <div className="chat-blocked-banner">
           Sorry you can&apos;t message this user
         </div>

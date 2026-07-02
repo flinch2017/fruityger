@@ -9,6 +9,7 @@ import { formatCount } from "../utils/countFormatter";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
 import FollowSuggestions from "../components/FollowSuggestions";
+import { getDisplayName } from "../utils/displayName";
 
 const SEARCH_TABS = [
   { key: "profiles", label: "Profiles", resultKey: "users" },
@@ -707,15 +708,18 @@ export default function Search() {
                     >
                       <div className="avatar-placeholder">
                         {u.profile_pic ? (
-                          <img src={getSafeMediaUrl(u.profile_pic)} alt={u.username} />
+                          <img src={getSafeMediaUrl(u.profile_pic)} alt={getDisplayName(u)} />
                         ) : (
                           <FaUser />
                         )}
                       </div>
                       <span className="username-with-badge">
-                        {u.username}
+                        {getDisplayName(u)}
                         <VerifiedBadge verified={u.is_verified} />
                       </span>
+                      {u.account_name && (
+                        <span className="search-user-handle">@{u.username}</span>
+                      )}
                     </div>
                   ))
                 )}

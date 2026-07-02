@@ -20,6 +20,7 @@ let activeUsersTableReadyPromise = null;
 let messageRepliesSchemaReadyPromise = null;
 let messageReactionsSchemaReadyPromise = null;
 let messageAttachmentsSchemaReadyPromise = null;
+let messageRequestsSchemaReadyPromise = null;
 let chatGroupsSchemaReadyPromise = null;
 let groupChatSchemaReadyPromise = null;
 let deletedGroupChatsTableReadyPromise = null;
@@ -182,6 +183,48 @@ async function ensureDeletedMessagesTable() {
   }
 
   await deletedMessagesTableReadyPromise;
+}
+
+async function ensureMessageRequestsSchema() {
+  if (!messageRequestsSchemaReadyPromise) {
+    messageRequestsSchemaReadyPromise = (async () => {
+      await pool.query(`
+        ALTER TABLE chats
+        ADD COLUMN IF NOT EXISTS request_status TEXT NOT NULL DEFAULT 'accepted'
+      `);
+
+      await pool.query(`
+        ALTER TABLE chats
+        ADD COLUMN IF NOT EXISTS requested_by UUID REFERENCES users(id) ON DELETE SET NULL
+      `);
+
+      await pool.query(`
+        ALTER TABLE chats
+        ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ
+      `);
+
+      await pool.query(`
+        UPDATE chats
+        SET request_status = 'accepted'
+        WHERE request_status IS NULL
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chats_request_status_user1
+        ON chats(request_status, user1_id, last_message_at DESC)
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chats_request_status_user2
+        ON chats(request_status, user2_id, last_message_at DESC)
+      `);
+    })().catch((error) => {
+      messageRequestsSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await messageRequestsSchemaReadyPromise;
 }
 
 async function ensureBlockedUsersTable() {
@@ -633,6 +676,36 @@ async function fetchMessageForUser(messageId, userId) {
   return rows[0] || null;
 }
 
+async function getDirectChatRequestState(senderId, receiverId) {
+  const { rows } = await pool.query(
+    `
+    SELECT
+      EXISTS (
+        SELECT 1
+        FROM follows
+        WHERE follower_id = $1
+          AND following_id = $2
+      ) AS sender_follows_receiver,
+      EXISTS (
+        SELECT 1
+        FROM follows
+        WHERE follower_id = $2
+          AND following_id = $1
+      ) AS receiver_follows_sender
+    `,
+    [senderId, receiverId]
+  );
+
+  const row = rows[0] || {};
+  const isMutual = Boolean(row.sender_follows_receiver && row.receiver_follows_sender);
+
+  return {
+    requestStatus: isMutual ? "accepted" : "pending",
+    requestedBy: isMutual ? null : senderId,
+    requestedAtSql: isMutual ? "NULL" : "CURRENT_TIMESTAMP",
+  };
+}
+
 async function fetchMessageReactionViewers(messageId, userId) {
   const { rows } = await pool.query(
     `
@@ -743,6 +816,7 @@ router.get("/chats", authenticateToken, async (req, res) => {
   try {
     await ensureDeletedChatsTable();
     await ensureDeletedMessagesTable();
+    await ensureMessageRequestsSchema();
     await ensureMessageAttachmentsSchema();
     await ensureVerificationBadgeSchema();
     await ensureAccountNameSchema();
@@ -753,6 +827,9 @@ router.get("/chats", authenticateToken, async (req, res) => {
         c.id,
         c.user1_id,
         c.user2_id,
+        c.request_status,
+        c.requested_by,
+        c.requested_at,
         dc.deleted_at,
         u1.username AS user1_username,
         u1.account_name AS user1_account_name,
@@ -805,6 +882,10 @@ router.get("/chats", authenticateToken, async (req, res) => {
       ) m ON true
       WHERE (c.user1_id = $1 OR c.user2_id = $1)
         AND (
+          COALESCE(c.request_status, 'accepted') = 'accepted'
+          OR c.requested_by = $1
+        )
+        AND (
           dc.chat_id IS NULL
           OR EXISTS (
             SELECT 1
@@ -840,6 +921,9 @@ router.get("/chats", authenticateToken, async (req, res) => {
           is_verified: chat.user2_is_verified,
         },
         last_message: chat.last_message,
+        request_status: chat.request_status || "accepted",
+        requested_by: chat.requested_by,
+        requested_at: chat.requested_at,
         last_message_attachment_type: chat.last_message_attachment_type,
         last_message_at: chat.last_message_at,
         last_message_sender_id: chat.last_message_sender_id,
@@ -859,6 +943,7 @@ router.get("/unread-count", authenticateToken, async (req, res) => {
   try {
     await ensureDeletedChatsTable();
     await ensureDeletedMessagesTable();
+    await ensureMessageRequestsSchema();
 
     const { rows } = await pool.query(
       `
@@ -874,6 +959,10 @@ router.get("/unread-count", authenticateToken, async (req, res) => {
        AND dm.user_id = $1
       WHERE m.receiver_id = $1
         AND m.read_status = FALSE
+        AND (
+          COALESCE(c.request_status, 'accepted') = 'accepted'
+          OR c.requested_by = $1
+        )
         AND dm.message_id IS NULL
         AND (
           dc.deleted_at IS NULL OR m.created_at > dc.deleted_at
@@ -903,6 +992,7 @@ router.post("/send", authenticateToken, async (req, res) => {
     await ensureDeletedMessagesTable();
     await ensureMessageRepliesSchema();
     await ensureMessageReactionsSchema();
+    await ensureMessageRequestsSchema();
     await ensureAccountNameSchema();
     await ensureVerificationBadgeSchema();
     await ensureMessageAttachmentsSchema();
@@ -923,7 +1013,7 @@ router.post("/send", authenticateToken, async (req, res) => {
 
     const chatResult = await pool.query(
       `
-      SELECT c.id
+      SELECT c.id, c.request_status, c.requested_by
       FROM chats c
       WHERE c.id = $1
         AND (
@@ -937,6 +1027,15 @@ router.post("/send", authenticateToken, async (req, res) => {
 
     if (chatResult.rows.length === 0) {
       return res.status(404).json({ error: "Chat not found" });
+    }
+
+    const chat = chatResult.rows[0];
+    if (
+      chat.request_status === "pending" &&
+      chat.requested_by &&
+      String(chat.requested_by) !== String(senderId)
+    ) {
+      return res.status(403).json({ error: "Accept this message request before replying." });
     }
 
     const blockedResult = await pool.query(
@@ -1182,6 +1281,7 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
   try {
     await ensureDeletedChatsTable();
     await ensureDeletedMessagesTable();
+    await ensureMessageRequestsSchema();
     await ensureBlockedUsersTable();
     await ensureActiveUsersTable();
     await ensureVerificationBadgeSchema();
@@ -1223,6 +1323,10 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
           ON dc.chat_id = c.id
          AND dc.user_id = $1
         WHERE (c.user1_id = $1 OR c.user2_id = $1)
+          AND (
+            COALESCE(c.request_status, 'accepted') = 'accepted'
+            OR c.requested_by = $1
+          )
           AND (
             dc.chat_id IS NULL
             OR EXISTS (
@@ -1343,6 +1447,179 @@ router.get("/presence/:targetUserId", authenticateToken, async (req, res) => {
   }
 });
 
+router.get("/requests", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    await ensureDeletedChatsTable();
+    await ensureDeletedMessagesTable();
+    await ensureMessageRequestsSchema();
+    await ensureMessageAttachmentsSchema();
+    await ensureVerificationBadgeSchema();
+    await ensureAccountNameSchema();
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        c.id,
+        c.user1_id,
+        c.user2_id,
+        c.request_status,
+        c.requested_by,
+        c.requested_at,
+        u1.username AS user1_username,
+        u1.account_name AS user1_account_name,
+        u1.profile_pic AS user1_profile_pic,
+        u1.is_verified AS user1_is_verified,
+        u2.username AS user2_username,
+        u2.account_name AS user2_account_name,
+        u2.profile_pic AS user2_profile_pic,
+        u2.is_verified AS user2_is_verified,
+        m.content AS last_message,
+        m.attachment_type AS last_message_attachment_type,
+        m.created_at AS last_message_at,
+        m.sender_id AS last_message_sender_id
+      FROM chats c
+      JOIN users u1
+        ON u1.id = c.user1_id
+      JOIN users u2
+        ON u2.id = c.user2_id
+      LEFT JOIN deleted_chats dc
+        ON dc.chat_id = c.id
+       AND dc.user_id = $1
+      LEFT JOIN LATERAL (
+        SELECT m.*
+        FROM messages m
+        LEFT JOIN deleted_messages dm
+          ON dm.message_id = m.id
+         AND dm.user_id = $1
+        WHERE m.chat_id = c.id
+          AND dm.message_id IS NULL
+        ORDER BY m.created_at DESC
+        LIMIT 1
+      ) m ON true
+      WHERE (c.user1_id = $1 OR c.user2_id = $1)
+        AND c.request_status = 'pending'
+        AND c.requested_by IS NOT NULL
+        AND c.requested_by <> $1
+        AND (
+          dc.chat_id IS NULL
+          OR (
+            m.created_at IS NOT NULL
+            AND m.created_at > dc.deleted_at
+          )
+        )
+      ORDER BY COALESCE(m.created_at, c.requested_at, c.last_message_at) DESC NULLS LAST
+      `,
+      [userId]
+    );
+
+    res.json(
+      rows.map((chat) => ({
+        id: chat.id,
+        request_status: chat.request_status,
+        requested_by: chat.requested_by,
+        requested_at: chat.requested_at,
+        user1: {
+          id: chat.user1_id,
+          username: chat.user1_username,
+          account_name: chat.user1_account_name,
+          profile_pic: chat.user1_profile_pic,
+          is_verified: chat.user1_is_verified,
+        },
+        user2: {
+          id: chat.user2_id,
+          username: chat.user2_username,
+          account_name: chat.user2_account_name,
+          profile_pic: chat.user2_profile_pic,
+          is_verified: chat.user2_is_verified,
+        },
+        last_message: chat.last_message,
+        last_message_attachment_type: chat.last_message_attachment_type,
+        last_message_at: chat.last_message_at,
+        last_message_sender_id: chat.last_message_sender_id,
+      }))
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch message requests" });
+  }
+});
+
+router.patch("/requests/:chatId/accept", authenticateToken, async (req, res) => {
+  const { chatId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await ensureMessageRequestsSchema();
+
+    const { rows } = await pool.query(
+      `
+      UPDATE chats
+      SET request_status = 'accepted'
+      WHERE id = $1
+        AND request_status = 'pending'
+        AND requested_by IS NOT NULL
+        AND requested_by <> $2
+        AND (user1_id = $2 OR user2_id = $2)
+      RETURNING id
+      `,
+      [chatId, userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Message request not found" });
+    }
+
+    res.json({ success: true, chatId: rows[0].id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to accept message request" });
+  }
+});
+
+router.delete("/requests/:chatId", authenticateToken, async (req, res) => {
+  const { chatId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await ensureDeletedChatsTable();
+    await ensureMessageRequestsSchema();
+
+    const { rows } = await pool.query(
+      `
+      SELECT id
+      FROM chats
+      WHERE id = $1
+        AND request_status = 'pending'
+        AND requested_by IS NOT NULL
+        AND requested_by <> $2
+        AND (user1_id = $2 OR user2_id = $2)
+      `,
+      [chatId, userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Message request not found" });
+    }
+
+    await pool.query(
+      `
+      INSERT INTO deleted_chats (user_id, chat_id, deleted_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (user_id, chat_id)
+      DO UPDATE SET deleted_at = EXCLUDED.deleted_at
+      `,
+      [userId, chatId]
+    );
+
+    res.json({ success: true, chatId: rows[0].id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to delete message request" });
+  }
+});
+
 router.get("/:chatId", authenticateToken, async (req, res) => {
   const { chatId } = req.params;
   const userId = req.user.id;
@@ -1352,6 +1629,7 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
     await ensureDeletedMessagesTable();
     await ensureMessageRepliesSchema();
     await ensureMessageReactionsSchema();
+    await ensureMessageRequestsSchema();
 
     const chatResult = await pool.query(
       `
@@ -1359,6 +1637,9 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
         c.id,
         c.user1_id,
         c.user2_id,
+        c.request_status,
+        c.requested_by,
+        c.requested_at,
         dc.deleted_at,
         u1.username AS user1_username,
         u1.account_name AS user1_account_name,
@@ -1487,6 +1768,9 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
     res.json({
       chat: {
         id: chat.id,
+        request_status: chat.request_status || "accepted",
+        requested_by: chat.requested_by,
+        requested_at: chat.requested_at,
         blocked_by_me: blockResult.rows[0]?.blocked_by_me || false,
         blocked_by_them: blockResult.rows[0]?.blocked_by_them || false,
         user1: {
@@ -1772,6 +2056,7 @@ router.post("/get-or-create", authenticateToken, async (req, res) => {
   try {
     await ensureDeletedChatsTable();
     await ensureDeletedMessagesTable();
+    await ensureMessageRequestsSchema();
 
     const existing = await pool.query(
       `
@@ -1784,19 +2069,36 @@ router.post("/get-or-create", authenticateToken, async (req, res) => {
     );
 
     if (existing.rows.length > 0) {
-      return res.json({ chatId: existing.rows[0].id });
+      return res.json({
+        chatId: existing.rows[0].id,
+        request_status: existing.rows[0].request_status || "accepted",
+        requested_by: existing.rows[0].requested_by || null,
+      });
     }
+
+    const requestState = await getDirectChatRequestState(senderId, targetUserId);
 
     const newChat = await pool.query(
       `
-      INSERT INTO chats (user1_id, user2_id, last_message_at)
-      VALUES ($1, $2, CURRENT_TIMESTAMP)
-      RETURNING id
+      INSERT INTO chats (
+        user1_id,
+        user2_id,
+        last_message_at,
+        request_status,
+        requested_by,
+        requested_at
+      )
+      VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, ${requestState.requestedAtSql})
+      RETURNING id, request_status, requested_by
       `,
-      [senderId, targetUserId]
+      [senderId, targetUserId, requestState.requestStatus, requestState.requestedBy]
     );
 
-    res.json({ chatId: newChat.rows[0].id });
+    res.json({
+      chatId: newChat.rows[0].id,
+      request_status: newChat.rows[0].request_status,
+      requested_by: newChat.rows[0].requested_by,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create chat" });

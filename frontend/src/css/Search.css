@@ -111,6 +111,11 @@
   object-fit: cover;
 }
 
+.search-user-handle {
+  color: #4f7f90;
+  font-size: 13px;
+}
+
 /* HASHTAG PILLS */
 .aero-pill {
   display: inline-block;

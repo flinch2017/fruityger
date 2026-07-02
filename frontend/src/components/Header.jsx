@@ -20,6 +20,7 @@ import "../css/Header.css";
 import { clearAuthStorage } from "../utils/authSession";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import { formatCount } from "../utils/countFormatter";
+import { getDisplayName } from "../utils/displayName";
 
 export default function Header() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -413,14 +414,14 @@ export default function Header() {
             >
               <span className="search-suggestion-avatar">
                 {user.profile_pic ? (
-                  <img src={getSafeMediaUrl(user.profile_pic)} alt={user.username} />
+                  <img src={getSafeMediaUrl(user.profile_pic)} alt={getDisplayName(user)} />
                 ) : (
                   <FaUser />
                 )}
               </span>
               <span className="search-suggestion-copy">
-                <strong>{user.username}</strong>
-                <span>Open profile</span>
+                <strong>{getDisplayName(user)}</strong>
+                <span>{user.account_name ? `@${user.username}` : "Open profile"}</span>
               </span>
             </button>
           ))}

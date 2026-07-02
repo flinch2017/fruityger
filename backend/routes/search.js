@@ -5,6 +5,7 @@ import { backfillPostHashtags, ensureHashtagSchema } from "../utils/hashtags.js"
 import { ensureRepostSchema } from "../utils/reposts.js";
 import { ensurePrivateAccountSchema } from "../utils/privacy.js";
 import { ensureVerificationBadgeSchema } from "../utils/verificationBadge.js";
+import { ensureAccountNameSchema } from "../utils/accountName.js";
 
 const router = express.Router();
 
@@ -209,6 +210,7 @@ router.get("/", authenticateToken, async (req, res) => {
     await ensureHashtagSchema();
     await backfillPostHashtags();
     await ensureBlockedUsersTable();
+    await ensureAccountNameSchema();
 
     const keyword = req.query.q?.trim();
     const normalizedKeyword = normalizeTag(keyword);
@@ -226,9 +228,12 @@ router.get("/", authenticateToken, async (req, res) => {
 
     const users = await pool.query(
       `
-      SELECT id, username, profile_pic, is_verified
+      SELECT id, username, account_name, profile_pic, is_verified
       FROM users u
-      WHERE u.username ILIKE $1
+      WHERE (
+          u.username ILIKE $1
+          OR u.account_name ILIKE $1
+        )
         AND u.id <> $2
         AND u.deactivated_at IS NULL
         AND u.deleted_at IS NULL
@@ -246,9 +251,12 @@ router.get("/", authenticateToken, async (req, res) => {
       ORDER BY
         CASE
           WHEN LOWER(u.username) = $3 THEN 0
-          WHEN LOWER(u.username) LIKE $4 THEN 1
-          ELSE 2
+          WHEN LOWER(COALESCE(u.account_name, '')) = $3 THEN 1
+          WHEN LOWER(u.username) LIKE $4 THEN 2
+          WHEN LOWER(COALESCE(u.account_name, '')) LIKE $4 THEN 3
+          ELSE 4
         END,
+        COALESCE(u.account_name, ''),
         u.username ASC
       LIMIT 20
       `,

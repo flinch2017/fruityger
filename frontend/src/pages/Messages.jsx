@@ -22,6 +22,8 @@ export default function Messages() {
 
   const [chats, setChats] = useState([]);
   const [groupChats, setGroupChats] = useState([]);
+  const [messageRequests, setMessageRequests] = useState([]);
+  const [activeView, setActiveView] = useState("inbox");
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -94,6 +96,14 @@ export default function Messages() {
     return Array.isArray(data) ? data : [];
   };
 
+  const fetchMessageRequests = async () => {
+    const res = await fetch("http://localhost:5000/api/messages/requests", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  };
+
   const fetchConversations = async ({ silent = false } = {}) => {
     if (!token) return;
 
@@ -102,13 +112,15 @@ export default function Messages() {
     }
 
     try {
-      const [directData, groupData] = await Promise.all([
+      const [directData, groupData, requestData] = await Promise.all([
         fetchDirectChats(),
         fetchGroupChats().catch(() => []),
+        fetchMessageRequests().catch(() => []),
       ]);
 
       setChats(directData);
       setGroupChats(groupData);
+      setMessageRequests(requestData);
       updateUnreadEvent(directData, groupData);
     } catch (err) {
       console.error(err);
@@ -345,6 +357,50 @@ export default function Messages() {
       return;
     }
     navigate(`/group-chat/${groupChatId}`);
+  };
+
+  const handleRequestChatClick = (chatId) => {
+    navigate(`/chat/${chatId}`);
+  };
+
+  const handleAcceptRequest = async (chatId) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/requests/${chatId}/accept`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to accept message request");
+      }
+
+      await fetchConversations({ silent: true });
+      await broadcastInboxSync("accepted-message-request", { chatId });
+      setActiveView("inbox");
+      navigate(`/chat/${chatId}`);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteRequest = async (chatId) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/requests/${chatId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete message request");
+      }
+
+      setMessageRequests((prev) => prev.filter((request) => request.id !== chatId));
+      await broadcastInboxSync("deleted-message-request", { chatId });
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleStartChat = async (targetUserId) => {
@@ -625,10 +681,25 @@ export default function Messages() {
         className={`messages-sidebar ${searchResults.length > 0 ? "searching" : ""}`}
       >
         <div className="messages-toolbar">
-          <h2>Chats</h2>
+          <h2>{activeView === "requests" ? "Message Requests" : "Chats"}</h2>
 
           <div className="messages-toolbar-actions">
             {!selectionMode && (
+              <button
+                className={`messages-action-btn ${activeView === "requests" ? "primary" : ""}`}
+                onClick={() => {
+                  setActiveView((current) => (current === "requests" ? "inbox" : "requests"));
+                  exitSelectionMode();
+                }}
+              >
+                Requests
+                {messageRequests.length > 0 && (
+                  <span className="messages-action-badge">{messageRequests.length}</span>
+                )}
+              </button>
+            )}
+
+            {!selectionMode && activeView === "inbox" && (
               <button className="messages-action-btn" onClick={openGroupModal}>
                 <FaPlus />
                 <span>New Group</span>
@@ -656,7 +727,7 @@ export default function Messages() {
               <button
                 className="messages-action-btn"
                 onClick={() => setSelectionMode(true)}
-                disabled={combinedConversations.length === 0}
+                disabled={activeView !== "inbox" || combinedConversations.length === 0}
               >
                 Select
               </button>
@@ -664,14 +735,17 @@ export default function Messages() {
           </div>
         </div>
 
-        <input
-          type="text"
-          className="chat-search"
-          placeholder="Search users..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+        {activeView === "inbox" && (
+          <input
+            type="text"
+            className="chat-search"
+            placeholder="Search users..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        )}
 
+        {activeView === "inbox" && (
         <div className="messages-online-strip">
           <div className="messages-online-header">
             <h3>Active</h3>
@@ -716,8 +790,9 @@ export default function Messages() {
             <div className="messages-online-empty">No chat or follow contacts to show yet.</div>
           )}
         </div>
+        )}
 
-        {searchResults.length > 0 && (
+        {activeView === "inbox" && searchResults.length > 0 && (
           <div className="search-results">
             {searchResults.map((user) => (
               <div
@@ -748,7 +823,68 @@ export default function Messages() {
         )}
 
         <div className="chat-list">
-          {loading ? (
+          {activeView === "requests" ? (
+            messageRequests.length === 0 ? (
+              <div className="messages-empty-state">
+                <h3>No message requests</h3>
+                <p>New chats from people outside your mutual follows will appear here.</p>
+              </div>
+            ) : (
+              messageRequests.map((chat) => {
+                const requester = chat.user1?.id === userId ? chat.user2 : chat.user1;
+                const previewText = chat.last_message || "Wants to send you a message";
+
+                return (
+                  <div
+                    key={`request-${chat.id}`}
+                    className="chat-preview message-request-preview"
+                    onClick={() => handleRequestChatClick(chat.id)}
+                  >
+                    <div className="chat-avatar">
+                      {requester?.profile_pic ? (
+                        <img src={getSafeMediaUrl(requester.profile_pic)} alt={getDisplayName(requester)} />
+                      ) : (
+                        <span className="avatar-initial">
+                          {getDisplayInitial(requester)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="chat-info">
+                      <div className="chat-top">
+                        <h4>
+                          <span className="username-with-badge">
+                            {getDisplayName(requester, "Request")}
+                            <VerifiedBadge verified={requester?.is_verified} />
+                          </span>
+                        </h4>
+                        <span className="chat-date">{formatChatDate(chat.last_message_at || chat.requested_at)}</span>
+                      </div>
+
+                      <p>{previewText}</p>
+
+                      <div className="message-request-actions" onClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="messages-action-btn primary"
+                          onClick={() => handleAcceptRequest(chat.id)}
+                        >
+                          Accept
+                        </button>
+                        <button
+                          type="button"
+                          className="messages-action-btn danger"
+                          onClick={() => handleDeleteRequest(chat.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )
+          ) : loading ? (
             <div className="spinner-alpha-container">
               <div className="spinner-alpha"></div>
             </div>
