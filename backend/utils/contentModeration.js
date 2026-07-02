@@ -515,10 +515,7 @@ export async function assertContentAllowedOrReport({
     details,
   });
 
-  const message =
-    result.status === "blocked"
-      ? "This content appears to violate our safety rules and cannot be posted."
-      : "This content needs moderator review before it can be posted.";
+  const message = "This content violates our Community Guidelines and cannot be posted.";
 
   throw new ContentModerationError(message, {
     statusCode: 400,
