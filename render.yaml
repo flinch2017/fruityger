@@ -25,6 +25,14 @@ services:
         sync: false
       - key: TURNSTILE_SECRET_KEY
         sync: false
+      - key: CONTENT_MODERATION_ENABLED
+        value: true
+      - key: CONTENT_MODERATION_FAIL_OPEN
+        value: true
+      - key: CONTENT_MODERATION_REVIEW_THRESHOLD
+        value: 0.45
+      - key: CONTENT_MODERATION_BLOCK_THRESHOLD
+        value: 0.82
       - key: MJ_APIKEY_PUBLIC
         sync: false
       - key: MJ_APIKEY_PRIVATE

@@ -1,35 +1,41 @@
-import axios from "axios";
 import { execFile } from "child_process";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
 import { promisify } from "util";
+import * as tf from "@tensorflow/tfjs";
+import * as nsfwjs from "nsfwjs";
+import jpeg from "jpeg-js";
 import ffmpegPath from "ffmpeg-static";
 import pool from "../db.js";
 
 const execFileAsync = promisify(execFile);
-const OPENAI_MODERATION_URL = "https://api.openai.com/v1/moderations";
-const MODERATION_MODEL = process.env.OPENAI_MODERATION_MODEL || "omni-moderation-latest";
-const REVIEW_THRESHOLD = Number(process.env.CONTENT_MODERATION_REVIEW_THRESHOLD || 0.35);
-const BLOCK_THRESHOLD = Number(process.env.CONTENT_MODERATION_BLOCK_THRESHOLD || 0.85);
+const REVIEW_THRESHOLD = Number(process.env.CONTENT_MODERATION_REVIEW_THRESHOLD || 0.45);
+const BLOCK_THRESHOLD = Number(process.env.CONTENT_MODERATION_BLOCK_THRESHOLD || 0.82);
 const FAIL_OPEN_ON_MODERATION_ERROR =
   String(process.env.CONTENT_MODERATION_FAIL_OPEN || "true").toLowerCase() !== "false";
-const MAX_IMAGE_BYTES_FOR_DIRECT_DATA_URL = 4 * 1024 * 1024;
 const MAX_TEXT_PREVIEW_LENGTH = 700;
 const FFMPEG_EXEC_OPTIONS = {
   maxBuffer: 10 * 1024 * 1024,
   windowsHide: true,
 };
 
-const BLOCK_CATEGORIES = new Set(["sexual/minors"]);
-const REVIEW_CATEGORIES = new Set([
-  "sexual",
-  "sexual/minors",
-  "violence/graphic",
-  "self-harm",
-  "self-harm/intent",
-  "self-harm/instructions",
-]);
+let nsfwModelPromise = null;
+
+const CHILD_SAFETY_TERMS = [
+  /\bchild\s*(porn|nudes?|sexual|sex|abuse|exploitation)\b/i,
+  /\bminor\s*(nudes?|sexual|sex|porn|abuse|exploitation)\b/i,
+  /\bunderage\s*(nudes?|sexual|sex|porn)\b/i,
+  /\bcsam\b/i,
+];
+
+const SEXUAL_REVIEW_TERMS = [
+  /\bnudes?\b/i,
+  /\bnsfw\b/i,
+  /\bporn\b/i,
+  /\bexplicit\b/i,
+  /\bsexual\b/i,
+];
 
 export class ContentModerationError extends Error {
   constructor(message, { statusCode = 400, result = null } = {}) {
@@ -41,25 +47,7 @@ export class ContentModerationError extends Error {
 }
 
 function isModerationEnabled() {
-  const configured = String(process.env.CONTENT_MODERATION_ENABLED || "true").toLowerCase();
-  return configured !== "false" && Boolean(process.env.OPENAI_API_KEY);
-}
-
-function normalizeNumber(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
-}
-
-function getModerationErrorSummary(error) {
-  const responseData = error?.response?.data;
-  const responseError = responseData?.error || responseData;
-
-  return {
-    status: error?.response?.status || null,
-    code: responseError?.code || error?.code || null,
-    type: responseError?.type || null,
-    message: responseError?.message || error?.message || "Unknown moderation error",
-  };
+  return String(process.env.CONTENT_MODERATION_ENABLED || "true").toLowerCase() !== "false";
 }
 
 function getMediaKind(media) {
@@ -75,8 +63,32 @@ function getSafeOriginalName(media) {
   return String(media?.originalName || media?.originalname || media?.fileName || "upload");
 }
 
-function buildDataUrl(buffer, mimetype) {
-  return `data:${mimetype};base64,${buffer.toString("base64")}`;
+function isJpegMedia(media, filePath = "") {
+  const mime = String(media?.mimetype || "").toLowerCase();
+  const extension = path.extname(filePath || getSafeOriginalName(media)).toLowerCase();
+  return mime === "image/jpeg" || mime === "image/jpg" || extension === ".jpg" || extension === ".jpeg";
+}
+
+function getModerationErrorSummary(error) {
+  return {
+    code: error?.code || null,
+    message: error?.message || "Unknown local moderation error",
+  };
+}
+
+function getNsfwModel() {
+  if (!nsfwModelPromise) {
+    nsfwModelPromise = (async () => {
+      tf.enableProdMode();
+      await tf.ready();
+      return nsfwjs.load();
+    })().catch((error) => {
+      nsfwModelPromise = null;
+      throw error;
+    });
+  }
+
+  return nsfwModelPromise;
 }
 
 async function createTempFileFromBuffer(buffer, originalName = "upload") {
@@ -108,22 +120,14 @@ async function getMediaFilePath(media) {
   return null;
 }
 
-async function convertImageToModerationDataUrl(filePath, mimetype, warnings) {
-  const resolvedMime = String(mimetype || "image/jpeg").toLowerCase();
-  const stats = await fs.stat(filePath).catch(() => null);
-
-  if (!ffmpegPath && stats && stats.size <= MAX_IMAGE_BYTES_FOR_DIRECT_DATA_URL) {
-    const buffer = await fs.readFile(filePath);
-    return buildDataUrl(buffer, resolvedMime);
-  }
-
+async function createJpegPreview(inputPath, warnings) {
   if (!ffmpegPath) {
-    warnings.push("Image moderation skipped because FFmpeg is unavailable and the image is too large.");
+    warnings.push("Media moderation skipped because FFmpeg is unavailable.");
     return null;
   }
 
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "fruityger-moderation-image-"));
-  const outputPath = path.join(tempDir, "moderation.jpg");
+  const outputPath = path.join(tempDir, "preview.jpg");
 
   try {
     await execFileAsync(
@@ -134,11 +138,11 @@ async function convertImageToModerationDataUrl(filePath, mimetype, warnings) {
         "error",
         "-y",
         "-i",
-        filePath,
+        inputPath,
         "-frames:v",
         "1",
         "-vf",
-        "scale='min(1024,iw)':-2",
+        "scale='min(640,iw)':-2",
         "-q:v",
         "5",
         outputPath,
@@ -146,27 +150,27 @@ async function convertImageToModerationDataUrl(filePath, mimetype, warnings) {
       FFMPEG_EXEC_OPTIONS
     );
 
-    const buffer = await fs.readFile(outputPath);
-    return buildDataUrl(buffer, "image/jpeg");
+    return {
+      filePath: outputPath,
+      cleanup: async () => {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      },
+    };
   } catch (error) {
     const message = error?.stderr ? String(error.stderr).trim() : error?.message;
     warnings.push(`Image moderation preview failed: ${message || "unknown error"}`);
-
-    if (stats && stats.size <= MAX_IMAGE_BYTES_FOR_DIRECT_DATA_URL) {
-      const buffer = await fs.readFile(filePath);
-      return buildDataUrl(buffer, resolvedMime);
-    }
-
-    return null;
-  } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
+    return null;
   }
 }
 
-async function extractVideoFrameDataUrls(filePath, warnings, maxFrames = 4) {
+async function extractVideoFramePaths(inputPath, warnings, maxFrames = 4) {
   if (!ffmpegPath) {
     warnings.push("Video moderation skipped because FFmpeg is unavailable.");
-    return [];
+    return {
+      framePaths: [],
+      cleanup: async () => {},
+    };
   }
 
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "fruityger-moderation-video-"));
@@ -181,9 +185,9 @@ async function extractVideoFrameDataUrls(filePath, warnings, maxFrames = 4) {
         "error",
         "-y",
         "-i",
-        filePath,
+        inputPath,
         "-vf",
-        "fps=1/10,scale='min(768,iw)':-2",
+        "fps=1/10,scale='min(640,iw)':-2",
         "-frames:v",
         String(maxFrames),
         outputPattern,
@@ -191,40 +195,184 @@ async function extractVideoFrameDataUrls(filePath, warnings, maxFrames = 4) {
       FFMPEG_EXEC_OPTIONS
     );
 
-    const frameNames = (await fs.readdir(tempDir))
+    const framePaths = (await fs.readdir(tempDir))
       .filter((name) => name.toLowerCase().endsWith(".jpg"))
       .sort()
-      .slice(0, maxFrames);
+      .slice(0, maxFrames)
+      .map((name) => path.join(tempDir, name));
 
-    const frames = [];
-
-    for (const frameName of frameNames) {
-      const buffer = await fs.readFile(path.join(tempDir, frameName));
-      frames.push(buildDataUrl(buffer, "image/jpeg"));
-    }
-
-    if (frames.length === 0) {
+    if (framePaths.length === 0) {
       warnings.push("Video moderation did not extract any frames.");
     }
 
-    return frames;
+    return {
+      framePaths,
+      cleanup: async () => {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      },
+    };
   } catch (error) {
     const message = error?.stderr ? String(error.stderr).trim() : error?.message;
     warnings.push(`Video moderation preview failed: ${message || "unknown error"}`);
-    return [];
-  } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
+    return {
+      framePaths: [],
+      cleanup: async () => {},
+    };
   }
 }
 
-async function buildModerationInput({ text = "", media = [] }) {
-  const input = [];
-  const warnings = [];
+async function classifyJpeg(filePath) {
+  const buffer = await fs.readFile(filePath);
+  const decoded = jpeg.decode(buffer, { useTArray: true });
+  const pixels = new Int32Array(decoded.width * decoded.height * 3);
+
+  for (let source = 0, target = 0; source < decoded.data.length; source += 4, target += 3) {
+    pixels[target] = decoded.data[source];
+    pixels[target + 1] = decoded.data[source + 1];
+    pixels[target + 2] = decoded.data[source + 2];
+  }
+
+  const imageTensor = tf.tensor3d(pixels, [decoded.height, decoded.width, 3], "int32");
+
+  try {
+    const model = await getNsfwModel();
+    return model.classify(imageTensor);
+  } finally {
+    imageTensor.dispose();
+  }
+}
+
+function summarizePredictions(predictions = []) {
+  const scores = Object.fromEntries(
+    predictions.map((prediction) => [
+      String(prediction.className || "").toLowerCase(),
+      Number(prediction.probability || 0),
+    ])
+  );
+
+  const pornScore = Math.max(scores.porn || 0, scores.hentai || 0);
+  const sexyScore = scores.sexy || 0;
+  const nsfwScore = Math.max(pornScore, sexyScore);
+  const blocked = pornScore >= BLOCK_THRESHOLD;
+  const review = blocked || nsfwScore >= REVIEW_THRESHOLD;
+
+  return {
+    status: blocked ? "blocked" : review ? "review" : "pass",
+    scores,
+    nsfw_score: nsfwScore,
+    porn_score: pornScore,
+    sexy_score: sexyScore,
+    blocked_categories: blocked ? ["pornographic_image"] : [],
+    review_categories: review && !blocked ? ["suggestive_or_nsfw_image"] : [],
+  };
+}
+
+function mergeMediaResults(results = []) {
+  const mergedScores = {};
+  const blockedCategories = new Set();
+  const reviewCategories = new Set();
+  let status = "pass";
+  let nsfwScore = 0;
+
+  for (const result of results) {
+    if (result.status === "blocked") status = "blocked";
+    if (status !== "blocked" && result.status === "review") status = "review";
+
+    nsfwScore = Math.max(nsfwScore, result.nsfw_score || 0);
+
+    for (const [category, score] of Object.entries(result.scores || {})) {
+      mergedScores[category] = Math.max(mergedScores[category] || 0, Number(score || 0));
+    }
+
+    for (const category of result.blocked_categories || []) {
+      blockedCategories.add(category);
+    }
+
+    for (const category of result.review_categories || []) {
+      reviewCategories.add(category);
+    }
+  }
+
+  return {
+    status,
+    flagged: status !== "pass",
+    category_scores: mergedScores,
+    nsfw_score: nsfwScore,
+    blocked_categories: Array.from(blockedCategories),
+    review_categories: Array.from(reviewCategories),
+  };
+}
+
+function moderateText(text = "") {
   const textValue = String(text || "").trim();
 
-  if (textValue) {
-    input.push({ type: "text", text: textValue });
+  if (!textValue) {
+    return {
+      status: "pass",
+      flagged: false,
+      blocked_categories: [],
+      review_categories: [],
+    };
   }
+
+  if (CHILD_SAFETY_TERMS.some((pattern) => pattern.test(textValue))) {
+    return {
+      status: "blocked",
+      flagged: true,
+      blocked_categories: ["child_safety_text"],
+      review_categories: [],
+    };
+  }
+
+  if (SEXUAL_REVIEW_TERMS.some((pattern) => pattern.test(textValue))) {
+    return {
+      status: "review",
+      flagged: true,
+      blocked_categories: [],
+      review_categories: ["sexual_text"],
+    };
+  }
+
+  return {
+    status: "pass",
+    flagged: false,
+    blocked_categories: [],
+    review_categories: [],
+  };
+}
+
+function mergeTextAndMediaResults(textResult, mediaResult, warnings) {
+  const status =
+    textResult.status === "blocked" || mediaResult.status === "blocked"
+      ? "blocked"
+      : textResult.status === "review" || mediaResult.status === "review"
+        ? "review"
+        : "pass";
+
+  return {
+    status,
+    flagged: status !== "pass",
+    provider: "local-nsfwjs",
+    text: textResult,
+    media: mediaResult,
+    category_scores: mediaResult.category_scores || {},
+    nsfw_score: mediaResult.nsfw_score || 0,
+    blocked_categories: [
+      ...(textResult.blocked_categories || []),
+      ...(mediaResult.blocked_categories || []),
+    ],
+    review_categories: [
+      ...(textResult.review_categories || []),
+      ...(mediaResult.review_categories || []),
+    ],
+    warnings,
+  };
+}
+
+async function moderateMedia(media = []) {
+  const warnings = [];
+  const results = [];
 
   for (const item of media || []) {
     const kind = getMediaKind(item);
@@ -233,72 +381,44 @@ async function buildModerationInput({ text = "", media = [] }) {
       continue;
     }
 
-    const file = await getMediaFilePath(item);
-    if (!file) {
+    const sourceFile = await getMediaFilePath(item);
+    if (!sourceFile) {
       warnings.push(`Media moderation skipped for ${getSafeOriginalName(item)} because no file data was available.`);
       continue;
     }
 
     try {
       if (kind === "image") {
-        const imageUrl = await convertImageToModerationDataUrl(file.filePath, item?.mimetype, warnings);
-        if (imageUrl) {
-          input.push({ type: "image_url", image_url: { url: imageUrl } });
+        const preview = await createJpegPreview(sourceFile.filePath, warnings);
+        const fileToClassify = preview?.filePath || (isJpegMedia(item, sourceFile.filePath) ? sourceFile.filePath : null);
+        if (!fileToClassify) continue;
+
+        try {
+          results.push(summarizePredictions(await classifyJpeg(fileToClassify)));
+        } finally {
+          await preview?.cleanup();
         }
       }
 
       if (kind === "video") {
-        const frameUrls = await extractVideoFrameDataUrls(file.filePath, warnings);
-        for (const frameUrl of frameUrls) {
-          input.push({ type: "image_url", image_url: { url: frameUrl } });
+        const frames = await extractVideoFramePaths(sourceFile.filePath, warnings);
+
+        try {
+          for (const framePath of frames.framePaths) {
+            results.push(summarizePredictions(await classifyJpeg(framePath)));
+          }
+        } finally {
+          await frames.cleanup();
         }
       }
     } finally {
-      await file.cleanup();
+      await sourceFile.cleanup();
     }
   }
-
-  return { input, warnings };
-}
-
-function summarizeModerationResults(results = []) {
-  const categories = {};
-  const categoryScores = {};
-  let flagged = false;
-
-  for (const result of results) {
-    flagged = flagged || Boolean(result?.flagged);
-
-    for (const [category, value] of Object.entries(result?.categories || {})) {
-      categories[category] = Boolean(categories[category] || value);
-    }
-
-    for (const [category, value] of Object.entries(result?.category_scores || {})) {
-      categoryScores[category] = Math.max(normalizeNumber(categoryScores[category]), normalizeNumber(value));
-    }
-  }
-
-  const blockedCategories = Object.keys(categories).filter((category) => {
-    if (BLOCK_CATEGORIES.has(category) && categories[category]) return true;
-    return normalizeNumber(categoryScores[category]) >= BLOCK_THRESHOLD;
-  });
-
-  const reviewCategories = Object.keys(categoryScores).filter((category) => {
-    if (blockedCategories.includes(category)) return false;
-    if (REVIEW_CATEGORIES.has(category) && categories[category]) return true;
-    return REVIEW_CATEGORIES.has(category) && normalizeNumber(categoryScores[category]) >= REVIEW_THRESHOLD;
-  });
-
-  const status =
-    blockedCategories.length > 0 ? "blocked" : reviewCategories.length > 0 || flagged ? "review" : "pass";
 
   return {
-    status,
-    flagged,
-    categories,
-    category_scores: categoryScores,
-    blocked_categories: blockedCategories,
-    review_categories: reviewCategories,
+    ...mergeMediaResults(results),
+    warnings,
   };
 }
 
@@ -306,41 +426,15 @@ export async function moderateContent({ text = "", media = [] } = {}) {
   if (!isModerationEnabled()) {
     return {
       status: "skipped",
-      reason: process.env.OPENAI_API_KEY ? "disabled" : "missing_openai_api_key",
+      reason: "disabled",
       flagged: false,
     };
   }
 
-  const { input, warnings } = await buildModerationInput({ text, media });
+  const textResult = moderateText(text);
+  const mediaResult = await moderateMedia(media);
 
-  if (input.length === 0) {
-    return {
-      status: "pass",
-      flagged: false,
-      warnings,
-    };
-  }
-
-  const { data } = await axios.post(
-    OPENAI_MODERATION_URL,
-    {
-      model: MODERATION_MODEL,
-      input,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      timeout: 30000,
-    }
-  );
-
-  return {
-    ...summarizeModerationResults(data?.results || []),
-    model: data?.model || MODERATION_MODEL,
-    warnings,
-  };
+  return mergeTextAndMediaResults(textResult, mediaResult, mediaResult.warnings || []);
 }
 
 async function createModerationReport({
@@ -377,7 +471,7 @@ export async function assertContentAllowedOrReport({
     result = await moderateContent({ text, media });
   } catch (error) {
     const errorSummary = getModerationErrorSummary(error);
-    console.error("OpenAI moderation request failed:", errorSummary);
+    console.error("Local content moderation failed:", errorSummary);
 
     const details = JSON.stringify({
       status: "moderation_failed",
