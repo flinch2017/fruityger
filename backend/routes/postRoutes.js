@@ -50,6 +50,7 @@ router.post(
     upload.array("media", 4),
     async (req, res) => {
         let postId = null;
+        let dbClient = null;
         const cleanupTasks = [];
 
         try {
@@ -89,15 +90,6 @@ router.post(
                     media_count: files.length,
                 },
             });
-
-            await pool.query(
-                `INSERT INTO posts (post_id, user_id, caption)
-                 VALUES ($1,$2,$3)`,
-                [postId, req.user.id, caption]
-            );
-
-            await syncPostHashtags(postId, caption);
-            await syncPostMentions(postId, caption, req.user.id);
 
             /* ===================================================
                Upload Media Files → Cloudflare R2
@@ -182,8 +174,17 @@ router.post(
                Insert Media Metadata
             =================================================== */
 
+            dbClient = await pool.connect();
+            await dbClient.query("BEGIN");
+
+            await dbClient.query(
+                `INSERT INTO posts (post_id, user_id, caption)
+                 VALUES ($1,$2,$3)`,
+                [postId, req.user.id, caption]
+            );
+
             if (mediaRecords.length > 0) {
-                await pool.query(
+                await dbClient.query(
                     `INSERT INTO post_media
                     (media_id, post_id, media_url, media_type, media_order, thumbnail_url)
                     VALUES ${mediaRecords.map((_, i) =>
@@ -193,6 +194,13 @@ router.post(
                 );
             }
 
+            await dbClient.query("COMMIT");
+            dbClient.release();
+            dbClient = null;
+
+            await syncPostHashtags(postId, caption);
+            await syncPostMentions(postId, caption, req.user.id);
+
             res.json({
                 success: true,
                 post_id: postId
@@ -200,6 +208,17 @@ router.post(
 
         } catch (err) {
             console.error(err);
+
+            if (dbClient) {
+                try {
+                    await dbClient.query("ROLLBACK");
+                } catch (rollbackError) {
+                    console.error("Failed to rollback post transaction:", rollbackError);
+                } finally {
+                    dbClient.release();
+                    dbClient = null;
+                }
+            }
 
             if (err instanceof ContentModerationError) {
                 return res.status(err.statusCode || 400).json({
