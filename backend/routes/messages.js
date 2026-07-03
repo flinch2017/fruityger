@@ -812,6 +812,8 @@ async function fetchGroupMessageReactionViewers(messageId, userId) {
 
 router.get("/chats", authenticateToken, async (req, res) => {
   const userId = req.user.id;
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 50);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
 
   try {
     await ensureDeletedChatsTable();
@@ -899,8 +901,9 @@ router.get("/chats", authenticateToken, async (req, res) => {
           )
         )
       ORDER BY m.created_at DESC NULLS LAST
+      LIMIT $2 OFFSET $3
       `,
-      [userId]
+      [userId, limit, offset]
     );
 
     res.json(
@@ -1370,6 +1373,7 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
              OR (bu.blocker_id = combined.id AND bu.blocked_id = $1)
         )
       ORDER BY combined.id, combined.has_chat DESC
+      LIMIT 30
       `
       ,
       [userId]
@@ -1449,6 +1453,8 @@ router.get("/presence/:targetUserId", authenticateToken, async (req, res) => {
 
 router.get("/requests", authenticateToken, async (req, res) => {
   const userId = req.user.id;
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 50);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
 
   try {
     await ensureDeletedChatsTable();
@@ -1510,8 +1516,9 @@ router.get("/requests", authenticateToken, async (req, res) => {
           )
         )
       ORDER BY COALESCE(m.created_at, c.requested_at, c.last_message_at) DESC NULLS LAST
+      LIMIT $2 OFFSET $3
       `,
-      [userId]
+      [userId, limit, offset]
     );
 
     res.json(
@@ -2107,6 +2114,8 @@ router.post("/get-or-create", authenticateToken, async (req, res) => {
 
 router.get("/groups/chats", authenticateToken, async (req, res) => {
   const userId = req.user.id;
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 50);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
 
   try {
     await ensureGroupChatSchema();
@@ -2185,8 +2194,9 @@ router.get("/groups/chats", authenticateToken, async (req, res) => {
         )
       )
       ORDER BY gm.created_at DESC NULLS LAST, gc.created_at DESC
+      LIMIT $2 OFFSET $3
       `,
-      [userId]
+      [userId, limit, offset]
     );
 
     res.json(
