@@ -299,6 +299,7 @@ router.get("/", authenticateToken, async (req, res) => {
           ),
           '[]'
         ) AS media,
+        liked_preview.liked_by_preview,
         (
           SELECT COUNT(*)::int
           FROM likes
@@ -333,6 +334,96 @@ router.get("/", authenticateToken, async (req, res) => {
         ON p.user_id = u.id
        AND u.deactivated_at IS NULL
        AND u.deleted_at IS NULL
+      LEFT JOIN LATERAL (
+        SELECT jsonb_build_object(
+          'user_id', lu.id,
+          'username', lu.username,
+          'profile_pic', lu.profile_pic,
+          'is_verified', lu.is_verified,
+          'other_count', GREATEST((
+            SELECT COUNT(*)::int
+            FROM likes like_total
+            WHERE like_total.post_id = p.post_id
+          ) - 1, 0)
+        ) AS liked_by_preview
+        FROM likes lp
+        JOIN users lu
+          ON lu.id = lp.liker
+         AND lu.deactivated_at IS NULL
+         AND lu.deleted_at IS NULL
+        WHERE lp.post_id = p.post_id
+        ORDER BY
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM follows f
+              WHERE f.follower_id = $2
+                AND f.following_id = lu.id
+            ) THEN 0
+            WHEN lu.id = $2 THEN 1
+            WHEN EXISTS (
+              SELECT 1
+              FROM follows f
+              WHERE f.follower_id = lu.id
+                AND f.following_id = $2
+            ) THEN 2
+            ELSE 3
+          END,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM follows f
+              WHERE f.follower_id = $2
+                AND f.following_id = lu.id
+            ) THEN (
+              (
+                SELECT COUNT(*)::int
+                FROM likes viewer_likes
+                JOIN posts liked_posts ON liked_posts.post_id = viewer_likes.post_id
+                WHERE viewer_likes.liker = $2
+                  AND liked_posts.user_id = lu.id
+              ) * 3
+              + (
+                SELECT COUNT(*)::int
+                FROM comments viewer_comments
+                JOIN posts commented_posts ON commented_posts.post_id = viewer_comments.post_id
+                WHERE viewer_comments.user_id = $2
+                  AND commented_posts.user_id = lu.id
+              ) * 4
+              + (
+                SELECT COUNT(*)::int
+                FROM reposts viewer_reposts
+                JOIN posts reposted_posts ON reposted_posts.post_id = viewer_reposts.post_id
+                WHERE viewer_reposts.user_id = $2
+                  AND reposted_posts.user_id = lu.id
+              ) * 5
+              + (
+                SELECT COUNT(*)::int
+                FROM likes their_likes
+                JOIN posts my_liked_posts ON my_liked_posts.post_id = their_likes.post_id
+                WHERE their_likes.liker = lu.id
+                  AND my_liked_posts.user_id = $2
+              ) * 2
+              + (
+                SELECT COUNT(*)::int
+                FROM comments their_comments
+                JOIN posts my_commented_posts ON my_commented_posts.post_id = their_comments.post_id
+                WHERE their_comments.user_id = lu.id
+                  AND my_commented_posts.user_id = $2
+              ) * 3
+              + (
+                SELECT COUNT(*)::int
+                FROM reposts their_reposts
+                JOIN posts my_reposted_posts ON my_reposted_posts.post_id = their_reposts.post_id
+                WHERE their_reposts.user_id = lu.id
+                  AND my_reposted_posts.user_id = $2
+              ) * 4
+            )
+            ELSE 0
+          END DESC,
+          lp.like_id DESC
+        LIMIT 1
+      ) liked_preview ON TRUE
       LEFT JOIN LATERAL (
         WITH eligible_reposts AS (
           SELECT

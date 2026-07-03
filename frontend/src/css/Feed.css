@@ -709,6 +709,154 @@
   color: #0088cc;
 }
 
+.liked-by-preview {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  max-width: 100%;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #2f697c;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.liked-by-preview strong {
+  color: #0b7fa5;
+  font-weight: 900;
+}
+
+.liked-by-preview:hover {
+  color: #119cc2;
+}
+
+.liked-by-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(5, 35, 52, 0.38);
+  backdrop-filter: blur(10px);
+}
+
+.liked-by-modal {
+  width: min(420px, 100%);
+  max-height: min(620px, 84vh);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 24px;
+  background: rgba(248, 253, 255, 0.94);
+  box-shadow:
+    0 24px 70px rgba(0, 85, 120, 0.26),
+    inset 0 1px 0 rgba(255,255,255,0.95);
+}
+
+.liked-by-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(105, 204, 235, 0.32);
+}
+
+.liked-by-modal-header h3 {
+  margin: 0;
+  color: #0b7596;
+  font-size: 1rem;
+}
+
+.liked-by-modal-header button {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #187c9b;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.liked-by-list {
+  max-height: 520px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.liked-by-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.liked-by-row:hover {
+  background: rgba(92, 211, 247, 0.15);
+}
+
+.liked-by-avatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #ffffff, #b8f2ff);
+  color: #148caf;
+}
+
+.liked-by-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.liked-by-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.liked-by-copy span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #155d75;
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.liked-by-copy small,
+.liked-by-state {
+  color: #668a98;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.liked-by-state {
+  padding: 22px 18px;
+  text-align: center;
+}
+
+.liked-by-state.error {
+  color: #b32645;
+}
+
 .feed-post-loader {
   text-align: center;
   color: #5c6f7a;

@@ -18,6 +18,7 @@ import { formatCount } from "../utils/countFormatter";
 import { getVideoPosterUrl } from "../utils/mediaThumbnail";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
+import LikedByPreview from "../components/LikedByPreview";
 
 export default function TapesFeed() {
   const navigate = useNavigate();
@@ -326,6 +327,23 @@ export default function TapesFeed() {
       if (!res.ok) {
         throw new Error("Failed to like tape");
       }
+
+      const data = await res.json().catch(() => ({}));
+      setTapes((prev) =>
+        prev.map((post) =>
+          post.post_id === postId
+            ? {
+                ...post,
+                is_liked: data.liked ?? post.is_liked,
+                like_count: data.likeCount ?? post.like_count,
+                liked_by_preview:
+                  Object.prototype.hasOwnProperty.call(data, "likedByPreview")
+                    ? data.likedByPreview
+                    : post.liked_by_preview,
+              }
+            : post
+        )
+      );
     } catch (error) {
       console.error(error);
       setTapes((prev) =>
@@ -759,6 +777,12 @@ export default function TapesFeed() {
                   </button>
 
                   {tape.caption && <CaptionWithHashtags className="tape-caption" text={tape.caption} />}
+                  <LikedByPreview
+                    postId={tape.post_id}
+                    likeCount={tape.like_count}
+                    preview={tape.liked_by_preview}
+                    className="tape-liked-by"
+                  />
                 </div>
 
                 <div className="tape-actions">

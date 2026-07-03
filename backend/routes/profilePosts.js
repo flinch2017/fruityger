@@ -133,6 +133,7 @@ router.get("/posts", authenticateToken, async (req, res) => {
           ),
           '[]'
         ) AS media,
+        liked_preview.liked_by_preview,
         COUNT(DISTINCT l.like_id)::int AS like_count,
         COUNT(DISTINCT r.user_id)::int AS repost_count,
         EXISTS (
@@ -157,6 +158,96 @@ router.get("/posts", authenticateToken, async (req, res) => {
         ON author.id = activity.user_id
        AND author.deactivated_at IS NULL
        AND author.deleted_at IS NULL
+      LEFT JOIN LATERAL (
+        SELECT jsonb_build_object(
+          'user_id', lu.id,
+          'username', lu.username,
+          'profile_pic', lu.profile_pic,
+          'is_verified', lu.is_verified,
+          'other_count', GREATEST((
+            SELECT COUNT(*)::int
+            FROM likes like_total
+            WHERE like_total.post_id = activity.post_id
+          ) - 1, 0)
+        ) AS liked_by_preview
+        FROM likes lp
+        JOIN users lu
+          ON lu.id = lp.liker
+         AND lu.deactivated_at IS NULL
+         AND lu.deleted_at IS NULL
+        WHERE lp.post_id = activity.post_id
+        ORDER BY
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM follows f
+              WHERE f.follower_id = $1
+                AND f.following_id = lu.id
+            ) THEN 0
+            WHEN lu.id = $1 THEN 1
+            WHEN EXISTS (
+              SELECT 1
+              FROM follows f
+              WHERE f.follower_id = lu.id
+                AND f.following_id = $1
+            ) THEN 2
+            ELSE 3
+          END,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM follows f
+              WHERE f.follower_id = $1
+                AND f.following_id = lu.id
+            ) THEN (
+              (
+                SELECT COUNT(*)::int
+                FROM likes viewer_likes
+                JOIN posts liked_posts ON liked_posts.post_id = viewer_likes.post_id
+                WHERE viewer_likes.liker = $1
+                  AND liked_posts.user_id = lu.id
+              ) * 3
+              + (
+                SELECT COUNT(*)::int
+                FROM comments viewer_comments
+                JOIN posts commented_posts ON commented_posts.post_id = viewer_comments.post_id
+                WHERE viewer_comments.user_id = $1
+                  AND commented_posts.user_id = lu.id
+              ) * 4
+              + (
+                SELECT COUNT(*)::int
+                FROM reposts viewer_reposts
+                JOIN posts reposted_posts ON reposted_posts.post_id = viewer_reposts.post_id
+                WHERE viewer_reposts.user_id = $1
+                  AND reposted_posts.user_id = lu.id
+              ) * 5
+              + (
+                SELECT COUNT(*)::int
+                FROM likes their_likes
+                JOIN posts my_liked_posts ON my_liked_posts.post_id = their_likes.post_id
+                WHERE their_likes.liker = lu.id
+                  AND my_liked_posts.user_id = $1
+              ) * 2
+              + (
+                SELECT COUNT(*)::int
+                FROM comments their_comments
+                JOIN posts my_commented_posts ON my_commented_posts.post_id = their_comments.post_id
+                WHERE their_comments.user_id = lu.id
+                  AND my_commented_posts.user_id = $1
+              ) * 3
+              + (
+                SELECT COUNT(*)::int
+                FROM reposts their_reposts
+                JOIN posts my_reposted_posts ON my_reposted_posts.post_id = their_reposts.post_id
+                WHERE their_reposts.user_id = lu.id
+                  AND my_reposted_posts.user_id = $1
+              ) * 4
+            )
+            ELSE 0
+          END DESC,
+          lp.like_id DESC
+        LIMIT 1
+      ) liked_preview ON TRUE
       LEFT JOIN likes l
         ON l.post_id = activity.post_id
       LEFT JOIN reposts r
@@ -181,7 +272,8 @@ router.get("/posts", authenticateToken, async (req, res) => {
         author.username,
         author.profile_pic,
         author.is_private,
-        author.is_verified
+        author.is_verified,
+        liked_preview.liked_by_preview
       ORDER BY COALESCE(activity.reposted_at, activity.date_posted) DESC
       LIMIT $3 OFFSET $4
       `,
@@ -288,6 +380,7 @@ router.get("/public-posts", async (req, res) => {
           ),
           '[]'
         ) AS media,
+        liked_preview.liked_by_preview,
         COUNT(DISTINCT l.like_id)::int AS like_count,
         COUNT(DISTINCT r.user_id)::int AS repost_count,
         FALSE AS is_liked,
@@ -302,6 +395,27 @@ router.get("/public-posts", async (req, res) => {
         ON author.id = activity.user_id
        AND author.deactivated_at IS NULL
        AND author.deleted_at IS NULL
+      LEFT JOIN LATERAL (
+        SELECT jsonb_build_object(
+          'user_id', lu.id,
+          'username', lu.username,
+          'profile_pic', lu.profile_pic,
+          'is_verified', lu.is_verified,
+          'other_count', GREATEST((
+            SELECT COUNT(*)::int
+            FROM likes like_total
+            WHERE like_total.post_id = activity.post_id
+          ) - 1, 0)
+        ) AS liked_by_preview
+        FROM likes lp
+        JOIN users lu
+          ON lu.id = lp.liker
+         AND lu.deactivated_at IS NULL
+         AND lu.deleted_at IS NULL
+        WHERE lp.post_id = activity.post_id
+        ORDER BY lp.like_id DESC
+        LIMIT 1
+      ) liked_preview ON TRUE
       LEFT JOIN likes l
         ON l.post_id = activity.post_id
       LEFT JOIN reposts r
@@ -317,7 +431,8 @@ router.get("/public-posts", async (req, res) => {
         author.username,
         author.profile_pic,
         author.is_private,
-        author.is_verified
+        author.is_verified,
+        liked_preview.liked_by_preview
       ORDER BY COALESCE(activity.reposted_at, activity.date_posted) DESC
       LIMIT $2 OFFSET $3
       `,

@@ -12,6 +12,7 @@ import { getMediaThumbnailUrl, getVideoPosterUrl } from "../utils/mediaThumbnail
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
 import FollowSuggestions from "../components/FollowSuggestions";
+import LikedByPreview from "../components/LikedByPreview";
 import { getDisplayName } from "../utils/displayName";
 
 const PROFILE_TABS = [
@@ -903,6 +904,23 @@ export default function Profile() {
         throw new Error("Failed");
       }
 
+      const data = await res.json().catch(() => ({}));
+      setPosts(prev =>
+        prev.map(post =>
+          post.post_id === postId
+            ? {
+                ...post,
+                is_liked: data.liked ?? post.is_liked,
+                like_count: data.likeCount ?? post.like_count,
+                liked_by_preview:
+                  Object.prototype.hasOwnProperty.call(data, "likedByPreview")
+                    ? data.likedByPreview
+                    : post.liked_by_preview
+              }
+            : post
+        )
+      );
+
     } catch (err) {
       console.error(err);
 
@@ -1758,6 +1776,11 @@ export default function Profile() {
               </div>
 
             </div>
+            <LikedByPreview
+              postId={post.post_id}
+              likeCount={post.like_count}
+              preview={post.liked_by_preview}
+            />
           </div>
         ))}
 

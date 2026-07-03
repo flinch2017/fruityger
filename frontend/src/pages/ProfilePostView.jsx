@@ -9,6 +9,7 @@ import { formatCount } from "../utils/countFormatter";
 import { getVideoPosterUrl } from "../utils/mediaThumbnail";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
+import LikedByPreview from "../components/LikedByPreview";
 
 const VALID_PROFILE_TABS = new Set(["general", "posts", "reposts", "tapes"]);
 
@@ -143,6 +144,22 @@ export default function ProfilePostView() {
         body: JSON.stringify({ postId: targetPostId }),
       });
       if (!res.ok) throw new Error("Failed to like post");
+      const data = await res.json().catch(() => ({}));
+      setPosts((prev) =>
+        prev.map((post) =>
+          post.post_id === targetPostId
+            ? {
+                ...post,
+                is_liked: data.liked ?? post.is_liked,
+                like_count: data.likeCount ?? post.like_count,
+                liked_by_preview:
+                  Object.prototype.hasOwnProperty.call(data, "likedByPreview")
+                    ? data.likedByPreview
+                    : post.liked_by_preview,
+              }
+            : post
+        )
+      );
     } catch (error) {
       console.error(error);
       setPosts((prev) =>
@@ -366,6 +383,11 @@ export default function ProfilePostView() {
                     </div>
                   </div>
                 </div>
+                <LikedByPreview
+                  postId={post.post_id}
+                  likeCount={post.like_count}
+                  preview={post.liked_by_preview}
+                />
               </div>
             );
           })

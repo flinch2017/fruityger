@@ -10,6 +10,7 @@ import { formatCount } from "../utils/countFormatter";
 import { getVideoPosterUrl } from "../utils/mediaThumbnail";
 import CaptionWithHashtags from "../components/CaptionWithHashtags";
 import VerifiedBadge from "../components/VerifiedBadge";
+import LikedByPreview from "../components/LikedByPreview";
 
 export default function PostDetail() {
   const { postId } = useParams();
@@ -294,6 +295,17 @@ export default function PostDetail() {
       if (!res.ok) {
         throw new Error("Failed");
       }
+
+      const data = await res.json().catch(() => ({}));
+      setPost((prev) => ({
+        ...prev,
+        is_liked: data.liked ?? prev.is_liked,
+        like_count: data.likeCount ?? prev.like_count,
+        liked_by_preview:
+          Object.prototype.hasOwnProperty.call(data, "likedByPreview")
+            ? data.likedByPreview
+            : prev.liked_by_preview,
+      }));
     } catch (err) {
       console.error(err);
       setPost((prev) => ({
@@ -523,6 +535,11 @@ export default function PostDetail() {
               </div>
             </div>
           </div>
+          <LikedByPreview
+            postId={post.post_id}
+            likeCount={post.like_count}
+            preview={post.liked_by_preview}
+          />
         </div>
       </div>
     </div>

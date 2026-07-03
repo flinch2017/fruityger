@@ -11,6 +11,7 @@ import VerifiedBadge from "../components/VerifiedBadge";
 import FollowSuggestions from "../components/FollowSuggestions";
 import { getDisplayName } from "../utils/displayName";
 import { getVideoPosterUrl } from "../utils/mediaThumbnail";
+import LikedByPreview from "../components/LikedByPreview";
 
 const SEARCH_TABS = [
   { key: "profiles", label: "Profiles", resultKey: "users" },
@@ -467,6 +468,24 @@ export default function Search() {
       if (!res.ok) {
         throw new Error("Failed to toggle like");
       }
+
+      const data = await res.json().catch(() => ({}));
+      setResult((prev) => ({
+        ...prev,
+        posts: prev.posts.map((post) =>
+          post.post_id === postId
+            ? {
+                ...post,
+                is_liked: data.liked ?? post.is_liked,
+                like_count: data.likeCount ?? post.like_count,
+                liked_by_preview:
+                  Object.prototype.hasOwnProperty.call(data, "likedByPreview")
+                    ? data.likedByPreview
+                    : post.liked_by_preview
+              }
+            : post
+        )
+      }));
     } catch (err) {
       console.error(err);
       setResult((prev) => ({
@@ -1009,6 +1028,11 @@ export default function Search() {
                           </div>
                         </div>
                       </div>
+                      <LikedByPreview
+                        postId={p.post_id}
+                        likeCount={p.like_count}
+                        preview={p.liked_by_preview}
+                      />
                     </div>
                   ))
                 )}

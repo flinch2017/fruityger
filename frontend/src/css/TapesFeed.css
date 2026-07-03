@@ -299,6 +299,16 @@
   text-shadow: 0 4px 16px rgba(0,0,0,0.24);
 }
 
+.tape-liked-by {
+  margin-top: 8px;
+  color: rgba(255,255,255,0.88);
+  text-shadow: 0 3px 12px rgba(0,0,0,0.42);
+}
+
+.tape-liked-by strong {
+  color: #ffffff;
+}
+
 .tape-actions {
   position: absolute;
   right: 14px;

@@ -10,6 +10,7 @@ import { getVideoPosterUrl } from "../utils/mediaThumbnail";
 import CaptionWithHashtags from "./CaptionWithHashtags";
 import VerifiedBadge from "./VerifiedBadge";
 import FollowSuggestions from "./FollowSuggestions";
+import LikedByPreview from "./LikedByPreview";
 
 const FEED_SUGGESTION_COOLDOWN_MS = 10 * 60 * 1000;
 const FEED_SUGGESTION_CHANCE = 0.35;
@@ -451,6 +452,23 @@ export default function Feed() {
       if (!res.ok) {
         throw new Error("Failed");
       }
+
+      const data = await res.json().catch(() => ({}));
+      setPosts((prev) =>
+        prev.map((post) =>
+          post.post_id === postId
+            ? {
+                ...post,
+                is_liked: data.liked ?? post.is_liked,
+                like_count: data.likeCount ?? post.like_count,
+                liked_by_preview:
+                  Object.prototype.hasOwnProperty.call(data, "likedByPreview")
+                    ? data.likedByPreview
+                    : post.liked_by_preview,
+              }
+            : post
+        )
+      );
     } catch (err) {
       console.error(err);
       setPosts((prev) =>
@@ -1143,6 +1161,11 @@ export default function Feed() {
                 </div>
               </div>
             </div>
+            <LikedByPreview
+              postId={post.post_id}
+              likeCount={post.like_count}
+              preview={post.liked_by_preview}
+            />
             </div>
 
             {showFeedSuggestions && index === suggestionInsertIndex && (
