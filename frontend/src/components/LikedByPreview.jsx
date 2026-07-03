@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaUser } from "react-icons/fa";
+import { FaHeart, FaTimes, FaUser } from "react-icons/fa";
 import { getSafeMediaUrl } from "../utils/mediaUrl";
 import VerifiedBadge from "./VerifiedBadge";
 
@@ -62,17 +62,42 @@ export default function LikedByPreview({ postId, likeCount = 0, preview = null, 
         type="button"
         className={`liked-by-preview ${className}`.trim()}
         onClick={openLikes}
+        aria-label={`View ${count} ${count === 1 ? "like" : "likes"}`}
       >
-        Liked by <strong>@{preview.username}</strong>
-        {otherCount > 0 ? ` and ${otherCount === 1 ? "1 other" : `${otherCount} others`}` : ""}
+        <span className="liked-by-preview-avatar" aria-hidden="true">
+          {preview.profile_pic ? (
+            <img src={getSafeMediaUrl(preview.profile_pic)} alt="" />
+          ) : (
+            <FaUser />
+          )}
+          <span className="liked-by-preview-heart">
+            <FaHeart />
+          </span>
+        </span>
+
+        <span className="liked-by-preview-copy">
+          <span className="liked-by-preview-line">
+            Liked by <strong>@{preview.username}</strong>
+          </span>
+          {otherCount > 0 ? (
+            <span className="liked-by-preview-more">
+              +{otherCount} {otherCount === 1 ? "other" : "others"}
+            </span>
+          ) : null}
+        </span>
       </button>
 
       {open && (
         <div className="liked-by-modal-overlay" onClick={() => setOpen(false)}>
           <div className="liked-by-modal" onClick={(event) => event.stopPropagation()}>
             <div className="liked-by-modal-header">
-              <h3>Likes</h3>
-              <button type="button" onClick={() => setOpen(false)}>Close</button>
+              <div>
+                <span className="liked-by-modal-kicker">Post Activity</span>
+                <h3>{count === 1 ? "1 like" : `${count} likes`}</h3>
+              </div>
+              <button type="button" onClick={() => setOpen(false)} aria-label="Close likes">
+                <FaTimes />
+              </button>
             </div>
 
             {loading ? (
@@ -98,11 +123,17 @@ export default function LikedByPreview({ postId, likeCount = 0, preview = null, 
                       )}
                     </span>
                     <span className="liked-by-copy">
-                      <span>
-                        @{liker.username}
+                      <span className="liked-by-name">
+                        <strong>@{liker.username}</strong>
                         <VerifiedBadge verified={liker.is_verified} />
                       </span>
-                      {liker.follows_you ? <small>Follows you</small> : null}
+                      <small>
+                        {liker.is_following
+                          ? "Following"
+                          : liker.follows_you
+                            ? "Follows you"
+                            : "Liked this post"}
+                      </small>
                     </span>
                   </button>
                 ))}

@@ -712,23 +712,90 @@
 .liked-by-preview {
   display: inline-flex;
   align-items: center;
+  gap: 10px;
   align-self: flex-start;
   max-width: 100%;
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   padding: 0;
   border: 0;
   background: transparent;
-  color: #2f697c;
-  font-size: 0.88rem;
+  color: #456f80;
+  font-size: 0.86rem;
   font-weight: 700;
   line-height: 1.35;
   text-align: left;
   cursor: pointer;
 }
 
+.liked-by-preview-avatar {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #ffffff, #bdefff);
+  color: #1688aa;
+  box-shadow:
+    0 7px 18px rgba(0, 150, 210, 0.16),
+    inset 0 1px 0 rgba(255,255,255,0.96);
+}
+
+.liked-by-preview-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.liked-by-preview-heart {
+  position: absolute;
+  right: -5px;
+  bottom: -3px;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(255,255,255,0.94);
+  border-radius: 50%;
+  background: linear-gradient(145deg, #ff69bd, #ff3c8b);
+  color: #ffffff;
+  font-size: 8px;
+  box-shadow: 0 4px 10px rgba(255, 64, 150, 0.24);
+}
+
+.liked-by-preview-copy {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 7px;
+}
+
+.liked-by-preview-line {
+  min-width: 0;
+}
+
 .liked-by-preview strong {
   color: #0b7fa5;
   font-weight: 900;
+}
+
+.liked-by-preview-more {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  color: #3b8196;
+  font-size: 0.74rem;
+  font-weight: 900;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.94),
+    0 6px 14px rgba(0, 164, 210, 0.08);
 }
 
 .liked-by-preview:hover {
@@ -748,12 +815,14 @@
 }
 
 .liked-by-modal {
-  width: min(420px, 100%);
+  width: min(430px, 100%);
   max-height: min(620px, 84vh);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.76);
-  border-radius: 24px;
-  background: rgba(248, 253, 255, 0.94);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(153, 237, 255, 0.52), transparent 36%),
+    linear-gradient(165deg, rgba(255,255,255,0.96), rgba(230,249,255,0.92));
   box-shadow:
     0 24px 70px rgba(0, 85, 120, 0.26),
     inset 0 1px 0 rgba(255,255,255,0.95);
@@ -764,24 +833,42 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 18px;
+  padding: 18px 20px;
   border-bottom: 1px solid rgba(105, 204, 235, 0.32);
+}
+
+.liked-by-modal-kicker {
+  display: block;
+  margin-bottom: 3px;
+  color: #49a5bd;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .liked-by-modal-header h3 {
   margin: 0;
   color: #0b7596;
-  font-size: 1rem;
+  font-size: 1.3rem;
+  line-height: 1.1;
 }
 
 .liked-by-modal-header button {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
   border: 0;
-  border-radius: 999px;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.82);
+  border-radius: 50%;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.86);
   color: #187c9b;
-  font-weight: 800;
+  font-size: 0.9rem;
   cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.96),
+    0 8px 18px rgba(0, 130, 180, 0.12);
 }
 
 .liked-by-list {
@@ -795,22 +882,32 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px;
+  padding: 11px;
   border: 0;
-  border-radius: 18px;
-  background: transparent;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.48);
   cursor: pointer;
   text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.liked-by-row + .liked-by-row {
+  margin-top: 7px;
 }
 
 .liked-by-row:hover {
-  background: rgba(92, 211, 247, 0.15);
+  transform: translateY(-1px);
+  background: rgba(255,255,255,0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.88),
+    0 10px 20px rgba(0, 142, 190, 0.1);
 }
 
 .liked-by-avatar {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -839,6 +936,12 @@
   color: #155d75;
   font-size: 0.92rem;
   font-weight: 900;
+}
+
+.liked-by-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .liked-by-copy small,

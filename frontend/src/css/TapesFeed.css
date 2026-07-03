@@ -300,13 +300,24 @@
 }
 
 .tape-liked-by {
-  margin-top: 8px;
+  margin-top: 9px;
   color: rgba(255,255,255,0.88);
   text-shadow: 0 3px 12px rgba(0,0,0,0.42);
 }
 
 .tape-liked-by strong {
   color: #ffffff;
+}
+
+.tape-liked-by .liked-by-preview-more {
+  background: rgba(255,255,255,0.2);
+  color: #ffffff;
+}
+
+.tape-liked-by .liked-by-preview-avatar {
+  box-shadow:
+    0 8px 20px rgba(0,0,0,0.26),
+    inset 0 1px 0 rgba(255,255,255,0.92);
 }
 
 .tape-actions {
