@@ -11,7 +11,7 @@ import { r2 } from "../utils/r2.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { ensureHashtagSchema, extractHashtags, MAX_HASHTAGS_PER_POST, syncPostHashtags } from "../utils/hashtags.js";
 import { syncPostMentions } from "../utils/mentions.js";
-import { createVideoThumbnailFile, transcodeVideoFileToMp4 } from "../utils/videoProcessing.js";
+import { burnTapeEditsIntoVideoFile, createVideoThumbnailFile, transcodeVideoFileToMp4 } from "../utils/videoProcessing.js";
 import { assertContentAllowedOrReport, ContentModerationError } from "../utils/contentModeration.js";
 import { ensurePostMediaThumbnailSchema } from "../utils/postMediaSchema.js";
 
@@ -22,6 +22,25 @@ const sanitizeFileName = (value = "") =>
         .replace(/[^\w.\-]+/g, "-")
         .replace(/-+/g, "-")
         .replace(/^-|-$/g, "") || "file";
+
+const parseJsonBodyField = (value) => {
+    if (!value) {
+        return null;
+    }
+
+    if (typeof value === "object") {
+        return value;
+    }
+
+    try {
+        return JSON.parse(String(value));
+    } catch {
+        return null;
+    }
+};
+
+const getTapeEditsFromBody = (body = {}) =>
+    parseJsonBodyField(body.tapeEdits) || parseJsonBodyField(body.tape_edits);
 
 const tempUploadDir = path.join(os.tmpdir(), "fruityger-post-uploads");
 
@@ -57,7 +76,9 @@ router.post(
             await ensureHashtagSchema();
             await ensurePostMediaThumbnailSchema();
 
-            const { caption } = req.body;
+            const { caption, kind } = req.body;
+            const isTapeUpload = kind === "tape";
+            const tapeEdits = getTapeEditsFromBody(req.body);
             const files = req.files || [];
             const hashtagCount = extractHashtags(caption || "").length;
 
@@ -111,7 +132,9 @@ router.post(
                 cleanupTasks.push(() => fs.rm(file.path, { force: true }));
 
                 if (isVideo) {
-                    const processedFile = await transcodeVideoFileToMp4(file.path, file.originalname);
+                    const processedFile = isTapeUpload
+                        ? await burnTapeEditsIntoVideoFile(file.path, file.originalname, tapeEdits)
+                        : await transcodeVideoFileToMp4(file.path, file.originalname);
                     cleanupTasks.push(processedFile.cleanup);
                     uploadBody = createReadStream(processedFile.outputPath);
                     uploadContentType = processedFile.mimetype;

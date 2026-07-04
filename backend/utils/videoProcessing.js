@@ -18,6 +18,213 @@ const sanitizeBaseName = (value = "") =>
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "") || "video";
 
+const TAPE_STICKER_DISPLAY = {
+  sparkle: "*",
+  heart: "<3",
+  star: "+",
+  bubble: "o",
+  flower: "@",
+  fire: "^",
+};
+
+const clampNumber = (value, min, max, fallback) => {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(min, number));
+};
+
+const normalizeTapeEdits = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const edits = typeof value === "string" ? JSON.parse(value) : value;
+  if (!edits || typeof edits !== "object") {
+    return null;
+  }
+
+  const sourceFrame = edits.sourceFrame && typeof edits.sourceFrame === "object"
+    ? {
+        width: clampNumber(edits.sourceFrame.width, 240, 2160, 390),
+        height: clampNumber(edits.sourceFrame.height, 320, 3840, 693),
+      }
+    : { width: 390, height: 693 };
+
+  const textOverlays = Array.isArray(edits.textOverlays)
+    ? edits.textOverlays
+        .filter((item) => item && typeof item.text === "string" && item.text.trim())
+        .slice(0, 12)
+        .map((item, index) => {
+          const transform = item.transform && typeof item.transform === "object" ? item.transform : {};
+          return {
+            text: item.text.trim().slice(0, 180),
+            transform: {
+              translateX: clampNumber(transform.translateX, -sourceFrame.width, sourceFrame.width, 0),
+              translateY: clampNumber(transform.translateY, -sourceFrame.height, sourceFrame.height, index * 34),
+              scale: clampNumber(transform.scale, 0.45, 3, 1),
+              rotate: clampNumber(transform.rotate, -180, 180, 0),
+            },
+          };
+        })
+    : [];
+
+  const sticker = typeof edits.sticker === "string" ? TAPE_STICKER_DISPLAY[edits.sticker] || "" : "";
+  const stickerTransform = edits.stickerTransform && typeof edits.stickerTransform === "object"
+    ? edits.stickerTransform
+    : {};
+
+  return {
+    sourceFrame,
+    textOverlays,
+    sticker,
+    stickerTransform: {
+      translateX: clampNumber(stickerTransform.translateX, -sourceFrame.width, sourceFrame.width, sourceFrame.width * 0.22),
+      translateY: clampNumber(stickerTransform.translateY, -sourceFrame.height, sourceFrame.height, -sourceFrame.height * 0.22),
+      scale: clampNumber(stickerTransform.scale, 0.45, 3, 1),
+      rotate: clampNumber(stickerTransform.rotate, -180, 180, -8),
+    },
+  };
+};
+
+const hasRenderableTapeEdits = (edits) =>
+  Boolean(edits && (edits.textOverlays.length > 0 || edits.sticker));
+
+const escapeAssText = (value) =>
+  String(value)
+    .replace(/[{}]/g, "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\r\n|\r|\n/g, "\\N");
+
+const formatAssNumber = (value) => Number(value).toFixed(2).replace(/\.00$/, "");
+
+const buildAssDialogue = ({ text, transform, sourceFrame, fontSize, bold = true }) => {
+  const x = sourceFrame.width / 2 + transform.translateX;
+  const y = sourceFrame.height / 2 + transform.translateY;
+  const scale = transform.scale * 100;
+  const rotate = transform.rotate;
+  const tags = [
+    "\\an5",
+    `\\pos(${formatAssNumber(x)},${formatAssNumber(y)})`,
+    `\\fs${formatAssNumber(fontSize)}`,
+    `\\fscx${formatAssNumber(scale)}`,
+    `\\fscy${formatAssNumber(scale)}`,
+    `\\frz${formatAssNumber(rotate)}`,
+    "\\bord3",
+    "\\shad2",
+    "\\c&HFFFFFF&",
+    "\\3c&H1A1A1A&",
+    bold ? "\\b1" : "\\b0",
+  ].join("");
+
+  return `Dialogue: 0,0:00:00.00,9:59:59.99,Default,,0,0,0,,{${tags}}${escapeAssText(text)}`;
+};
+
+const createTapeEditsAssFile = async (tempDir, edits) => {
+  const assPath = path.join(tempDir, "tape-edits.ass");
+  const { sourceFrame } = edits;
+  const events = [
+    ...edits.textOverlays.map((item) =>
+      buildAssDialogue({
+        text: item.text,
+        transform: item.transform,
+        sourceFrame,
+        fontSize: 30,
+      })
+    ),
+  ];
+
+  if (edits.sticker) {
+    events.push(
+      buildAssDialogue({
+        text: edits.sticker,
+        transform: edits.stickerTransform,
+        sourceFrame,
+        fontSize: 46,
+      })
+    );
+  }
+
+  const ass = [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    "WrapStyle: 2",
+    "ScaledBorderAndShadow: yes",
+    `PlayResX: ${Math.round(sourceFrame.width)}`,
+    `PlayResY: ${Math.round(sourceFrame.height)}`,
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    "Style: Default,Arial,30,&H00FFFFFF,&H000000FF,&H801A1A1A,&H60000000,-1,0,0,0,100,100,0,0,1,3,2,5,20,20,20,1",
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ...events,
+    "",
+  ].join("\n");
+
+  await fs.writeFile(assPath, ass, "utf8");
+  return assPath;
+};
+
+const escapeFilterPath = (filePath) =>
+  filePath
+    .replace(/\\/g, "/")
+    .replace(/:/g, "\\:")
+    .replace(/'/g, "\\'")
+    .replace(/,/g, "\\,")
+    .replace(/\[/g, "\\[")
+    .replace(/\]/g, "\\]");
+
+const getTranscodeArgs = ({ inputPath, outputPath, videoFilter }) => [
+  "-hide_banner",
+  "-loglevel",
+  "error",
+  "-y",
+  "-i",
+  inputPath,
+  "-map",
+  "0:v:0",
+  "-map",
+  "0:a?",
+  ...(videoFilter ? ["-vf", videoFilter] : []),
+  "-c:v",
+  "libx264",
+  "-preset",
+  "veryfast",
+  "-crf",
+  "28",
+  "-threads",
+  "1",
+  "-pix_fmt",
+  "yuv420p",
+  "-tag:v",
+  "avc1",
+  "-c:a",
+  "aac",
+  "-b:a",
+  "128k",
+  "-movflags",
+  "+faststart",
+  outputPath,
+];
+
+const runVideoTranscode = async ({ inputPath, outputPath, videoFilter }) => {
+  try {
+    await execFileAsync(
+      ffmpegPath,
+      getTranscodeArgs({ inputPath, outputPath, videoFilter }),
+      FFMPEG_EXEC_OPTIONS
+    );
+  } catch (error) {
+    const stderr = error?.stderr ? String(error.stderr).trim() : "";
+    const ffmpegMessage = stderr.split("\n").slice(-3).join(" ").trim();
+    throw new Error(ffmpegMessage || "Video transcoding failed");
+  }
+};
+
 export async function transcodeVideoToMp4(fileBuffer, originalName = "video") {
   if (!ffmpegPath) {
     throw new Error("FFmpeg binary is not available");
@@ -32,43 +239,7 @@ export async function transcodeVideoToMp4(fileBuffer, originalName = "video") {
   try {
     await fs.writeFile(inputPath, fileBuffer);
 
-    try {
-      await execFileAsync(ffmpegPath, [
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-y",
-        "-i",
-        inputPath,
-        "-map",
-        "0:v:0",
-        "-map",
-        "0:a?",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "28",
-        "-threads",
-        "1",
-        "-pix_fmt",
-        "yuv420p",
-        "-tag:v",
-        "avc1",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "128k",
-        "-movflags",
-        "+faststart",
-        outputPath,
-      ], FFMPEG_EXEC_OPTIONS);
-    } catch (error) {
-      const stderr = error?.stderr ? String(error.stderr).trim() : "";
-      const ffmpegMessage = stderr.split("\n").slice(-3).join(" ").trim();
-      throw new Error(ffmpegMessage || "Video transcoding failed");
-    }
+    await runVideoTranscode({ inputPath, outputPath });
 
     const outputBuffer = await fs.readFile(outputPath);
 
@@ -93,43 +264,50 @@ export async function transcodeVideoFileToMp4(inputPath, originalName = "video")
   const outputPath = path.join(tempDir, `${baseName}.mp4`);
 
   try {
-    try {
-      await execFileAsync(ffmpegPath, [
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-y",
-        "-i",
-        inputPath,
-        "-map",
-        "0:v:0",
-        "-map",
-        "0:a?",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "28",
-        "-threads",
-        "1",
-        "-pix_fmt",
-        "yuv420p",
-        "-tag:v",
-        "avc1",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "128k",
-        "-movflags",
-        "+faststart",
-        outputPath,
-      ], FFMPEG_EXEC_OPTIONS);
-    } catch (error) {
-      const stderr = error?.stderr ? String(error.stderr).trim() : "";
-      const ffmpegMessage = stderr.split("\n").slice(-3).join(" ").trim();
-      throw new Error(ffmpegMessage || "Video transcoding failed");
-    }
+    await runVideoTranscode({ inputPath, outputPath });
+
+    return {
+      outputPath,
+      mimetype: "video/mp4",
+      fileName: `${baseName}.mp4`,
+      cleanup: async () => {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    await fs.rm(tempDir, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+export async function burnTapeEditsIntoVideoFile(inputPath, originalName = "video", rawTapeEdits = null) {
+  if (!ffmpegPath) {
+    throw new Error("FFmpeg binary is not available");
+  }
+
+  let edits = null;
+  try {
+    edits = normalizeTapeEdits(rawTapeEdits);
+  } catch {
+    edits = null;
+  }
+
+  if (!hasRenderableTapeEdits(edits)) {
+    return transcodeVideoFileToMp4(inputPath, originalName);
+  }
+
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "fruityger-tape-render-"));
+  const inputExt = path.extname(originalName) || path.extname(inputPath) || ".mov";
+  const baseName = sanitizeBaseName(path.basename(originalName, inputExt));
+  const outputPath = path.join(tempDir, `${baseName}.mp4`);
+
+  try {
+    const assPath = await createTapeEditsAssFile(tempDir, edits);
+    await runVideoTranscode({
+      inputPath,
+      outputPath,
+      videoFilter: `subtitles='${escapeFilterPath(assPath)}'`,
+    });
 
     return {
       outputPath,
