@@ -178,17 +178,18 @@ const escapeFilterPath = (filePath) =>
     .replace(/\[/g, "\\[")
     .replace(/\]/g, "\\]");
 
-const getTranscodeArgs = ({ inputPath, outputPath, videoFilter }) => [
+const getTranscodeArgs = ({ inputPath, outputPath, videoFilter, audioInputPath }) => [
   "-hide_banner",
   "-loglevel",
   "error",
   "-y",
   "-i",
   inputPath,
+  ...(audioInputPath ? ["-stream_loop", "-1", "-i", audioInputPath] : []),
   "-map",
   "0:v:0",
   "-map",
-  "0:a?",
+  audioInputPath ? "1:a:0" : "0:a?",
   ...(videoFilter ? ["-vf", videoFilter] : []),
   "-c:v",
   "libx264",
@@ -206,16 +207,17 @@ const getTranscodeArgs = ({ inputPath, outputPath, videoFilter }) => [
   "aac",
   "-b:a",
   "128k",
+  ...(audioInputPath ? ["-shortest"] : []),
   "-movflags",
   "+faststart",
   outputPath,
 ];
 
-const runVideoTranscode = async ({ inputPath, outputPath, videoFilter }) => {
+const runVideoTranscode = async ({ inputPath, outputPath, videoFilter, audioInputPath }) => {
   try {
     await execFileAsync(
       ffmpegPath,
-      getTranscodeArgs({ inputPath, outputPath, videoFilter }),
+      getTranscodeArgs({ inputPath, outputPath, videoFilter, audioInputPath }),
       FFMPEG_EXEC_OPTIONS
     );
   } catch (error) {
@@ -280,7 +282,7 @@ export async function transcodeVideoFileToMp4(inputPath, originalName = "video")
   }
 }
 
-export async function burnTapeEditsIntoVideoFile(inputPath, originalName = "video", rawTapeEdits = null) {
+export async function burnTapeEditsIntoVideoFile(inputPath, originalName = "video", rawTapeEdits = null, audioInputPath = null) {
   if (!ffmpegPath) {
     throw new Error("FFmpeg binary is not available");
   }
@@ -292,7 +294,7 @@ export async function burnTapeEditsIntoVideoFile(inputPath, originalName = "vide
     edits = null;
   }
 
-  if (!hasRenderableTapeEdits(edits)) {
+  if (!hasRenderableTapeEdits(edits) && !audioInputPath) {
     return transcodeVideoFileToMp4(inputPath, originalName);
   }
 
@@ -302,11 +304,12 @@ export async function burnTapeEditsIntoVideoFile(inputPath, originalName = "vide
   const outputPath = path.join(tempDir, `${baseName}.mp4`);
 
   try {
-    const assPath = await createTapeEditsAssFile(tempDir, edits);
+    const assPath = hasRenderableTapeEdits(edits) ? await createTapeEditsAssFile(tempDir, edits) : null;
     await runVideoTranscode({
       inputPath,
       outputPath,
-      videoFilter: `subtitles='${escapeFilterPath(assPath)}'`,
+      videoFilter: assPath ? `subtitles='${escapeFilterPath(assPath)}'` : undefined,
+      audioInputPath,
     });
 
     return {

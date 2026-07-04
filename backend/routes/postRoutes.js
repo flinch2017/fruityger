@@ -66,7 +66,10 @@ const upload = multer({
 router.post(
     "/create",
     authenticateToken,
-    upload.array("media", 4),
+    upload.fields([
+        { name: "media", maxCount: 4 },
+        { name: "music", maxCount: 1 },
+    ]),
     async (req, res) => {
         let postId = null;
         let dbClient = null;
@@ -79,8 +82,19 @@ router.post(
             const { caption, kind } = req.body;
             const isTapeUpload = kind === "tape";
             const tapeEdits = getTapeEditsFromBody(req.body);
-            const files = req.files || [];
+            const files = Array.isArray(req.files) ? req.files : req.files?.media || [];
+            const musicFile = !Array.isArray(req.files) ? req.files?.music?.[0] : null;
             const hashtagCount = extractHashtags(caption || "").length;
+
+            if (musicFile) {
+                cleanupTasks.push(() => fs.rm(musicFile.path, { force: true }));
+            }
+
+            if (musicFile && (!isTapeUpload || !musicFile.mimetype?.startsWith("audio/"))) {
+                return res.status(400).json({
+                    error: "Music must be an audio file for a tape upload.",
+                });
+            }
 
             if (hashtagCount > MAX_HASHTAGS_PER_POST) {
                 return res.status(400).json({
@@ -133,7 +147,7 @@ router.post(
 
                 if (isVideo) {
                     const processedFile = isTapeUpload
-                        ? await burnTapeEditsIntoVideoFile(file.path, file.originalname, tapeEdits)
+                        ? await burnTapeEditsIntoVideoFile(file.path, file.originalname, tapeEdits, musicFile?.path || null)
                         : await transcodeVideoFileToMp4(file.path, file.originalname);
                     cleanupTasks.push(processedFile.cleanup);
                     uploadBody = createReadStream(processedFile.outputPath);
