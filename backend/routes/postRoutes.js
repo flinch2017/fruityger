@@ -9,11 +9,12 @@ import os from "os";
 import path from "path";
 import { r2 } from "../utils/r2.js";
 import { authenticateToken } from "../middleware/auth.js";
-import { ensureHashtagSchema, extractHashtags, MAX_HASHTAGS_PER_POST, syncPostHashtags } from "../utils/hashtags.js";
+import { ensureHashtagSchema, extractHashtags, MAX_HASHTAGS_PER_POST, removePostHashtags, syncPostHashtags } from "../utils/hashtags.js";
 import { syncPostMentions } from "../utils/mentions.js";
 import { burnTapeEditsIntoVideoFile, createVideoThumbnailFile, transcodeVideoFileToMp4 } from "../utils/videoProcessing.js";
 import { assertContentAllowedOrReport, ContentModerationError } from "../utils/contentModeration.js";
 import { ensurePostMediaThumbnailSchema } from "../utils/postMediaSchema.js";
+import { deleteR2Object } from "../utils/r2Delete.js";
 
 const router = express.Router();
 const sanitizeFileName = (value = "") =>
@@ -59,6 +60,70 @@ const upload = multer({
     }
 });
 
+const deleteUploadedObjects = async (objectKeys = []) => {
+    const bucketName = process.env.R2_BUCKET;
+    const uniqueKeys = [...new Set(objectKeys.filter(Boolean))];
+
+    await Promise.allSettled(
+        uniqueKeys.map((key) => deleteR2Object(bucketName, key))
+    );
+};
+
+const removePublishedPostAfterModeration = async (postId, objectKeys = []) => {
+    try {
+        await removePostHashtags(postId);
+    } catch (error) {
+        console.error("Failed to update hashtags for moderated post removal:", error);
+    }
+
+    try {
+        await pool.query("DELETE FROM comments WHERE post_id = $1", [postId]);
+        await pool.query("DELETE FROM likes WHERE post_id = $1", [postId]);
+        await pool.query("DELETE FROM reposts WHERE post_id = $1", [postId]);
+        await pool.query("DELETE FROM post_media WHERE post_id = $1", [postId]);
+        await pool.query("DELETE FROM posts WHERE post_id = $1", [postId]);
+    } catch (error) {
+        console.error("Failed to remove moderated post from database:", error);
+    }
+
+    await deleteUploadedObjects(objectKeys);
+};
+
+const scanPublishedPostForModeration = async ({
+    postId,
+    userId,
+    caption,
+    media,
+    objectKeys,
+    isTapeUpload,
+}) => {
+    try {
+        await assertContentAllowedOrReport({
+            userId,
+            contentType: "post",
+            contentId: postId,
+            text: caption,
+            media,
+            context: {
+                surface: isTapeUpload ? "tape_post_publish_background" : "post_publish_background",
+                media_count: media.length,
+                published_before_scan: true,
+            },
+        });
+    } catch (error) {
+        if (
+            error instanceof ContentModerationError &&
+            (error.result?.status === "blocked" || error.result?.status === "review")
+        ) {
+            console.warn(`Post ${postId} removed after background moderation scan.`);
+            await removePublishedPostAfterModeration(postId, objectKeys);
+            return;
+        }
+
+        console.error("Background post moderation scan failed:", error);
+    }
+};
+
 /* ======================================================
    CREATE POST API
 ====================================================== */
@@ -74,6 +139,7 @@ router.post(
         let postId = null;
         let dbClient = null;
         const cleanupTasks = [];
+        const uploadedObjectKeys = [];
 
         try {
             await ensureHashtagSchema();
@@ -105,33 +171,13 @@ router.post(
             /* ⭐ Insert post */
             postId = uuidv4();
 
-            await assertContentAllowedOrReport({
-                userId: req.user.id,
-                contentType: "post",
-                contentId: postId,
-                text: caption,
-                media: files.map((file) => ({
-                    kind: file.mimetype?.startsWith("video")
-                        ? "video"
-                        : file.mimetype?.startsWith("image")
-                            ? "image"
-                            : "other",
-                    filePath: file.path,
-                    mimetype: file.mimetype,
-                    originalName: file.originalname,
-                })),
-                context: {
-                    surface: "post_create",
-                    media_count: files.length,
-                },
-            });
-
             /* ===================================================
                Upload Media Files → Cloudflare R2
             =================================================== */
 
             const bucketName = process.env.R2_BUCKET;
             const mediaRecords = [];
+            const moderationMedia = [];
 
             for (let i = 0; i < files.length; i++) {
 
@@ -163,6 +209,7 @@ router.post(
                 const mediaId = uuidv4();
 
                 const key = `posts/${postId}/${mediaId}-${uploadFileName}`;
+                uploadedObjectKeys.push(key);
 
                 await r2.send(
                     new PutObjectCommand({
@@ -184,6 +231,7 @@ router.post(
 
                     const thumbnailFileName = sanitizeFileName(thumbnail.fileName);
                     const thumbnailKey = `posts/${postId}/${mediaId}-${thumbnailFileName}`;
+                    uploadedObjectKeys.push(thumbnailKey);
 
                     await r2.send(
                         new PutObjectCommand({
@@ -196,6 +244,13 @@ router.post(
 
                     thumbnailUrl = `${process.env.R2_PUBLIC_URL}/${thumbnailKey}`;
                 }
+
+                moderationMedia.push({
+                    kind: isVideo ? "video" : file.mimetype?.startsWith("image") ? "image" : "other",
+                    filePath: thumbnailSourcePath || file.path,
+                    mimetype: uploadContentType,
+                    originalName: uploadFileName,
+                });
 
                 mediaRecords.push([
                     mediaId,
@@ -243,6 +298,15 @@ router.post(
                 post_id: postId
             });
 
+            await scanPublishedPostForModeration({
+                postId,
+                userId: req.user.id,
+                caption,
+                media: moderationMedia,
+                objectKeys: uploadedObjectKeys,
+                isTapeUpload,
+            });
+
         } catch (err) {
             console.error(err);
 
@@ -257,19 +321,25 @@ router.post(
                 }
             }
 
-            if (err instanceof ContentModerationError) {
-                return res.status(err.statusCode || 400).json({
-                    error: err.message,
-                    moderation: err.result,
-                });
-            }
-
             if (postId) {
                 try {
                     await pool.query(`DELETE FROM posts WHERE post_id = $1`, [postId]);
                 } catch (cleanupError) {
                     console.error("Failed to rollback post after upload error:", cleanupError);
                 }
+            }
+
+            await deleteUploadedObjects(uploadedObjectKeys);
+
+            if (res.headersSent) {
+                return;
+            }
+
+            if (err instanceof ContentModerationError) {
+                return res.status(err.statusCode || 400).json({
+                    error: err.message,
+                    moderation: err.result,
+                });
             }
 
             res.status(500).json({
