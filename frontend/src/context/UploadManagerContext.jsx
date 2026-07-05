@@ -111,6 +111,7 @@ export function UploadManagerProvider({ children }) {
 
     const formData = new FormData();
     formData.append("caption", caption);
+    formData.append("kind", kind);
     normalizedFiles.forEach((file) => {
       formData.append("media", file);
     });

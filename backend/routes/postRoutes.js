@@ -43,6 +43,9 @@ const parseJsonBodyField = (value) => {
 const getTapeEditsFromBody = (body = {}) =>
     parseJsonBodyField(body.tapeEdits) || parseJsonBodyField(body.tape_edits);
 
+const isLowMemoryMediaMode = () =>
+    String(process.env.LOW_MEMORY_MEDIA_MODE || "false").toLowerCase() === "true";
+
 const tempUploadDir = path.join(os.tmpdir(), "fruityger-post-uploads");
 
 await fs.mkdir(tempUploadDir, { recursive: true });
@@ -147,6 +150,7 @@ router.post(
 
             const { caption, kind } = req.body;
             const isTapeUpload = kind === "tape";
+            const lowMemoryMediaMode = isLowMemoryMediaMode();
             const tapeEdits = getTapeEditsFromBody(req.body);
             const files = Array.isArray(req.files) ? req.files : req.files?.media || [];
             const musicFile = !Array.isArray(req.files) ? req.files?.music?.[0] : null;
@@ -191,7 +195,7 @@ router.post(
 
                 cleanupTasks.push(() => fs.rm(file.path, { force: true }));
 
-                if (isVideo) {
+                if (isVideo && !lowMemoryMediaMode) {
                     const processedFile = isTapeUpload
                         ? await burnTapeEditsIntoVideoFile(file.path, file.originalname, tapeEdits, musicFile?.path || null)
                         : await transcodeVideoFileToMp4(file.path, file.originalname);
@@ -222,7 +226,7 @@ router.post(
 
                 const mediaUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
 
-                if (isVideo) {
+                if (isVideo && !lowMemoryMediaMode) {
                     const thumbnail = await createVideoThumbnailFile(
                         thumbnailSourcePath || file.path,
                         uploadFileName

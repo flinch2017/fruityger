@@ -25,8 +25,12 @@ services:
         sync: false
       - key: TURNSTILE_SECRET_KEY
         sync: false
+      - key: LOW_MEMORY_MEDIA_MODE
+        value: true
       - key: CONTENT_MODERATION_ENABLED
         value: true
+      - key: CONTENT_MODERATION_MEDIA_ENABLED
+        value: false
       - key: CONTENT_MODERATION_FAIL_OPEN
         value: true
       - key: CONTENT_MODERATION_REVIEW_THRESHOLD

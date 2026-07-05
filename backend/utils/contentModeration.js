@@ -3,9 +3,6 @@ import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
 import { promisify } from "util";
-import * as tf from "@tensorflow/tfjs";
-import * as nsfwjs from "nsfwjs";
-import jpeg from "jpeg-js";
 import ffmpegPath from "ffmpeg-static";
 import pool from "../db.js";
 import { moderationTextRules } from "./moderationTextRules.js";
@@ -22,6 +19,9 @@ const FFMPEG_EXEC_OPTIONS = {
 };
 
 let nsfwModelPromise = null;
+let tensorflowPromise = null;
+let nsfwjsPromise = null;
+let jpegPromise = null;
 
 export class ContentModerationError extends Error {
   constructor(message, { statusCode = 400, result = null } = {}) {
@@ -34,6 +34,15 @@ export class ContentModerationError extends Error {
 
 function isModerationEnabled() {
   return String(process.env.CONTENT_MODERATION_ENABLED || "true").toLowerCase() !== "false";
+}
+
+function isLowMemoryMediaMode() {
+  return String(process.env.LOW_MEMORY_MEDIA_MODE || "false").toLowerCase() === "true";
+}
+
+function isMediaModerationEnabled() {
+  const defaultValue = isLowMemoryMediaMode() ? "false" : "true";
+  return String(process.env.CONTENT_MODERATION_MEDIA_ENABLED || defaultValue).toLowerCase() !== "false";
 }
 
 function getMediaKind(media) {
@@ -62,9 +71,34 @@ function getModerationErrorSummary(error) {
   };
 }
 
+async function getTensorflow() {
+  if (!tensorflowPromise) {
+    tensorflowPromise = import("@tensorflow/tfjs");
+  }
+
+  return tensorflowPromise;
+}
+
+async function getNsfwjs() {
+  if (!nsfwjsPromise) {
+    nsfwjsPromise = import("nsfwjs");
+  }
+
+  return nsfwjsPromise;
+}
+
+async function getJpeg() {
+  if (!jpegPromise) {
+    jpegPromise = import("jpeg-js");
+  }
+
+  return jpegPromise;
+}
+
 function getNsfwModel() {
   if (!nsfwModelPromise) {
     nsfwModelPromise = (async () => {
+      const [tf, nsfwjs] = await Promise.all([getTensorflow(), getNsfwjs()]);
       tf.enableProdMode();
       await tf.ready();
       return nsfwjs.load();
@@ -209,6 +243,8 @@ async function extractVideoFramePaths(inputPath, warnings, maxFrames = 4) {
 }
 
 async function classifyJpeg(filePath) {
+  const [tf, jpegModule] = await Promise.all([getTensorflow(), getJpeg()]);
+  const jpeg = jpegModule.default || jpegModule;
   const buffer = await fs.readFile(filePath);
   const decoded = jpeg.decode(buffer, { useTArray: true });
   const pixels = new Int32Array(decoded.width * decoded.height * 3);
@@ -366,6 +402,13 @@ function mergeTextAndMediaResults(textResult, mediaResult, warnings) {
 async function moderateMedia(media = []) {
   const warnings = [];
   const results = [];
+
+  if (!isMediaModerationEnabled()) {
+    return {
+      ...mergeMediaResults(results),
+      warnings: ["Media moderation skipped because low-memory media mode is enabled."],
+    };
+  }
 
   for (const item of media || []) {
     const kind = getMediaKind(item);
