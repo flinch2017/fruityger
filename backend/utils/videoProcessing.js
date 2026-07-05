@@ -75,6 +75,11 @@ const normalizeTapeEdits = (value) => {
   const stickerTransform = edits.stickerTransform && typeof edits.stickerTransform === "object"
     ? edits.stickerTransform
     : {};
+  const trimStartMillis = clampNumber(edits.trimStartMillis, 0, Number.MAX_SAFE_INTEGER, 0);
+  const rawTrimEndMillis = Number(edits.trimEndMillis);
+  const trimEndMillis =
+    Number.isFinite(rawTrimEndMillis) && rawTrimEndMillis > trimStartMillis + 500 ? rawTrimEndMillis : 0;
+  const audioStartMillis = clampNumber(edits.audioStartMillis, 0, Number.MAX_SAFE_INTEGER, 0);
 
   return {
     sourceFrame,
@@ -86,11 +91,18 @@ const normalizeTapeEdits = (value) => {
       scale: clampNumber(stickerTransform.scale, 0.45, 3, 1),
       rotate: clampNumber(stickerTransform.rotate, -180, 180, -8),
     },
+    trimStartMillis,
+    trimEndMillis,
+    audioStartMillis,
+    muteOriginalAudio: Boolean(edits.muteOriginalAudio),
   };
 };
 
 const hasRenderableTapeEdits = (edits) =>
   Boolean(edits && (edits.textOverlays.length > 0 || edits.sticker));
+
+const hasTimingTapeEdits = (edits) =>
+  Boolean(edits && (edits.trimStartMillis > 0 || edits.trimEndMillis > 0 || edits.muteOriginalAudio));
 
 const escapeAssText = (value) =>
   String(value)
@@ -178,46 +190,109 @@ const escapeFilterPath = (filePath) =>
     .replace(/\[/g, "\\[")
     .replace(/\]/g, "\\]");
 
-const getTranscodeArgs = ({ inputPath, outputPath, videoFilter, audioInputPath }) => [
-  "-hide_banner",
-  "-loglevel",
-  "error",
-  "-y",
-  "-i",
+const getTranscodeArgs = ({
   inputPath,
-  ...(audioInputPath ? ["-stream_loop", "-1", "-i", audioInputPath] : []),
-  "-map",
-  "0:v:0",
-  "-map",
-  audioInputPath ? "1:a:0" : "0:a?",
-  ...(videoFilter ? ["-vf", videoFilter] : []),
-  "-c:v",
-  "libx264",
-  "-preset",
-  "veryfast",
-  "-crf",
-  "28",
-  "-threads",
-  "1",
-  "-pix_fmt",
-  "yuv420p",
-  "-tag:v",
-  "avc1",
-  "-c:a",
-  "aac",
-  "-b:a",
-  "128k",
-  ...(audioInputPath ? ["-shortest"] : []),
-  "-movflags",
-  "+faststart",
   outputPath,
-];
+  videoFilter,
+  audioInputPath,
+  videoStartSeconds = 0,
+  durationSeconds = 0,
+  audioStartSeconds = 0,
+  muteOriginalAudio = false,
+  mixOriginalAudio = false,
+}) => {
+  const hasExternalAudio = Boolean(audioInputPath);
+  const shouldTrimExternalAudio = hasExternalAudio && audioStartSeconds > 0;
+  const externalAudioFilterInput = shouldTrimExternalAudio ? "[music_trimmed]" : "[1:a:0]";
+  const externalAudioMap = shouldTrimExternalAudio ? "[music_trimmed]" : "1:a:0";
+  const filterComplexParts = [
+    ...(shouldTrimExternalAudio
+      ? [`[1:a:0]atrim=start=${audioStartSeconds},asetpts=PTS-STARTPTS[music_trimmed]`]
+      : []),
+    ...(mixOriginalAudio
+      ? [`[0:a:0]${externalAudioFilterInput}amix=inputs=2:duration=shortest:dropout_transition=0[aout]`]
+      : []),
+  ];
 
-const runVideoTranscode = async ({ inputPath, outputPath, videoFilter, audioInputPath }) => {
+  return [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-y",
+    ...(videoStartSeconds > 0 ? ["-ss", String(videoStartSeconds)] : []),
+    "-i",
+    inputPath,
+    ...(hasExternalAudio ? ["-stream_loop", "-1", "-i", audioInputPath] : []),
+    "-map",
+    "0:v:0",
+    ...(videoFilter ? ["-vf", videoFilter] : []),
+    ...(filterComplexParts.length > 0 ? ["-filter_complex", filterComplexParts.join(";")] : []),
+    ...(mixOriginalAudio
+      ? ["-map", "[aout]"]
+      : hasExternalAudio
+        ? ["-map", externalAudioMap]
+        : muteOriginalAudio
+          ? []
+          : ["-map", "0:a?"]),
+    ...(durationSeconds > 0 ? ["-t", String(durationSeconds)] : []),
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "28",
+    "-threads",
+    "1",
+    "-pix_fmt",
+    "yuv420p",
+    "-tag:v",
+    "avc1",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    ...(hasExternalAudio || durationSeconds > 0 ? ["-shortest"] : []),
+    "-movflags",
+    "+faststart",
+    outputPath,
+  ];
+};
+
+const videoHasAudioStream = async (inputPath) => {
+  try {
+    await execFileAsync(ffmpegPath, ["-hide_banner", "-i", inputPath], FFMPEG_EXEC_OPTIONS);
+    return false;
+  } catch (error) {
+    const stderr = error?.stderr ? String(error.stderr) : "";
+    return /Audio:/i.test(stderr);
+  }
+};
+
+const runVideoTranscode = async ({
+  inputPath,
+  outputPath,
+  videoFilter,
+  audioInputPath,
+  videoStartSeconds,
+  durationSeconds,
+  audioStartSeconds,
+  muteOriginalAudio,
+  mixOriginalAudio,
+}) => {
   try {
     await execFileAsync(
       ffmpegPath,
-      getTranscodeArgs({ inputPath, outputPath, videoFilter, audioInputPath }),
+      getTranscodeArgs({
+        inputPath,
+        outputPath,
+        videoFilter,
+        audioInputPath,
+        videoStartSeconds,
+        durationSeconds,
+        audioStartSeconds,
+        muteOriginalAudio,
+        mixOriginalAudio,
+      }),
       FFMPEG_EXEC_OPTIONS
     );
   } catch (error) {
@@ -294,7 +369,7 @@ export async function burnTapeEditsIntoVideoFile(inputPath, originalName = "vide
     edits = null;
   }
 
-  if (!hasRenderableTapeEdits(edits) && !audioInputPath) {
+  if (!hasRenderableTapeEdits(edits) && !hasTimingTapeEdits(edits) && !audioInputPath) {
     return transcodeVideoFileToMp4(inputPath, originalName);
   }
 
@@ -302,14 +377,28 @@ export async function burnTapeEditsIntoVideoFile(inputPath, originalName = "vide
   const inputExt = path.extname(originalName) || path.extname(inputPath) || ".mov";
   const baseName = sanitizeBaseName(path.basename(originalName, inputExt));
   const outputPath = path.join(tempDir, `${baseName}.mp4`);
+  const videoStartSeconds = edits?.trimStartMillis ? Number((edits.trimStartMillis / 1000).toFixed(3)) : 0;
+  const durationSeconds =
+    edits?.trimEndMillis && edits.trimEndMillis > edits.trimStartMillis
+      ? Number(((edits.trimEndMillis - edits.trimStartMillis) / 1000).toFixed(3))
+      : 0;
+  const audioStartSeconds = edits?.audioStartMillis ? Number((edits.audioStartMillis / 1000).toFixed(3)) : 0;
+  const muteOriginalAudio = Boolean(edits?.muteOriginalAudio);
 
   try {
     const assPath = hasRenderableTapeEdits(edits) ? await createTapeEditsAssFile(tempDir, edits) : null;
+    const mixOriginalAudio =
+      Boolean(audioInputPath) && !muteOriginalAudio && (await videoHasAudioStream(inputPath));
     await runVideoTranscode({
       inputPath,
       outputPath,
       videoFilter: assPath ? `subtitles='${escapeFilterPath(assPath)}'` : undefined,
       audioInputPath,
+      videoStartSeconds,
+      durationSeconds,
+      audioStartSeconds,
+      muteOriginalAudio,
+      mixOriginalAudio,
     });
 
     return {
