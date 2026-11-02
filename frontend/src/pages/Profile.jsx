@@ -28,6 +28,7 @@ export default function Profile() {
   const token = localStorage.getItem("token");
 
   const [user, setUser] = useState(null);
+  const [profileNotFound, setProfileNotFound] = useState(false);
   const [posts, setPosts] = useState([]);
   const [activeIndexMap, setActiveIndexMap] = useState({});
 
@@ -390,6 +391,9 @@ export default function Profile() {
   }, []);
 
   const fetchUser = async () => {
+    setProfileNotFound(false);
+    setUser(null);
+
     try {
       const url = token
         ? username
@@ -411,6 +415,10 @@ export default function Profile() {
       if (res.ok) {
         setUser(data.user);
         setIsBlockedProfile(Boolean(data.user?.blocked_by_me || data.user?.blocked_by_them));
+      } else if (res.status === 404) {
+        setPosts([]);
+        setHasMore(false);
+        setProfileNotFound(true);
       }
 
     } catch (err) {
@@ -1141,6 +1149,14 @@ export default function Profile() {
   };
 
   /* ================= RENDER ================= */
+
+  if (profileNotFound) {
+    return (
+      <div className="profile-loading" role="status">
+        <p>Account not found</p>
+      </div>
+    );
+  }
 
   if (!user) {
     return (

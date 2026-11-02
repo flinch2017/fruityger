@@ -1,4 +1,9 @@
+const SESSION_CACHE_TTL_MS = 60_000;
+let cachedSession = null;
+let sessionRequest = null;
+
 export const clearAuthStorage = () => {
+  cachedSession = null;
   localStorage.setItem("fruitygerLoggedOut", "true");
   localStorage.removeItem("token");
   localStorage.removeItem("userId");
@@ -65,25 +70,45 @@ export const fetchAuthSession = async () => {
     return { ok: false, reason: "missing-token" };
   }
 
-  try {
-    const res = await fetch("http://localhost:5000/api/auth/session", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      if (res.status === 401 || res.status === 403) {
-        clearAuthStorage();
-      }
-      return { ok: false, reason: data.error || "session-failed" };
-    }
-
-    persistAuthSession(data);
-    return { ok: true, data };
-  } catch (err) {
-    return { ok: false, reason: "network-error" };
+  if (
+    cachedSession?.token === token &&
+    Date.now() - cachedSession.checkedAt < SESSION_CACHE_TTL_MS
+  ) {
+    return cachedSession.result;
   }
+
+  if (sessionRequest?.token === token) {
+    return sessionRequest.promise;
+  }
+
+  const request = (async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/session", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          clearAuthStorage();
+        }
+        return { ok: false, reason: data.error || "session-failed" };
+      }
+
+      persistAuthSession(data);
+      const result = { ok: true, data };
+      cachedSession = { token, checkedAt: Date.now(), result };
+      return result;
+    } catch (err) {
+      return { ok: false, reason: "network-error" };
+    } finally {
+      sessionRequest = null;
+    }
+  })();
+
+  sessionRequest = { token, promise: request };
+  return request;
 };

@@ -1042,7 +1042,8 @@
   background: transparent;
   box-shadow: none;
   transition: transform 0.25s ease, color 0.25s ease, filter 0.25s ease;
-
+  border: 0;
+  padding: 0;
 }
 
 .post-more:hover {
@@ -1108,6 +1109,14 @@
   color: #006688;
 
   transition: all 0.2s ease;
+}
+
+.post-dropdown button.dropdown-item {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
 }
 
 /* Hover = glowing bubble */
@@ -1217,6 +1226,12 @@
   margin-bottom: 28px;
   color: #333;
   line-height: 1.5;
+}
+
+.profile-post-delete-error {
+  color: #c92e50 !important;
+  font-weight: 600;
+  margin-top: -14px;
 }
 
 .modal-actions {

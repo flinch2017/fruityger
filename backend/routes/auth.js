@@ -26,6 +26,8 @@ const router = express.Router();
 const SALT_ROUNDS = 10;
 const ACCOUNT_CHANGE_TOKEN_MINUTES = 15;
 const ACCOUNT_DELETION_RECOVERY_DAYS = 30;
+let accountChangeSchemaReadyPromise = null;
+let accountStatusSchemaReadyPromise = null;
 const normalizeBaseUrl = (value = "") => String(value).trim().replace(/\/+$/, "");
 
 const getMobileAppBaseUrl = () =>
@@ -90,42 +92,34 @@ const getFrontendBaseUrl = (req) => {
 };
 
 const ensureAccountChangeSchema = async () => {
-  await pool.query(`
-    ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS pending_email TEXT
-  `);
+  if (!accountChangeSchemaReadyPromise) {
+    accountChangeSchemaReadyPromise = (async () => {
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email TEXT`);
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_change_token TEXT`);
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_change_expires_at TIMESTAMPTZ`);
+    })().catch((error) => {
+      accountChangeSchemaReadyPromise = null;
+      throw error;
+    });
+  }
 
-  await pool.query(`
-    ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS email_change_token TEXT
-  `);
-
-  await pool.query(`
-    ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS email_change_expires_at TIMESTAMPTZ
-  `);
+  await accountChangeSchemaReadyPromise;
 };
 
 const ensureAccountStatusSchema = async () => {
-  await pool.query(`
-    ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS deactivated_at TIMESTAMPTZ
-  `);
+  if (!accountStatusSchemaReadyPromise) {
+    accountStatusSchemaReadyPromise = (async () => {
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deactivated_at TIMESTAMPTZ`);
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_recovery_expires_at TIMESTAMPTZ`);
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_banned_at TIMESTAMPTZ`);
+    })().catch((error) => {
+      accountStatusSchemaReadyPromise = null;
+      throw error;
+    });
+  }
 
-  await pool.query(`
-    ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ
-  `);
-
-  await pool.query(`
-    ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS deletion_recovery_expires_at TIMESTAMPTZ
-  `);
-
-  await pool.query(`
-    ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS admin_banned_at TIMESTAMPTZ
-  `);
+  await accountStatusSchemaReadyPromise;
 };
 
 const ensureUserCreatedAtSchema = async () => {
@@ -180,6 +174,30 @@ const cleanupUserDependencies = async (client, userId) => {
 
     await client.query(`DELETE FROM ${tableName} WHERE ${columnName} = $1`, [userId]);
   }
+};
+
+// Deleted users are recoverable for 30 days. Keep their user row and messages
+// during that period, but remove their public activity immediately.
+const deleteRowsIfTableExists = async (client, tableName, statement, params) => {
+  const { rows } = await client.query(
+    "SELECT to_regclass($1) IS NOT NULL AS exists",
+    [`public.${tableName}`]
+  );
+
+  if (rows[0]?.exists) await client.query(statement, params);
+};
+
+const deleteAccountPublicActivity = async (client, userId) => {
+  await deleteRowsIfTableExists(client, "comment_likes", `DELETE FROM comment_likes WHERE user_id = $1 OR comment_id IN (SELECT comment_id FROM comments WHERE user_id = $1 OR post_id IN (SELECT post_id FROM posts WHERE user_id = $1))`, [userId]);
+  await deleteRowsIfTableExists(client, "likes", `DELETE FROM likes WHERE liker = $1 OR post_id IN (SELECT post_id FROM posts WHERE user_id = $1)`, [userId]);
+  await deleteRowsIfTableExists(client, "reposts", `DELETE FROM reposts WHERE user_id = $1 OR post_id IN (SELECT post_id FROM posts WHERE user_id = $1)`, [userId]);
+  await deleteRowsIfTableExists(client, "message_reactions", `DELETE FROM message_reactions WHERE user_id = $1`, [userId]);
+  await deleteRowsIfTableExists(client, "group_message_reactions", `DELETE FROM group_message_reactions WHERE user_id = $1`, [userId]);
+  // Keep other users' replies, but detach them from the removed comment.
+  await deleteRowsIfTableExists(client, "comments", `UPDATE comments SET parent_comment_id = NULL WHERE parent_comment_id IN (SELECT comment_id FROM comments WHERE user_id = $1 OR post_id IN (SELECT post_id FROM posts WHERE user_id = $1))`, [userId]);
+  await deleteRowsIfTableExists(client, "comments", `DELETE FROM comments WHERE user_id = $1 OR post_id IN (SELECT post_id FROM posts WHERE user_id = $1)`, [userId]);
+  await deleteRowsIfTableExists(client, "post_media", `DELETE FROM post_media WHERE post_id IN (SELECT post_id FROM posts WHERE user_id = $1)`, [userId]);
+  await deleteRowsIfTableExists(client, "posts", `DELETE FROM posts WHERE user_id = $1`, [userId]);
 };
 
 const getDeletionRecoveryExpiry = () => {
@@ -983,13 +1001,13 @@ router.post("/forgot-password/change-password", async (req, res) => {
 });
 
 router.get("/session", authenticateTokenAllowUnverified, async (req, res) => {
-  await ensureEmailVerificationSchema();
-  await ensureUserOnboardingSchema();
-  await ensureAccountChangeSchema();
-  await ensureAccountStatusSchema();
-  await cleanupExpiredUnverifiedUsers();
-  await cleanupExpiredDeletedUsers();
-  await ensureAccountNameSchema();
+  await Promise.all([
+    ensureEmailVerificationSchema(),
+    ensureUserOnboardingSchema(),
+    ensureAccountChangeSchema(),
+    ensureAccountStatusSchema(),
+    ensureAccountNameSchema(),
+  ]);
 
   const { rows } = await pool.query(
     `
@@ -1440,7 +1458,11 @@ router.delete("/delete-account", authenticateTokenAllowUnverified, async (req, r
     await cleanupExpiredDeletedUsers();
     verifyAccountChangeToken(approvalToken, req.user.id, "account-delete");
 
-    const result = await pool.query(
+    const client = await pool.connect();
+    let result;
+    try {
+      await client.query("BEGIN");
+      result = await client.query(
       `
       UPDATE users
       SET deleted_at = NOW(),
@@ -1458,8 +1480,18 @@ router.delete("/delete-account", authenticateTokenAllowUnverified, async (req, r
       [req.user.id, getDeletionRecoveryExpiry()]
     );
 
-    if (!result.rows[0]) {
-      return res.status(404).json({ error: "Account not found" });
+      if (!result.rows[0]) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      await deleteAccountPublicActivity(client, req.user.id);
+      await client.query("COMMIT");
+    } catch (transactionError) {
+      await client.query("ROLLBACK").catch(() => null);
+      throw transactionError;
+    } finally {
+      client.release();
     }
 
     await pool

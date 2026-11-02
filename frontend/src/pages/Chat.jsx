@@ -641,7 +641,7 @@ export default function Chat() {
   };
 
   const sendMessage = async () => {
-    if ((!input.trim() && !selectedAttachment) || blockedByMe || blockedByThem || isIncomingRequest || sending) {
+    if ((!input.trim() && !selectedAttachment) || otherUser?.is_inactive || blockedByMe || blockedByThem || isIncomingRequest || sending) {
       return;
     }
 
@@ -1364,6 +1364,10 @@ export default function Chat() {
       {isIncomingRequest ? (
         <div className="chat-blocked-banner">
           Accept this message request before replying.
+        </div>
+      ) : otherUser?.is_inactive ? (
+        <div className="chat-blocked-banner">
+          This account is inactive and cannot receive replies.
         </div>
       ) : blockedByMe || blockedByThem ? (
         <div className="chat-blocked-banner">

@@ -55,6 +55,8 @@ router.get("/:postId", authenticateToken, async (req, res) => {
       FROM comments c
       JOIN users u
         ON u.id = c.user_id
+       AND u.deactivated_at IS NULL
+       AND u.deleted_at IS NULL
       LEFT JOIN comment_likes cl
         ON cl.comment_id = c.comment_id
       WHERE c.post_id = $1
@@ -221,6 +223,8 @@ router.post("/", authenticateToken, async (req, res) => {
       FROM comments c
       JOIN users u
         ON u.id = c.user_id
+       AND u.deactivated_at IS NULL
+       AND u.deleted_at IS NULL
       WHERE c.comment_id = $1
       `,
       [newComment.comment_id]
@@ -261,6 +265,8 @@ router.get("/single/:commentId", authenticateToken, async (req, res) => {
       FROM comments c
       JOIN users u
         ON u.id = c.user_id
+       AND u.deactivated_at IS NULL
+       AND u.deleted_at IS NULL
       WHERE c.comment_id = $1
       `,
       [commentId]

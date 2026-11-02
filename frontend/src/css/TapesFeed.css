@@ -190,11 +190,14 @@
 
 .tape-video-frame {
   position: relative;
-  width: 100vw;
-  height: 100dvh;
-  aspect-ratio: auto;
+  width: min(100vw, 56.25dvh);
+  height: min(100dvh, 177.7778vw);
+  aspect-ratio: 9 / 16;
   overflow: hidden;
   background: #000000;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 24px;
+  box-shadow: 0 24px 58px rgba(0,0,0,0.48);
 }
 
 .tape-video {
@@ -203,8 +206,7 @@
   object-fit: cover;
   display: block;
   background: #000000;
-  transform: scale(1.08);
-  transform-origin: center;
+  transform: none;
 }
 
 .tape-gradient {
@@ -547,8 +549,11 @@
     font-size: 0.98rem;
   }
 
-  .tape-video {
-    transform: scale(1.12);
+  .tape-video-frame {
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    box-shadow: none;
   }
 
   .tape-meta {

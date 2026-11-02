@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { FaChevronLeft, FaChevronRight, FaCommentDots, FaHeart, FaRegHeart, FaRetweet, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
+import { FaChevronLeft, FaChevronRight, FaCommentDots, FaEllipsisV, FaHeart, FaRegHeart, FaRetweet, FaUser, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import CommentSheet from "../components/CommentSheet";
 import "../css/Profile.css";
 import "../css/CommentSheet.css";
@@ -18,17 +18,24 @@ export default function ProfilePostView() {
   const location = useLocation();
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
+  const currentUserId = localStorage.getItem("userId");
   const initialPosts = Array.isArray(location.state?.profilePosts)
     ? location.state.profilePosts
     : [];
 
   const [posts, setPosts] = useState(initialPosts);
   const [loading, setLoading] = useState(initialPosts.length === 0);
+  const [accountNotFound, setAccountNotFound] = useState(false);
   const [activeIndexMap, setActiveIndexMap] = useState({});
   const [videoMutedMap, setVideoMutedMap] = useState({});
   const [activeCommentPost, setActiveCommentPost] = useState(null);
   const [likingMap, setLikingMap] = useState({});
   const [repostingMap, setRepostingMap] = useState({});
+  const [activeMenuPostId, setActiveMenuPostId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingPost, setDeletingPost] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const menuRef = useRef(null);
 
   const activeTab = VALID_PROFILE_TABS.has(tab) ? tab : "general";
 
@@ -56,10 +63,9 @@ export default function ProfilePostView() {
   }, [postId, activeTab, tabPosts.length]);
 
   useEffect(() => {
-    if (initialPosts.length > 0) return;
-
     const fetchProfilePosts = async () => {
       setLoading(true);
+      setAccountNotFound(false);
 
       try {
         const params = new URLSearchParams({
@@ -75,7 +81,14 @@ export default function ProfilePostView() {
           token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
         );
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || "Failed to load profile posts");
+        if (!res.ok) {
+          if (res.status === 404) {
+            setPosts([]);
+            setAccountNotFound(true);
+            return;
+          }
+          throw new Error(data.error || "Failed to load profile posts");
+        }
         setPosts(Array.isArray(data.posts) ? data.posts : []);
       } catch (error) {
         console.error(error);
@@ -85,7 +98,18 @@ export default function ProfilePostView() {
     };
 
     fetchProfilePosts();
-  }, [initialPosts.length, token, username]);
+  }, [token, username]);
+
+  useEffect(() => {
+    const closeMenu = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setActiveMenuPostId(null);
+      }
+    };
+
+    document.addEventListener("mousedown", closeMenu);
+    return () => document.removeEventListener("mousedown", closeMenu);
+  }, []);
 
   const formatDate = (dateString) => {
     if (!dateString) return "";
@@ -214,6 +238,30 @@ export default function ProfilePostView() {
     }
   };
 
+  const deletePost = async () => {
+    if (!token || !deleteTarget || deletingPost) return;
+
+    setDeletingPost(true);
+    setDeleteError("");
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/profile/${deleteTarget.post_id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to delete post");
+
+      setPosts((prev) => prev.filter((item) => item.post_id !== deleteTarget.post_id));
+      setActiveMenuPostId(null);
+      setDeleteTarget(null);
+    } catch (error) {
+      console.error(error);
+      setDeleteError("Could not delete this post. Please try again.");
+    } finally {
+      setDeletingPost(false);
+    }
+  };
+
   return (
     <div className="profile-page">
       {activeCommentPost && token && (
@@ -222,6 +270,42 @@ export default function ProfilePostView() {
           postAuthorId={activeCommentPost.postAuthorId}
           onClose={() => setActiveCommentPost(null)}
         />
+      )}
+
+      {deleteTarget && (
+        <div className="modal-overlay" role="presentation">
+          <div
+            className={`modal-card animate-in ${deletingPost ? "loading" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="expanded-post-delete-title"
+          >
+            <h3 id="expanded-post-delete-title">Delete post?</h3>
+            <p>This will permanently delete this post and its interactions.</p>
+            {deleteError && <p className="profile-post-delete-error">{deleteError}</p>}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="modal-btn cancel"
+                disabled={deletingPost}
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteError("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="modal-btn confirm"
+                disabled={deletingPost}
+                onClick={deletePost}
+              >
+                {deletingPost ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="profile-posts profile-post-view">
@@ -236,7 +320,9 @@ export default function ProfilePostView() {
           </button>
         </div>
 
-        {loading ? (
+        {accountNotFound ? (
+          <p className="no-posts-message">Account not found</p>
+        ) : loading ? (
           <div className="post-loader">Loading post...</div>
         ) : tabPosts.length === 0 ? (
           <p className="no-posts-message">Post not found</p>
@@ -277,6 +363,61 @@ export default function ProfilePostView() {
                       </div>
                     </button>
                   </div>
+                  {token && (
+                    <div
+                      className="post-more-wrapper"
+                      ref={activeMenuPostId === post.post_id ? menuRef : null}
+                    >
+                      <button
+                        type="button"
+                        className="post-more"
+                        aria-label="Post options"
+                        aria-expanded={activeMenuPostId === post.post_id}
+                        onClick={() =>
+                          setActiveMenuPostId((current) =>
+                            current === post.post_id ? null : post.post_id
+                          )
+                        }
+                      >
+                        <FaEllipsisV />
+                      </button>
+                      {activeMenuPostId === post.post_id && (
+                        <div className="post-dropdown">
+                          {String(post.user_id) === String(currentUserId) ? (
+                            <>
+                              <button
+                                type="button"
+                                className="dropdown-item edit"
+                                onClick={() =>
+                                  navigate(`/edit-post/${post.post_id}`, { state: { post } })
+                                }
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="dropdown-item delete"
+                                onClick={() => {
+                                  setActiveMenuPostId(null);
+                                  setDeleteTarget(post);
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="dropdown-item report"
+                              onClick={() => navigate(`/report?type=post&id=${post.post_id}`)}
+                            >
+                              Report
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {post.activity_type === "repost" && (

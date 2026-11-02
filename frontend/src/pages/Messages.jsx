@@ -498,6 +498,7 @@ export default function Messages() {
   const onlineVisibleUsers = useMemo(
     () =>
       onlineCandidates
+        .filter((user) => !user.is_inactive && !user.deactivated_at && !user.deleted_at)
         .map((user) => ({
           ...user,
           is_online: onlineUserIds.includes(String(user.id)),

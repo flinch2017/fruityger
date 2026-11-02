@@ -734,9 +734,9 @@ async function fetchGroupMessageForUser(messageId, userId) {
     `
     SELECT
       gm.*,
-      sender.username AS sender_username,
-      sender.account_name AS sender_account_name,
-      sender.profile_pic AS sender_profile_pic,
+      CASE WHEN sender.deleted_at IS NOT NULL THEN 'Deleted account' WHEN sender.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE sender.username END AS sender_username,
+      CASE WHEN sender.deleted_at IS NOT NULL THEN 'Deleted account' WHEN sender.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE sender.account_name END AS sender_account_name,
+      CASE WHEN sender.deleted_at IS NOT NULL OR sender.deactivated_at IS NOT NULL THEN NULL ELSE sender.profile_pic END AS sender_profile_pic,
       CASE
         WHEN reply_dgm.message_id IS NULL THEN reply_message.content
         ELSE NULL
@@ -745,8 +745,8 @@ async function fetchGroupMessageForUser(messageId, userId) {
         WHEN reply_dgm.message_id IS NULL THEN reply_message.sender_id
         ELSE NULL
       END AS reply_to_sender_id,
-      reply_sender.username AS reply_to_sender_username,
-      reply_sender.account_name AS reply_to_sender_account_name,
+      CASE WHEN reply_sender.deleted_at IS NOT NULL THEN 'Deleted account' WHEN reply_sender.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE reply_sender.username END AS reply_to_sender_username,
+      CASE WHEN reply_sender.deleted_at IS NOT NULL THEN 'Deleted account' WHEN reply_sender.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE reply_sender.account_name END AS reply_to_sender_account_name,
       COALESCE(reactions_agg.reactions, '[]'::json) AS reactions
     FROM group_messages gm
     JOIN users sender
@@ -833,13 +833,15 @@ router.get("/chats", authenticateToken, async (req, res) => {
         c.requested_by,
         c.requested_at,
         dc.deleted_at,
-        u1.username AS user1_username,
-        u1.account_name AS user1_account_name,
-        u1.profile_pic AS user1_profile_pic,
+        CASE WHEN u1.deleted_at IS NOT NULL THEN 'Deleted account' WHEN u1.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE u1.username END AS user1_username,
+        CASE WHEN u1.deleted_at IS NOT NULL THEN 'Deleted account' WHEN u1.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE u1.account_name END AS user1_account_name,
+        CASE WHEN u1.deleted_at IS NOT NULL OR u1.deactivated_at IS NOT NULL THEN NULL ELSE u1.profile_pic END AS user1_profile_pic,
+        (u1.deleted_at IS NOT NULL OR u1.deactivated_at IS NOT NULL) AS user1_is_inactive,
         u1.is_verified AS user1_is_verified,
-        u2.username AS user2_username,
-        u2.account_name AS user2_account_name,
-        u2.profile_pic AS user2_profile_pic,
+        CASE WHEN u2.deleted_at IS NOT NULL THEN 'Deleted account' WHEN u2.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE u2.username END AS user2_username,
+        CASE WHEN u2.deleted_at IS NOT NULL THEN 'Deleted account' WHEN u2.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE u2.account_name END AS user2_account_name,
+        CASE WHEN u2.deleted_at IS NOT NULL OR u2.deactivated_at IS NOT NULL THEN NULL ELSE u2.profile_pic END AS user2_profile_pic,
+        (u2.deleted_at IS NOT NULL OR u2.deactivated_at IS NOT NULL) AS user2_is_inactive,
         u2.is_verified AS user2_is_verified,
         m.content AS last_message,
         m.attachment_type AS last_message_attachment_type,
@@ -915,6 +917,7 @@ router.get("/chats", authenticateToken, async (req, res) => {
           account_name: chat.user1_account_name,
           profile_pic: chat.user1_profile_pic,
           is_verified: chat.user1_is_verified,
+          is_inactive: chat.user1_is_inactive,
         },
         user2: {
           id: chat.user2_id,
@@ -922,6 +925,7 @@ router.get("/chats", authenticateToken, async (req, res) => {
           account_name: chat.user2_account_name,
           profile_pic: chat.user2_profile_pic,
           is_verified: chat.user2_is_verified,
+          is_inactive: chat.user2_is_inactive,
         },
         last_message: chat.last_message,
         request_status: chat.request_status || "accepted",
@@ -1054,6 +1058,14 @@ router.post("/send", authenticateToken, async (req, res) => {
 
     if (blockedResult.rows.length > 0) {
       return res.status(403).json({ error: "Messaging is unavailable with this user" });
+    }
+
+    const receiverResult = await pool.query(
+      `SELECT 1 FROM users WHERE id = $1 AND deactivated_at IS NULL AND deleted_at IS NULL LIMIT 1`,
+      [receiverId]
+    );
+    if (receiverResult.rows.length === 0) {
+      return res.status(403).json({ error: "You cannot reply to an inactive account." });
     }
 
     if (normalizedReplyToMessageId) {
@@ -1304,6 +1316,8 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
         FROM follows f
         JOIN users u
           ON u.id = f.following_id
+         AND u.deactivated_at IS NULL
+         AND u.deleted_at IS NULL
         WHERE f.follower_id = $1
       ),
       chat_people AS (
@@ -1322,6 +1336,8 @@ router.get("/online-candidates", authenticateToken, async (req, res) => {
             WHEN c.user1_id = $1 THEN c.user2_id
             ELSE c.user1_id
           END
+         AND other_user.deactivated_at IS NULL
+         AND other_user.deleted_at IS NULL
         LEFT JOIN deleted_chats dc
           ON dc.chat_id = c.id
          AND dc.user_id = $1
@@ -1473,13 +1489,15 @@ router.get("/requests", authenticateToken, async (req, res) => {
         c.request_status,
         c.requested_by,
         c.requested_at,
-        u1.username AS user1_username,
-        u1.account_name AS user1_account_name,
-        u1.profile_pic AS user1_profile_pic,
+        CASE WHEN u1.deleted_at IS NOT NULL THEN 'Deleted account' WHEN u1.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE u1.username END AS user1_username,
+        CASE WHEN u1.deleted_at IS NOT NULL THEN 'Deleted account' WHEN u1.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE u1.account_name END AS user1_account_name,
+        CASE WHEN u1.deleted_at IS NOT NULL OR u1.deactivated_at IS NOT NULL THEN NULL ELSE u1.profile_pic END AS user1_profile_pic,
+        (u1.deleted_at IS NOT NULL OR u1.deactivated_at IS NOT NULL) AS user1_is_inactive,
         u1.is_verified AS user1_is_verified,
-        u2.username AS user2_username,
-        u2.account_name AS user2_account_name,
-        u2.profile_pic AS user2_profile_pic,
+        CASE WHEN u2.deleted_at IS NOT NULL THEN 'Deleted account' WHEN u2.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE u2.username END AS user2_username,
+        CASE WHEN u2.deleted_at IS NOT NULL THEN 'Deleted account' WHEN u2.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE u2.account_name END AS user2_account_name,
+        CASE WHEN u2.deleted_at IS NOT NULL OR u2.deactivated_at IS NOT NULL THEN NULL ELSE u2.profile_pic END AS user2_profile_pic,
+        (u2.deleted_at IS NOT NULL OR u2.deactivated_at IS NOT NULL) AS user2_is_inactive,
         u2.is_verified AS user2_is_verified,
         m.content AS last_message,
         m.attachment_type AS last_message_attachment_type,
@@ -1533,6 +1551,7 @@ router.get("/requests", authenticateToken, async (req, res) => {
           account_name: chat.user1_account_name,
           profile_pic: chat.user1_profile_pic,
           is_verified: chat.user1_is_verified,
+          is_inactive: chat.user1_is_inactive,
         },
         user2: {
           id: chat.user2_id,
@@ -1540,6 +1559,7 @@ router.get("/requests", authenticateToken, async (req, res) => {
           account_name: chat.user2_account_name,
           profile_pic: chat.user2_profile_pic,
           is_verified: chat.user2_is_verified,
+          is_inactive: chat.user2_is_inactive,
         },
         last_message: chat.last_message,
         last_message_attachment_type: chat.last_message_attachment_type,
@@ -1648,13 +1668,15 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
         c.requested_by,
         c.requested_at,
         dc.deleted_at,
-        u1.username AS user1_username,
-        u1.account_name AS user1_account_name,
-        u1.profile_pic AS user1_profile_pic,
+        CASE WHEN u1.deleted_at IS NOT NULL THEN 'Deleted account' WHEN u1.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE u1.username END AS user1_username,
+        CASE WHEN u1.deleted_at IS NOT NULL THEN 'Deleted account' WHEN u1.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE u1.account_name END AS user1_account_name,
+        CASE WHEN u1.deleted_at IS NOT NULL OR u1.deactivated_at IS NOT NULL THEN NULL ELSE u1.profile_pic END AS user1_profile_pic,
+        (u1.deleted_at IS NOT NULL OR u1.deactivated_at IS NOT NULL) AS user1_is_inactive,
         u1.is_verified AS user1_is_verified,
-        u2.username AS user2_username,
-        u2.account_name AS user2_account_name,
-        u2.profile_pic AS user2_profile_pic,
+        CASE WHEN u2.deleted_at IS NOT NULL THEN 'Deleted account' WHEN u2.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE u2.username END AS user2_username,
+        CASE WHEN u2.deleted_at IS NOT NULL THEN 'Deleted account' WHEN u2.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE u2.account_name END AS user2_account_name,
+        CASE WHEN u2.deleted_at IS NOT NULL OR u2.deactivated_at IS NOT NULL THEN NULL ELSE u2.profile_pic END AS user2_profile_pic,
+        (u2.deleted_at IS NOT NULL OR u2.deactivated_at IS NOT NULL) AS user2_is_inactive,
         u2.is_verified AS user2_is_verified
       FROM chats c
       LEFT JOIN deleted_chats dc
@@ -1719,9 +1741,9 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
       `
       SELECT
         m.*,
-        sender_user.username AS sender_username,
-        sender_user.account_name AS sender_account_name,
-        sender_user.profile_pic AS sender_profile_pic,
+        CASE WHEN sender_user.deleted_at IS NOT NULL THEN 'Deleted account' WHEN sender_user.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE sender_user.username END AS sender_username,
+        CASE WHEN sender_user.deleted_at IS NOT NULL THEN 'Deleted account' WHEN sender_user.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE sender_user.account_name END AS sender_account_name,
+        CASE WHEN sender_user.deleted_at IS NOT NULL OR sender_user.deactivated_at IS NOT NULL THEN NULL ELSE sender_user.profile_pic END AS sender_profile_pic,
         CASE
           WHEN reply_dm.message_id IS NULL THEN reply_message.content
           ELSE NULL
@@ -1786,6 +1808,7 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
           account_name: chat.user1_account_name,
           profile_pic: chat.user1_profile_pic,
           is_verified: chat.user1_is_verified,
+          is_inactive: chat.user1_is_inactive,
         },
         user2: {
           id: chat.user2_id,
@@ -1793,6 +1816,7 @@ router.get("/:chatId", authenticateToken, async (req, res) => {
           account_name: chat.user2_account_name,
           profile_pic: chat.user2_profile_pic,
           is_verified: chat.user2_is_verified,
+          is_inactive: chat.user2_is_inactive,
         },
       },
       messages: messagesResult.rows,
@@ -2137,8 +2161,8 @@ router.get("/groups/chats", authenticateToken, async (req, res) => {
         gm.attachment_type AS last_message_attachment_type,
         gm.created_at AS last_message_at,
         gm.sender_id AS last_message_sender_id,
-        sender.username AS last_message_sender_username,
-        sender.account_name AS last_message_sender_account_name,
+        CASE WHEN sender.deleted_at IS NOT NULL THEN 'Deleted account' WHEN sender.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE sender.username END AS last_message_sender_username,
+        CASE WHEN sender.deleted_at IS NOT NULL THEN 'Deleted account' WHEN sender.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE sender.account_name END AS last_message_sender_account_name,
         (
           SELECT COUNT(*)::int
           FROM group_messages unread
@@ -2368,9 +2392,9 @@ router.get("/groups/chats/:groupChatId", authenticateToken, async (req, res) => 
       `
       SELECT
         gm.*,
-        sender.username AS sender_username,
-        sender.account_name AS sender_account_name,
-        sender.profile_pic AS sender_profile_pic,
+        CASE WHEN sender.deleted_at IS NOT NULL THEN 'Deleted account' WHEN sender.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE sender.username END AS sender_username,
+        CASE WHEN sender.deleted_at IS NOT NULL THEN 'Deleted account' WHEN sender.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE sender.account_name END AS sender_account_name,
+        CASE WHEN sender.deleted_at IS NOT NULL OR sender.deactivated_at IS NOT NULL THEN NULL ELSE sender.profile_pic END AS sender_profile_pic,
         CASE
           WHEN reply_dgm.message_id IS NULL THEN reply_message.content
           ELSE NULL
@@ -2379,8 +2403,8 @@ router.get("/groups/chats/:groupChatId", authenticateToken, async (req, res) => 
           WHEN reply_dgm.message_id IS NULL THEN reply_message.sender_id
           ELSE NULL
         END AS reply_to_sender_id,
-        reply_sender.username AS reply_to_sender_username,
-        reply_sender.account_name AS reply_to_sender_account_name,
+        CASE WHEN reply_sender.deleted_at IS NOT NULL THEN 'Deleted account' WHEN reply_sender.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE reply_sender.username END AS reply_to_sender_username,
+        CASE WHEN reply_sender.deleted_at IS NOT NULL THEN 'Deleted account' WHEN reply_sender.deactivated_at IS NOT NULL THEN 'Deactivated account' ELSE reply_sender.account_name END AS reply_to_sender_account_name,
         COALESCE(reactions_agg.reactions, '[]'::json) AS reactions
       FROM group_messages gm
       JOIN users sender
@@ -2491,10 +2515,13 @@ router.post("/groups/chats/:groupChatId/send", authenticateToken, async (req, re
     if (replyToMessageId) {
       const replyTargetResult = await pool.query(
         `
-        SELECT id, sender_id
-        FROM group_messages
-        WHERE id = $1
-          AND group_chat_id = $2
+        SELECT gm.id, gm.sender_id
+        FROM group_messages gm
+        JOIN users sender ON sender.id = gm.sender_id
+        WHERE gm.id = $1
+          AND gm.group_chat_id = $2
+          AND sender.deactivated_at IS NULL
+          AND sender.deleted_at IS NULL
         LIMIT 1
         `,
         [replyToMessageId, groupChatId]
